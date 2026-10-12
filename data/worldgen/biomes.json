@@ -1,0 +1,25 @@
+{
+ "_doc": "Carte du monde (jalon 2). Les champs (altitude, humidité, rivière...) sont des bruits continus évalués à chaque case : tout est déterministe (seed + coordonnées). frequency = 1 / longueur d'onde en cases. Lacs : altitude < lake.level (profonds sous level - deep_margin ; berge de sable jusqu'à level + shore). Rivières : lignes où |bruit river| < half_width (profondes si |bruit| < deep_half_width ET bruit ford < ford_level, sinon peu profondes = gués ; berge de terre sur bank). Sur la terre ferme : marais si humidité > swamp_humidity et altitude < swamp_altitude_max ; forêt si humidité > forest_humidity ; sinon plaine. trees = part de cases occupées par un arbre. L'ORDRE de kinds doit suivre l'énumération WorldMap.Kind.",
+ "noise": {
+  "altitude": {"frequency": 0.0008, "octaves": 3},
+  "humidity": {"frequency": 0.0011, "octaves": 2},
+  "river":    {"frequency": 0.0015, "octaves": 2},
+  "ford":     {"frequency": 0.0040, "octaves": 1},
+  "detail":   {"frequency": 0.0450, "octaves": 2}
+ },
+ "lake":  {"level": -0.26, "deep_margin": 0.07, "shore": 0.035},
+ "river": {"half_width": 0.040, "deep_half_width": 0.016, "bank": 0.018, "ford_level": 0.05},
+ "land":  {"swamp_humidity": 0.28, "swamp_altitude_max": 0.05, "forest_humidity": 0.05},
+ "trees": {"plain": 0.03, "forest": 0.25, "swamp": 0.08},
+ "kinds": [
+  {"id": "plain",         "name": "Plaine",                "color": "#8fbf5a"},
+  {"id": "forest",        "name": "Forêt",                 "color": "#2f6b2f"},
+  {"id": "swamp",         "name": "Marais",                "color": "#5a6b3a"},
+  {"id": "lake_deep",     "name": "Lac profond",           "color": "#1d3f8f"},
+  {"id": "lake_shallow",  "name": "Lac peu profond",       "color": "#3f74c9"},
+  {"id": "river_deep",    "name": "Rivière profonde",      "color": "#2a52b0"},
+  {"id": "river_shallow", "name": "Rivière peu profonde (gué)", "color": "#6fa0e0"},
+  {"id": "shore_lake",    "name": "Berge de lac",          "color": "#d8c88a"},
+  {"id": "bank_river",    "name": "Berge de rivière",      "color": "#a07f55"}
+ ]
+}

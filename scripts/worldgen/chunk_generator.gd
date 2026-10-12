@@ -1,0 +1,51 @@
+class_name ChunkGenerator
+extends RefCounted
+## Génère le terrain d'un chunk. FONCTION PURE de (seed, clé de chunk, mode) : aucune dépendance à l'ordre
+## de génération, aucun état global (docs/WORLD_GEN.md §3). Monde normal : biomes, lacs et rivières via WorldMap.
+## Villes, routes et lieux spéciaux viendront aux jalons suivants.
+
+# --- Arène de test (ancienne carte fermée 60 x 40, option debug USE_TEST_ARENA) ---
+const ARENA_WIDTH: int = 60
+const ARENA_HEIGHT: int = 40
+const SPAWN_POS: Vector2i = Vector2i(5, 5)    # départ du joueur dans l'arène
+const ARENA_CLEAR_RADIUS: float = 3.5         # pas d'arbre autour du départ
+const ARENA_TREE_DENSITY: float = 0.12
+
+
+## Un octet par case (index TerrainDB), rangées de haut en bas : indice = y local * 24 + x local.
+static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> PackedByteArray:
+	var data := PackedByteArray()
+	data.resize(Chunk.CELLS)
+	if arena:
+		_fill_arena(world_seed, key, data)
+		return data
+	var world_map: WorldMap = WorldMap.for_seed(world_seed)
+	for ly in Chunk.SIZE:
+		for lx in Chunk.SIZE:
+			var cell := Vector2i(key.x * Chunk.SIZE + lx, key.y * Chunk.SIZE + ly)
+			data[ly * Chunk.SIZE + lx] = world_map.terrain_at(cell, key.z)
+	return data
+
+
+static func _fill_arena(world_seed: int, key: Vector3i, data: PackedByteArray) -> void:
+	var grass: int = TerrainDB.index_of("t_grass")
+	var tree: int = TerrainDB.index_of("t_tree")
+	var wall: int = TerrainDB.index_of("t_wall_arena")
+	for ly in Chunk.SIZE:
+		for lx in Chunk.SIZE:
+			var cell := Vector2i(key.x * Chunk.SIZE + lx, key.y * Chunk.SIZE + ly)
+			var index: int = grass
+			if cell.x <= 0 or cell.y <= 0 or cell.x >= ARENA_WIDTH - 1 or cell.y >= ARENA_HEIGHT - 1:
+				index = wall
+			elif Vector2(cell).distance_to(Vector2(SPAWN_POS)) > ARENA_CLEAR_RADIUS \
+					and WorldRng.chance(world_seed, WorldRng.LAYER_TERRAIN, cell.x, cell.y, key.z, ARENA_TREE_DENSITY):
+				index = tree
+			data[ly * Chunk.SIZE + lx] = index
+
+
+## Empreinte (FNV-1a 64 bits) du contenu d'un chunk : sert au test de déterminisme.
+static func fingerprint(world_seed: int, key: Vector3i, arena: bool = false) -> int:
+	var h: int = -3750763034362895579
+	for byte: int in generate(world_seed, key, arena):
+		h = (h ^ byte) * 1099511628211
+	return h

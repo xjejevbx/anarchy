@@ -1,0 +1,260 @@
+class_name World
+extends Node2D
+## Le monde : chunks (via ChunkManager), objets au sol, monstres, file d'actions et champ de vision.
+## La carte est INFINIE et générée par chunks de façon déterministe à partir de `world_seed`
+## (voir docs/WORLD_GEN.md). Le terrain n'est jamais stocké ici : on interroge le ChunkManager.
+##
+## Rendu en couches (de bas en haut) :
+##   1. `_terrain_layer` : les chunks (sol : herbe, murs)
+##   2. `_items_layer`   : objets au sol
+##   3. `entities`       : arbres, joueur, monstres, triés par Y (plus bas = plus devant)
+##   4. `fog`            : brouillard de guerre par-dessus
+##   5. `_pick_overlay`  : touches de choix de la case où ramasser
+## Les nœuds sont positionnés sur le coin haut-gauche de leur case ; UlticaTiles applique
+## les décalages de chaque sprite (personnages 32x48, arbres 96x96...).
+
+const TILE_SIZE: int = 32
+const VIEW_RADIUS: int = 20              # portée de vue en cases (plein jour pour l'instant)
+
+var world_seed: int = 4444                  # à fixer AVANT add_child()
+var use_arena: bool = false              # true : ancienne carte fermée 60x40 (debug), à fixer AVANT add_child()
+var chunks: ChunkManager
+var player: Player
+var monsters: Array[Monster] = []
+var entities: Node2D
+var fog: FogLayer
+var ground_items: Dictionary = {}   # Vector2i -> Array (d'Item posés au sol)
+var pick_labels: Dictionary = {}    # Vector2i -> touche affichée (choix de la case où ramasser)
+var visible_cells: Dictionary = {}  # cases actuellement visibles
+
+var _terrain_layer: Node2D
+var _items_layer: Node2D
+var _pick_overlay: Node2D
+var _hovered: Monster = null
+
+
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # pixel art net, hérité par les enfants
+	_terrain_layer = Node2D.new()
+	add_child(_terrain_layer)
+	_items_layer = Node2D.new()
+	_items_layer.draw.connect(_draw_ground_items)
+	add_child(_items_layer)
+	entities = Node2D.new()
+	entities.y_sort_enabled = true
+	add_child(entities)
+	fog = FogLayer.new()
+	fog.world = self
+	fog.z_index = 10
+	add_child(fog)
+	_pick_overlay = Node2D.new()
+	_pick_overlay.z_index = 11  # au-dessus du brouillard
+	_pick_overlay.draw.connect(_draw_pick_overlay)
+	add_child(_pick_overlay)
+	chunks = ChunkManager.new()
+	chunks.setup(world_seed, use_arena, _terrain_layer, entities)
+	EventBus.time_advanced.connect(_on_time_advanced)
+
+
+func add_entity(node: Node2D) -> void:
+	entities.add_child(node)
+
+
+## --- Objets au sol ---
+
+## Affiche la touche (1-9) sur chaque case de `labels` (Vector2i -> String) ; {} pour effacer.
+func show_pick_overlay(labels: Dictionary) -> void:
+	pick_labels = labels
+	_pick_overlay.queue_redraw()
+
+
+func _draw_pick_overlay() -> void:
+	var font: Font = ThemeDB.fallback_font
+	for pos: Vector2i in pick_labels:
+		var cell := Rect2(Vector2(pos * TILE_SIZE), Vector2(TILE_SIZE, TILE_SIZE))
+		_pick_overlay.draw_rect(cell, Color(0.3, 0.6, 1.0, 0.35))
+		_pick_overlay.draw_rect(cell, Color(0.55, 0.8, 1.0, 0.95), false, 2.0)
+		_pick_overlay.draw_string(font, cell.position + Vector2(0, 23), String(pick_labels[pos]),
+			HORIZONTAL_ALIGNMENT_CENTER, TILE_SIZE, 20, Color.WHITE)
+
+
+func get_ground_items(pos: Vector2i) -> Array:
+	return ground_items.get(pos, [])
+
+
+func add_ground_item(pos: Vector2i, item: Item) -> void:
+	var list: Array = ground_items.get(pos, [])
+	var merged: bool = false
+	for it: Item in list:
+		if it.can_merge(item):
+			it.count += item.count
+			merged = true
+			break
+	if not merged:
+		list.append(item)
+	ground_items[pos] = list
+	refresh_items()
+
+
+func remove_ground_item(pos: Vector2i, item: Item) -> void:
+	var list: Array = ground_items.get(pos, [])
+	list.erase(item)
+	if list.is_empty():
+		ground_items.erase(pos)
+	refresh_items()
+
+
+## À appeler après toute modification d'un tas d'objets au sol.
+func refresh_items() -> void:
+	_items_layer.queue_redraw()
+
+
+# --- Terrain (délégué aux chunks) ---
+
+## Une case hors des chunks chargés est inconnue : ni praticable, opaque.
+func is_walkable(pos: Vector2i) -> bool:
+	return chunks.is_walkable(pos)
+
+
+## Murs et arbres bloquent la vue.
+func is_opaque(pos: Vector2i) -> bool:
+	return chunks.is_opaque(pos)
+
+
+func has_terrain(pos: Vector2i) -> bool:
+	return chunks.has_terrain(pos)
+
+
+## Portée de mêlée : cases voisines en orthogonal uniquement (cohérent avec les déplacements).
+static func are_adjacent(a: Vector2i, b: Vector2i) -> bool:
+	return absi(a.x - b.x) + absi(a.y - b.y) == 1
+
+
+func is_occupied(pos: Vector2i) -> bool:
+	return (player != null and player.grid_pos == pos) or get_monster_at(pos) != null
+
+
+func find_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
+	return PathFinder.find(self, from, to)
+
+
+# --- Champ de vision ---
+
+func is_visible_cell(pos: Vector2i) -> bool:
+	return visible_cells.has(pos)
+
+
+## Case déjà vue au moins une fois (mémoire de la carte).
+func is_seen(pos: Vector2i) -> bool:
+	return chunks.is_seen(pos)
+
+
+## À appeler quand le joueur change de case (et au démarrage) : charge les chunks proches, puis calcule la vue.
+func update_fov() -> void:
+	if player == null:
+		return
+	chunks.update_around(player.grid_pos)
+	visible_cells = FieldOfView.compute(self, player.grid_pos, VIEW_RADIUS)
+	for cell: Vector2i in visible_cells:
+		chunks.mark_seen(cell)
+	fog.queue_redraw()
+	_refresh_monster_visibility()
+
+
+## Cache les monstres hors de vue ; signale ceux qui viennent d'apparaître.
+func _refresh_monster_visibility() -> void:
+	for m in monsters:
+		var now_visible: bool = visible_cells.has(m.grid_pos)
+		if now_visible and not m.visible:
+			EventBus.message_logged.emit("Vous apercevez %s." % m.data.display_name)
+			EventBus.hostile_spotted.emit(m)
+		m.visible = now_visible
+
+
+# --- Monstres ---
+
+func get_monster_at(pos: Vector2i) -> Monster:
+	for m in monsters:
+		if m.grid_pos == pos:
+			return m
+	return null
+
+
+func find_free_cell_near(origin: Vector2i) -> Vector2i:
+	for r in range(0, 8):
+		for dx in range(-r, r + 1):
+			for dy in range(-r, r + 1):
+				var p: Vector2i = origin + Vector2i(dx, dy)
+				if is_walkable(p) and not is_occupied(p):
+					return p
+	return origin
+
+
+func spawn_monster(data: MonsterData, near: Vector2i) -> Monster:
+	var m := Monster.new()
+	m.data = data
+	m.world = self
+	m.hp = data.max_hp
+	m.grid_pos = find_free_cell_near(near)
+	m.next_action_time = GameClock.elapsed_points
+	m.visible = false  # update_fov() décidera
+	entities.add_child(m)
+	monsters.append(m)
+	_refresh_monster_visibility()
+	return m
+
+
+func remove_monster(m: Monster) -> void:
+	monsters.erase(m)
+	if _hovered == m:
+		_hovered = null
+		EventBus.monster_hovered.emit(null)
+	m.queue_free()
+
+
+## Fait agir tous les monstres dont le moment d'action est arrivé, dans l'ordre chronologique.
+func _on_time_advanced(_points: float) -> void:
+	if player == null:
+		return
+	var guard: int = 0
+	while guard < 500 and not player.dead:
+		var next_monster: Monster = null
+		for m in monsters:
+			if m.next_action_time <= GameClock.elapsed_points:
+				if next_monster == null or m.next_action_time < next_monster.next_action_time:
+					next_monster = m
+		if next_monster == null:
+			break
+		var cost: float = next_monster.take_turn()
+		next_monster.next_action_time += maxf(cost, 0.1)
+		guard += 1
+	_refresh_monster_visibility()
+
+
+func _process(_delta: float) -> void:
+	chunks.process_queue()  # génération étalée des chunks lointains
+	var cell := Vector2i((get_global_mouse_position() / TILE_SIZE).floor())
+	var under_mouse: Monster = get_monster_at(cell)
+	if under_mouse != null and not under_mouse.visible:
+		under_mouse = null  # on n'infobulle pas ce qu'on ne voit pas
+	if under_mouse != _hovered:
+		_hovered = under_mouse
+		EventBus.monster_hovered.emit(under_mouse)
+
+
+# --- Rendu des objets au sol ---
+
+## Objets au sol : sprite du dernier objet posé ; petit repère blanc s'il y en a plusieurs.
+func _draw_ground_items() -> void:
+	for pos: Vector2i in ground_items:
+		var list: Array = ground_items[pos]
+		if list.is_empty():
+			continue
+		var origin := Vector2(pos * TILE_SIZE)
+		var top := list[list.size() - 1] as Item
+		var sprite: String = UlticaTiles.pick_sprite(top.tile_id(), "fg", 0)
+		var box := Rect2(origin, Vector2(TILE_SIZE, TILE_SIZE))
+		if not UlticaTiles.draw_icon(_items_layer, sprite, box):
+			_items_layer.draw_rect(Rect2(origin + Vector2(10, 10), Vector2(12, 12)), Color(0.85, 0.7, 0.3))  # repli
+		if list.size() > 1:
+			_items_layer.draw_rect(Rect2(origin + Vector2(TILE_SIZE - 7, TILE_SIZE - 7), Vector2(5, 5)), Color.WHITE)

@@ -1,0 +1,61 @@
+{
+ "_doc": "Terrains du monde. tile : id de tuile UltiCa ; base : terrain dessiné dessous (ex. herbe sous un arbre) ; entity_sprite : dessiné comme un sprite trié par Y (arbres) ; autotile : choix du sprite selon les voisins (wall). L'ORDRE des entrées donne l'index stocké dans les chunks (max 255).",
+ "terrains": {
+  "t_grass": {
+   "name": "Herbe",
+   "tile": "t_grass",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_tree": {
+   "name": "Arbre",
+   "tile": "t_tree",
+   "base": "t_grass",
+   "entity_sprite": true,
+   "walkable": false,
+   "opaque": true
+  },
+  "t_wall_arena": {
+   "name": "Mur",
+   "autotile": "wall",
+   "walkable": false,
+   "opaque": true
+  },
+  "t_water_sh": {
+   "name": "Eau peu profonde",
+   "tile": "t_water_sh",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_water_dp": {
+   "name": "Eau profonde",
+   "tile": "t_water_dp",
+   "walkable": false,
+   "opaque": false
+  },
+  "t_swater_sh": {
+   "name": "Eau de marais",
+   "tile": "t_swater_sh",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_mud": {
+   "name": "Boue",
+   "tile": "t_mud",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_dirt": {
+   "name": "Terre",
+   "tile": "t_dirt",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_sand": {
+   "name": "Sable",
+   "tile": "t_sand",
+   "walkable": true,
+   "opaque": false
+  }
+ }
+}

@@ -1,0 +1,19 @@
+[gd_scene load_steps=3 format=3 uid="uid://bx2bw7iyn7otw"]
+
+[ext_resource type="Texture2D" uid="uid://bj4cagaeuxdnl" path="res://assets/character/male1/body.png" id="1_wbwf2"]
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_pgkuf"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("1_wbwf2")
+}],
+"loop": true,
+"name": &"default",
+"speed": 5.0
+}]
+
+[node name="Player" type="Node2D"]
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+sprite_frames = SubResource("SpriteFrames_pgkuf")
