@@ -56,6 +56,30 @@
    "tile": "t_sand",
    "walkable": true,
    "opaque": false
+  },
+  "t_pavement": {
+   "name": "Asphalte",
+   "tile": "t_pavement",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_pavement_y": {
+   "name": "Asphalte (ligne jaune)",
+   "tile": "t_pavement_y",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_sidewalk": {
+   "name": "Trottoir",
+   "tile": "t_sidewalk",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_bridge": {
+   "name": "Pont",
+   "tile": "t_bridge",
+   "walkable": true,
+   "opaque": false
   }
  }
 }

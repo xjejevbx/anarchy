@@ -28,6 +28,8 @@ IDS = [
     "overlay_male_worn_backpack", "overlay_male_worn_backpack_tactical_large",
     # terrains du monde (jalon 2)
     "t_water_sh", "t_water_dp", "t_swater_sh", "t_mud", "t_dirt", "t_sand",
+    # routes et villes (jalon 3)
+    "t_pavement", "t_pavement_y", "t_sidewalk", "t_bridge",
 ]
 
 # Dossiers dont on copie TOUS les sprites, pour les utiliser directement par nom

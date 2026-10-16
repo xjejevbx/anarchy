@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bfhe2may4jfgt"
-path="res://.godot/imported/sprite-sheet-character.png-6362c25c9a94dbb69964c76d64c74248.ctex"
+uid="uid://hh0756m7o2sf"
+path="res://.godot/imported/t_pavement_y.png-f9b959c1a9449ab0f57f62709edb8dde.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprite-sheet-character.png"
-dest_files=["res://.godot/imported/sprite-sheet-character.png-6362c25c9a94dbb69964c76d64c74248.ctex"]
+source_file="res://assets/ultica/sprites/t_pavement_y.png"
+dest_files=["res://.godot/imported/t_pavement_y.png-f9b959c1a9449ab0f57f62709edb8dde.ctex"]
 
 [params]
 

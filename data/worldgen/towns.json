@@ -1,0 +1,17 @@
+{
+ "_doc": "Villes (jalon 3). Le monde est découpé en régions de region_size x region_size cellules (1 cellule = 1 chunk = 24 x 24 cases). Chaque région tire 0 à 2 villes (count_weights = poids pour 0, 1, 2 villes) ; une ville tient entièrement dans sa région (marge incluse). sizes : radius en cellules (la ville couvre (2*radius+1)^2 cellules), street_spacing = écart des rues secondaires (0 = seulement la croix principale), weight = poids du tirage. Un site est refusé s'il y a moins de min_land_ratio de terre constructible sous la ville. outer_ring_keep = part des cellules du bord conservées (bords irréguliers). yard_tree_keep = part d'arbres conservés dans les parcelles. colors = couleurs de la mini-carte.",
+ "region_size": 32,
+ "margin": 1,
+ "attempts": 8,
+ "count_weights": [0.35, 0.50, 0.15],
+ "min_land_ratio": 0.7,
+ "outer_ring_keep": 0.6,
+ "yard_tree_keep": 0.03,
+ "sizes": [
+  {"id": "hamlet",  "name": "Hameau",       "radius": 1, "street_spacing": 0, "weight": 0.35},
+  {"id": "village", "name": "Village",      "radius": 2, "street_spacing": 0, "weight": 0.35},
+  {"id": "town",    "name": "Ville",        "radius": 4, "street_spacing": 3, "weight": 0.22},
+  {"id": "city",    "name": "Grande ville", "radius": 6, "street_spacing": 3, "weight": 0.08}
+ ],
+ "colors": {"road": "#5b5f66", "lot": "#c8a478", "yard": "#86a85c"}
+}

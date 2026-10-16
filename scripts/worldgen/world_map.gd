@@ -7,7 +7,7 @@ extends RefCounted
 ## Les bruits utilisent FastNoiseLite ; les décisions fines (arbres) n'utilisent que des entiers (WorldRng).
 
 const PATH: String = "res://data/worldgen/biomes.json"
-const SPAWN_CLEAR_RADIUS: float = 3.5   # pas d'arbre autour du point de départ
+const SPAWN_CLEAR_RADIUS: float = 3.5   # pas d'arbre autour du point de départ (appliqué par ChunkGenerator)
 const SPAWN_STEP: int = 6               # pas de la recherche en spirale du point de départ (cases)
 const SPAWN_MAX_RINGS: int = 400        # jusqu'à ~2400 cases de l'origine
 
@@ -17,7 +17,7 @@ enum Kind { PLAIN, FOREST, SWAMP, LAKE_DEEP, LAKE_SHALLOW, RIVER_DEEP, RIVER_SHA
 static var _config: Dictionary = {}
 static var _cache: Dictionary = {}  # seed -> WorldMap
 
-var world_seed: int = 4444
+var world_seed: int = 0
 
 var _altitude: FastNoiseLite
 var _humidity: FastNoiseLite
@@ -169,8 +169,6 @@ static func is_deep_water(kind: int) -> bool:
 
 ## Index TerrainDB de la case (fonction pure de seed, case et z).
 func terrain_at(cell: Vector2i, z: int = 0) -> int:
-	if Vector2(cell).distance_to(Vector2(_spawn)) <= SPAWN_CLEAR_RADIUS:
-		return _t_grass
 	var kind: int = kind_at(cell)
 	match kind:
 		Kind.LAKE_DEEP, Kind.RIVER_DEEP:
@@ -202,7 +200,8 @@ func terrain_at(cell: Vector2i, z: int = 0) -> int:
 
 # --- Point de départ ---
 
-## Case de départ du joueur : première zone de terre sèche dégagée en spirale depuis l'origine (déterministe).
+## Départ en PLEINE NATURE : première zone de terre sèche en spirale depuis l'origine (déterministe). Repli de
+## SettlementMap.spawn_cell(), qui préfère la lisière d'une ville.
 func spawn_cell() -> Vector2i:
 	return _spawn
 

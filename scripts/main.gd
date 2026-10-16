@@ -12,8 +12,8 @@ func _ready() -> void:
 	world.use_arena = USE_TEST_ARENA
 	add_child(world)
 
-	# Point de départ : déterministe selon la seed (première terre sèche dégagée) ; (5, 5) dans l'arène.
-	var spawn: Vector2i = ChunkGenerator.SPAWN_POS if USE_TEST_ARENA else WorldMap.for_seed(world.world_seed).spawn_cell()
+	# Point de départ : déterministe selon la seed (lisière de la ville la plus proche, sinon pleine nature) ; (5, 5) dans l'arène.
+	var spawn: Vector2i = ChunkGenerator.SPAWN_POS if USE_TEST_ARENA else SettlementMap.for_seed(world.world_seed).spawn_cell()
 
 	var player := Player.new()
 	player.world = world
@@ -34,7 +34,13 @@ func _ready() -> void:
 	hud.set_script(load("res://scripts/ui/hud.gd"))
 	add_child(hud)
 
-	EventBus.message_logged.emit("Monde : seed « %s » (%d)%s. Départ en (%d, %d). m : carte de debug." % [WORLD_SEED_TEXT, world.world_seed, ", arène de test" if USE_TEST_ARENA else "", spawn.x, spawn.y])
+	var spawn_town: Dictionary = {}
+	if not USE_TEST_ARENA:
+		var spawn_key: Vector3i = ChunkManager.key_of(spawn)
+		spawn_town = SettlementMap.for_seed(world.world_seed).town_at(Vector2i(spawn_key.x, spawn_key.y))
+	var spawn_note: String = (" en lisière de « %s »" % spawn_town["name"]) if not spawn_town.is_empty() else ""
+	EventBus.message_logged.emit("Monde : seed « %s » (%d)%s. Départ en (%d, %d)%s. m : carte de debug." % \
+		[WORLD_SEED_TEXT, world.world_seed, ", arène de test" if USE_TEST_ARENA else "", spawn.x, spawn.y, spawn_note])
 
 	# Quelques zombies pour tester (placés relativement au joueur)
 	world.spawn_monster(MonsterData.zombie(), spawn + Vector2i(9, 3))

@@ -64,7 +64,7 @@ Tileset provisoire : UltiCa (CC BY-SA 3.0, voir assets/ultica/CREDITS.txt). Les 
 - Sauvegarde = seed + modifications (deltas par chunk) ; le terrain se régénère. Pas de `randi()` global dans la génération.
 - Contenu en données (`data/worldgen/*.json`) : villes, routes, motels, fermes, centrales nucléaires, etc.
 - Étages / sous-sols / tour radio prévus plus tard : les clés de chunk portent déjà une coordonnée `z`.
-- Statut : **jalons 1 et 2 faits** (chunks, A* borné, arène de test en option ; biomes, lacs, rivières, gués, point de départ par seed, mini-carte de debug) ; jalons 3 à 8 à venir.
+- Statut : **jalons 1 et 2 faits** (chunks, A* borné, arène de test en option ; biomes, lacs, rivières, gués, mini-carte de debug) ; **jalon 3 en cours** : 3a fait (villes et rues, départ en lisière de ville), 3b (routes entre villes, ponts) et 3c (maisons avec intérieur et mobilier) à venir ; jalons 4 à 8 ensuite.
 - Réglages de partie en haut de `main.gd` : `WORLD_SEED_TEXT` (nombre ou texte) et `USE_TEST_ARENA` (true = ancienne carte fermée 60 x 40).
 
 ## Contrôles
@@ -99,6 +99,8 @@ Souris : lecture seule (survol du diviseur dans « Poids : 0.40 kg ÷ 2 × 4 = 0
   `data/worldgen/terrain.json`), `chunk_generator.gd` (terrain d'un chunk = fonction pure de seed + clé), `chunk.gd` (`Chunk` 24 x 24 :
   terrain, cases vues, sprites d'arbres, rendu du sol), `chunk_manager.gd` (`ChunkManager` : charge rayon 3, génération immédiate
   rayon 2, déchargement au-delà de 4, mémoire des cases vues conservée), `path_finder.gd` (`PathFinder`, A* borné 1500 cases / rayon 40),
+  `settlement_map.gd` (`SettlementMap` : villes par région de 32 x 32 cellules, rues en croix + grille, parcelles / jardins, géométrie des
+  cellules de route (chaussée, trottoirs, lignes, ponts sur l'eau), point de départ en lisière de ville ; réglages `data/worldgen/towns.json`),
   `world_map.gd` (`WorldMap` : champs de bruit continus altitude / humidité / rivière -> nature d'une case (`Kind` : plaine, forêt, marais,
   lac profond / peu profond, rivière profonde / gué, berges), terrain d'une case, cellule macro, point de départ ; une instance par seed).
   Réglages en données : `data/worldgen/biomes.json` (bruits, seuils, densité d'arbres, couleurs de la mini-carte).

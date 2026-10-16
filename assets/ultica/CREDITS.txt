@@ -1,7 +1,0 @@
-Sprites : tileset UltiCa ("Ultimate Cataclysm"), tileset communautaire pour Cataclysm: Dark Days Ahead.
-Source : https://github.com/I-am-Erk/CDDA-tilesets  (dossier gfx/UltimateCataclysm)
-Licence : Creative Commons Attribution-ShareAlike 3.0 Unported (CC BY-SA 3.0),
-          https://creativecommons.org/licenses/by-sa/3.0/  (licence indiquée dans le LICENSE.txt du dépôt)
-
-Les PNG sont copiés tels quels (seulement renommés à plat dans sprites/) par tools/build_ultica_pack.py.
-Les artistes individuels de chaque sprite sont listés dans le dépôt source.

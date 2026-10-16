@@ -1,8 +1,8 @@
 class_name ChunkGenerator
 extends RefCounted
 ## Génère le terrain d'un chunk. FONCTION PURE de (seed, clé de chunk, mode) : aucune dépendance à l'ordre
-## de génération, aucun état global (docs/WORLD_GEN.md §3). Monde normal : biomes, lacs et rivières via WorldMap.
-## Villes, routes et lieux spéciaux viendront aux jalons suivants.
+## de génération, aucun état global (docs/WORLD_GEN.md §3). Monde normal : biomes, lacs et rivières (WorldMap), puis villes
+## et rues par-dessus (SettlementMap). Maisons, routes entre villes et lieux spéciaux viendront aux jalons suivants.
 
 # --- Arène de test (ancienne carte fermée 60 x 40, option debug USE_TEST_ARENA) ---
 const ARENA_WIDTH: int = 60
@@ -20,10 +20,26 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 		_fill_arena(world_seed, key, data)
 		return data
 	var world_map: WorldMap = WorldMap.for_seed(world_seed)
+	var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
+	var cell_coord := Vector2i(key.x, key.y)  # une cellule macro = un chunk
+	var cell_type: int = settlement.cell_type(cell_coord) if key.z == 0 else SettlementMap.CellType.NONE
+	var mask: int = settlement.road_mask(cell_coord) if cell_type == SettlementMap.CellType.ROAD else 0
+	var spawn: Vector2i = settlement.spawn_cell()
+	var near_spawn: bool = absi(ChunkManager.key_of(spawn).x - key.x) <= 1 and absi(ChunkManager.key_of(spawn).y - key.y) <= 1
+	var grass: int = TerrainDB.index_of("t_grass")
+	var tree: int = TerrainDB.index_of("t_tree")
 	for ly in Chunk.SIZE:
 		for lx in Chunk.SIZE:
 			var cell := Vector2i(key.x * Chunk.SIZE + lx, key.y * Chunk.SIZE + ly)
-			data[ly * Chunk.SIZE + lx] = world_map.terrain_at(cell, key.z)
+			var index: int = world_map.terrain_at(cell, key.z)
+			match cell_type:
+				SettlementMap.CellType.ROAD:
+					index = settlement.road_terrain(mask, lx, ly, index)
+				SettlementMap.CellType.LOT, SettlementMap.CellType.YARD:
+					index = settlement.lot_terrain(index, cell)
+			if near_spawn and index == tree and Vector2(cell).distance_to(Vector2(spawn)) <= WorldMap.SPAWN_CLEAR_RADIUS:
+				index = grass  # le point de départ est dégagé
+			data[ly * Chunk.SIZE + lx] = index
 	return data
 
 

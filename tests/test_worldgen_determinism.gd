@@ -43,13 +43,77 @@ func _initialize() -> void:
 					same = false
 		_check(same, "seed %d : carte macro et départ identiques sur une instance neuve" % world_seed)
 
-	# --- Point de départ : terre sèche, herbe dégagée ---
+	# --- Point de départ (lisière d'une ville si possible) : praticable, hors de l'eau, déterministe ---
 	for world_seed in seeds:
-		var world_map: WorldMap = WorldMap.for_seed(world_seed)
-		var spawn: Vector2i = world_map.spawn_cell()
-		var kind: int = world_map.kind_at(spawn)
-		_check(kind == WorldMap.Kind.PLAIN or kind == WorldMap.Kind.FOREST, "seed %d : départ %s sur terre sèche (%s)" % [world_seed, spawn, WorldMap.kind_name(kind)])
-		_check(world_map.terrain_at(spawn) == TerrainDB.index_of("t_grass"), "seed %d : herbe au point de départ" % world_seed)
+		var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
+		var spawn: Vector2i = settlement.spawn_cell()
+		_check(spawn == SettlementMap.new(world_seed).spawn_cell(), "seed %d : départ identique sur une instance neuve" % world_seed)
+		var spawn_chunk: Vector3i = ChunkManager.key_of(spawn)
+		var data: PackedByteArray = ChunkGenerator.generate(world_seed, spawn_chunk)
+		var terrain: int = data[ChunkManager.index_of(spawn)]
+		_check(TerrainDB.is_walkable(terrain), "seed %d : départ %s praticable (%s)" % [world_seed, spawn, TerrainDB.id_of(terrain)])
+		var near: Dictionary = settlement.nearest_town()
+		print("       départ : %s%s" % [spawn, (" en lisière de « %s »" % near["name"]) if not near.is_empty() else " en pleine nature"])
+		# Déterminisme autour du départ (là où se trouvent les villes) : 2 ordres de génération.
+		var around: Array[Vector3i] = []
+		for dy in range(-5, 6):
+			for dx in range(-5, 6):
+				around.append(Vector3i(spawn_chunk.x + dx, spawn_chunk.y + dy, 0))
+		var around_reversed: Array[Vector3i] = around.duplicate()
+		around_reversed.reverse()
+		_check(_fingerprints(world_seed, around) == _fingerprints(world_seed, around_reversed), "seed %d : chunks autour du départ identiques dans 2 ordres" % world_seed)
+
+	# --- Villes et rues ---
+	var region_count: int = 7
+	var half_regions: int = 3
+	for world_seed in seeds:
+		var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
+		var fresh_settlement := SettlementMap.new(world_seed)
+		var same_towns: bool = true
+		var towns: Array[Dictionary] = []
+		for ry in range(-half_regions, half_regions + 1):
+			for rx in range(-half_regions, half_regions + 1):
+				var list: Array = settlement.towns_in_region(Vector2i(rx, ry))
+				if list != fresh_settlement.towns_in_region(Vector2i(rx, ry)):
+					same_towns = false
+				for t: Dictionary in list:
+					towns.append(t)
+		_check(same_towns, "seed %d : villes identiques sur une instance neuve" % world_seed)
+		_check(towns.size() >= 5, "seed %d : %d villes dans %d x %d régions (attendu au moins 5)" % [world_seed, towns.size(), region_count, region_count])
+		var roads: int = 0
+		var isolated: int = 0
+		var asymmetric: int = 0
+		var on_lake: int = 0
+		var centers_ok: bool = true
+		for t in towns:
+			var center: Vector2i = t["center"]
+			if settlement.cell_type(center) != SettlementMap.CellType.ROAD:
+				centers_ok = false
+			var radius: int = t["radius"]
+			for dy in range(-radius, radius + 1):
+				for dx in range(-radius, radius + 1):
+					var cell: Vector2i = center + Vector2i(dx, dy)
+					if settlement.cell_type(cell) != SettlementMap.CellType.ROAD:
+						continue
+					roads += 1
+					var kind: int = WorldMap.for_seed(world_seed).cell_kind(cell)
+					if kind == WorldMap.Kind.LAKE_DEEP or kind == WorldMap.Kind.LAKE_SHALLOW:
+						on_lake += 1
+					var mask: int = settlement.road_mask(cell)
+					if mask == 0:
+						isolated += 1
+					for i in SettlementMap.DIRS.size():
+						var neighbor: Vector2i = cell + SettlementMap.DIRS[i]
+						if (mask & (1 << i)) != 0 and (settlement.road_mask(neighbor) & (1 << ((i + 2) % 4))) == 0:
+							asymmetric += 1
+		_check(centers_ok, "seed %d : le centre de chaque ville est une rue" % world_seed)
+		_check(on_lake == 0, "seed %d : aucune rue sur un lac" % world_seed)
+		_check(asymmetric == 0, "seed %d : connexions des rues symétriques" % world_seed)
+		_check(isolated * 20 <= roads, "seed %d : peu de rues isolées (%d sur %d)" % [world_seed, isolated, roads])
+
+	# --- Terrains de route ---
+	for id in ["t_pavement", "t_pavement_y", "t_sidewalk", "t_bridge"]:
+		_check(TerrainDB.is_walkable(TerrainDB.index_of(id)), "%s praticable" % id)
 
 	# --- Répartition des biomes (relevé grossier) : rivières, gués, lacs, forêts, plaines, marais ---
 	var totals: Array[int] = []

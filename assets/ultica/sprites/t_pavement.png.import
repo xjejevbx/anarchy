@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ckn0xl4if6vgr"
-path="res://.godot/imported/sprite-sheet.png-93dc3d984c8fa700b27070a175212ede.ctex"
+uid="uid://bavdlfvgagm34"
+path="res://.godot/imported/t_pavement.png-a147beaa0bc8559429c4fe372dcaad50.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprite-sheet.png"
-dest_files=["res://.godot/imported/sprite-sheet.png-93dc3d984c8fa700b27070a175212ede.ctex"]
+source_file="res://assets/ultica/sprites/t_pavement.png"
+dest_files=["res://.godot/imported/t_pavement.png-a147beaa0bc8559429c4fe372dcaad50.ctex"]
 
 [params]
 

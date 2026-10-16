@@ -58,13 +58,21 @@ Le terrain d'une case et la cellule macro (24 x 24, échantillonnée en son cent
 - Terre ferme : marais (humide et bas), forêt (humide), plaine ; densité d'arbres par biome (hachage entier, pas de flottant).
 - Natures : `plaine, forêt, marais, lac profond, lac peu profond, rivière profonde, rivière peu profonde (gué), berge de lac, berge de rivière`.
 
-### 5.2 Villes
-- Chaque région calcule **ses propres centres de villes** (grille jitterée : nombre 0..N, position et taille tirés avec `mix(seed, LAYER_TOWN, rx, ry)`).
-  Les centres des régions voisines sont calculables sans les générer, donc pas de couture visible aux bords de région.
-- Tailles : hameau (~3 × 3 cellules), village, ville, grande ville (~12 × 12). Un tissu urbain = rues principales + grille secondaire.
-- Zonage par distance au centre et bruit : **résidentiel, commercial, industriel, civique**. Chaque cellule de parcelle choisit un bâtiment
-  selon des poids du zonage.
-- Les cellules de route portent un **masque de connexions** (droit, coin, T, croix) + trottoirs ; le plan est choisi selon ce masque.
+### 5.2 Villes (jalon 3a, tel que construit)
+- Le monde est découpé en **régions de 32 × 32 cellules** (1 cellule = 1 chunk = 24 × 24 cases). Chaque région tire, avec
+  `mix(seed, LAYER_TOWN, rx, ry)`, **0 à 2 villes** (poids 35 / 50 / 15 %) qui tiennent **entièrement dans la région** (marge de 1 cellule) :
+  aucune dépendance entre régions. Un site est refusé si le centre n'est pas en plaine ou forêt, s'il y a moins de 70 % de terre
+  constructible sous la ville, ou s'il chevauche une autre ville de la région.
+- Tailles : **hameau** (rayon 1), **village** (rayon 2), **ville** (rayon 4, rues secondaires tous les 3 cellules), **grande ville** (rayon 6).
+  La ville couvre (2 × rayon + 1)² cellules ; les cellules du bord sont conservées avec une probabilité de 60 % (contour irrégulier).
+- **Rues** : croix principale (cellules alignées sur le centre) + grille de rues secondaires ; pas de rue sur un lac. Les cellules voisines
+  d'une rue sont des **parcelles** (futures maisons), les autres des **jardins** ; les arbres y sont enlevés (3 % conservés).
+- **Cellule de route** (24 × 24 cases) : chaussée de 8 cases au centre, trottoirs de 2 cases de chaque côté, lignes jaunes en pointillés
+  sur les routes droites ; le dessin dépend du masque de connexions (droit, virage, T, croix, impasse, place isolée). La route est
+  dessinée PAR-DESSUS le terrain naturel : toute case d'eau sous la chaussée ou le trottoir devient un **pont**.
+- Réglages : `data/worldgen/towns.json` (probabilités, tailles, ratios) ; géométrie des routes en constantes de `SettlementMap`.
+- **Départ** : au bout d'une rue principale de la ville la plus proche de l'origine (à moins de 600 cases), sinon en pleine nature
+  (`WorldMap.spawn_cell()`). Les arbres sont enlevés autour du départ (`ChunkGenerator`).
 
 ### 5.3 Routes entre villes
 Chaque ville se relie à ses 2 ou 3 plus proches voisines (y compris dans les régions voisines, connues par leurs centres). Chemin : A* sur la
@@ -223,3 +231,12 @@ Météo, saisons, cycle jour/nuit détaillé et éclairage, hordes errantes, vé
   `swamp_*`, `forest_humidity`).
 - Limites : pas de déplacement ralenti dans l'eau ni de nage ; pas de ponts (jalon 3, avec les routes) ; les arbres sont toujours posés
   sur de l'herbe.
+
+### Jalon 3a — villes et rues (fait)
+- `SettlementMap` (`worldgen/settlement_map.gd`) + `data/worldgen/towns.json` ; terrains `t_pavement`, `t_pavement_y`, `t_sidewalk`, `t_bridge`
+  (sprites UltiCa ajoutés au pack) ; `ChunkGenerator` superpose villes et rues au terrain naturel ; départ en lisière de ville.
+- Mini-carte (`m`) : rues, parcelles et jardins par-dessus les biomes, nom de la ville sous le joueur et sous le curseur.
+- Test étendu : villes identiques sur une instance neuve, au moins 5 villes sur 7 × 7 régions, centre de ville = rue, aucune rue sur un lac,
+  connexions des rues symétriques, peu de rues isolées, départ praticable, chunks autour du départ identiques dans 2 ordres.
+- Réglages initiaux posés « à l'aveugle » : à ajuster avec la mini-carte (`count_weights`, `sizes`, `min_land_ratio`).
+- Limites : pas encore de maisons (les parcelles sont de l'herbe), pas de routes entre villes ni de ponts hors des villes (3b), pas de mobilier (3c).

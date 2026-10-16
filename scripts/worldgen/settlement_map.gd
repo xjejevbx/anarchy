@@ -1,0 +1,350 @@
+class_name SettlementMap
+extends RefCounted
+## Villes et rues (docs/WORLD_GEN.md §5.2, jalon 3a). FONCTION PURE de (seed, coordonnées), comme WorldMap :
+## les villes d'une région ne dépendent que de la seed et de la région (jamais d'une autre région déjà générée).
+##
+## Unité : la CELLULE macro = un chunk = 24 x 24 cases. Le monde est découpé en régions de region_size x region_size cellules ;
+## chaque région tire 0 à 2 villes, qui tiennent entièrement dans la région (marge comprise). Une ville est une croix de rues
+## principales plus, pour les grandes, une grille de rues secondaires ; les cellules voisines d'une rue sont des parcelles
+## (LOT : futures maisons), les autres des jardins (YARD). Réglages dans data/worldgen/towns.json.
+
+const PATH: String = "res://data/worldgen/towns.json"
+
+enum CellType { NONE, ROAD, LOT, YARD }
+
+# Bits du masque de connexions d'une cellule de route (même ordre que DIRS).
+const DIR_N: int = 1
+const DIR_E: int = 2
+const DIR_S: int = 4
+const DIR_W: int = 8
+const DIRS: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
+
+# --- Géométrie d'une cellule de route (cases locales 0..23) : chaussée de 8, trottoirs de 2 de chaque côté ---
+const ASPHALT_LO: int = 8
+const ASPHALT_HI: int = 15
+const SIDEWALK_LO: int = 6
+const SIDEWALK_HI: int = 17
+const LINE_A: int = 11             # lignes jaunes au centre des routes droites (2 cases, en pointillés)
+const LINE_B: int = 12
+const LINE_DASH_PERIOD: int = 6
+const LINE_DASH_LENGTH: int = 4
+
+const SPAWN_MAX_DISTANCE: int = 600  # on démarre en lisière d'une ville à moins de N cases de l'origine, sinon en pleine nature
+
+static var _config: Dictionary = {}
+static var _cache: Dictionary = {}  # seed -> SettlementMap
+
+var world_seed: int = 0
+
+var _world_map: WorldMap
+var _region_size: int
+var _margin: int
+var _attempts: int
+var _min_land_ratio: float
+var _outer_ring_keep: float
+var _yard_tree_keep: float
+var _count_weights: Array = []
+var _sizes: Array = []
+var _size_weights: Array = []
+var _regions: Dictionary = {}   # Vector2i (région) -> Array de villes
+var _spawn: Vector2i = Vector2i.ZERO
+var _spawn_ready: bool = false
+
+var _t_grass: int
+var _t_tree: int
+var _t_water_sh: int
+var _t_water_dp: int
+var _t_swater_sh: int
+var _t_pavement: int
+var _t_pavement_y: int
+var _t_sidewalk: int
+var _t_bridge: int
+
+
+static func for_seed(seed_value: int) -> SettlementMap:
+	if not _cache.has(seed_value):
+		_cache[seed_value] = SettlementMap.new(seed_value)
+	return _cache[seed_value]
+
+
+static func _load_config() -> void:
+	if not _config.is_empty():
+		return
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PATH))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_error("SettlementMap : %s introuvable ou invalide." % PATH)
+		return
+	_config = parsed
+
+
+func _init(seed_value: int = 0) -> void:
+	world_seed = seed_value
+	_load_config()
+	_world_map = WorldMap.for_seed(seed_value)
+	_region_size = _config["region_size"]
+	_margin = _config["margin"]
+	_attempts = _config["attempts"]
+	_min_land_ratio = _config["min_land_ratio"]
+	_outer_ring_keep = _config["outer_ring_keep"]
+	_yard_tree_keep = _config["yard_tree_keep"]
+	_count_weights = _config["count_weights"]
+	_sizes = _config["sizes"]
+	for size: Dictionary in _sizes:
+		_size_weights.append(float(size["weight"]))
+	_t_grass = TerrainDB.index_of("t_grass")
+	_t_tree = TerrainDB.index_of("t_tree")
+	_t_water_sh = TerrainDB.index_of("t_water_sh")
+	_t_water_dp = TerrainDB.index_of("t_water_dp")
+	_t_swater_sh = TerrainDB.index_of("t_swater_sh")
+	_t_pavement = TerrainDB.index_of("t_pavement")
+	_t_pavement_y = TerrainDB.index_of("t_pavement_y")
+	_t_sidewalk = TerrainDB.index_of("t_sidewalk")
+	_t_bridge = TerrainDB.index_of("t_bridge")
+
+
+static func region_size_cells() -> int:
+	_load_config()
+	return _config["region_size"]
+
+
+static func overlay_color(cell_type: int) -> Color:
+	_load_config()
+	var colors: Dictionary = _config["colors"]
+	match cell_type:
+		CellType.ROAD:
+			return Color.html(String(colors["road"]))
+		CellType.LOT:
+			return Color.html(String(colors["lot"]))
+		_:
+			return Color.html(String(colors["yard"]))
+
+
+# --- Villes d'une région ---
+
+## Villes d'une région : [{center: Vector2i (cellule), radius, spacing, size_id, name}] (mis en cache).
+func towns_in_region(region: Vector2i) -> Array:
+	if not _regions.has(region):
+		_regions[region] = _generate_region(region)
+	return _regions[region]
+
+
+func _generate_region(region: Vector2i) -> Array:
+	var rng: RandomNumberGenerator = WorldRng.rng_for(world_seed, WorldRng.LAYER_TOWN, region.x, region.y, 0)
+	var count: int = _pick_weighted(_count_weights, rng.randf())
+	var towns: Array = []
+	for i in count:
+		for attempt in _attempts:
+			var size: Dictionary = _sizes[_pick_weighted(_size_weights, rng.randf())]
+			var radius: int = size["radius"]
+			var low: int = radius + _margin
+			var high: int = _region_size - 1 - radius - _margin
+			if high < low:
+				continue
+			var center := Vector2i(region.x * _region_size + rng.randi_range(low, high),
+				region.y * _region_size + rng.randi_range(low, high))
+			if not _site_ok(center, radius) or _overlaps(towns, center, radius):
+				continue
+			towns.append({"center": center, "radius": radius, "spacing": int(size["street_spacing"]),
+				"size_id": String(size["id"]), "name": String(size["name"])})
+			break
+	return towns
+
+
+static func _pick_weighted(weights: Array, roll: float) -> int:
+	var total: float = 0.0
+	for w in weights:
+		total += float(w)
+	var target: float = roll * total
+	var acc: float = 0.0
+	for i in weights.size():
+		acc += float(weights[i])
+		if target < acc:
+			return i
+	return weights.size() - 1
+
+
+## Site acceptable : centre en plaine ou forêt, assez de terre constructible sous toute la ville.
+func _site_ok(center: Vector2i, radius: int) -> bool:
+	var center_kind: int = _world_map.cell_kind(center)
+	if center_kind != WorldMap.Kind.PLAIN and center_kind != WorldMap.Kind.FOREST:
+		return false
+	var good: int = 0
+	var total: int = 0
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			total += 1
+			if _is_buildable(_world_map.cell_kind(center + Vector2i(dx, dy))):
+				good += 1
+	return float(good) / float(total) >= _min_land_ratio
+
+
+static func _overlaps(towns: Array, center: Vector2i, radius: int) -> bool:
+	for t: Dictionary in towns:
+		var d: Vector2i = center - (t["center"] as Vector2i)
+		if maxi(absi(d.x), absi(d.y)) < radius + int(t["radius"]) + 3:
+			return true
+	return false
+
+
+static func _is_buildable(kind: int) -> bool:
+	return kind == WorldMap.Kind.PLAIN or kind == WorldMap.Kind.FOREST \
+		or kind == WorldMap.Kind.SHORE_LAKE or kind == WorldMap.Kind.BANK_RIVER
+
+
+static func _is_lake(kind: int) -> bool:
+	return kind == WorldMap.Kind.LAKE_DEEP or kind == WorldMap.Kind.LAKE_SHALLOW
+
+
+## Ville qui contient cette cellule (dictionnaire vide si aucune).
+func town_at(cell: Vector2i) -> Dictionary:
+	var region := Vector2i(floori(float(cell.x) / _region_size), floori(float(cell.y) / _region_size))
+	for t: Dictionary in towns_in_region(region):
+		var d: Vector2i = cell - (t["center"] as Vector2i)
+		if absi(d.x) <= int(t["radius"]) and absi(d.y) <= int(t["radius"]):
+			return t
+	return {}
+
+
+# --- Nature d'une cellule ---
+
+## La cellule fait-elle partie du réseau de rues de la ville (indépendamment de l'eau) ?
+static func _is_street(town: Dictionary, cell: Vector2i) -> bool:
+	var d: Vector2i = cell - (town["center"] as Vector2i)
+	if absi(d.x) > int(town["radius"]) or absi(d.y) > int(town["radius"]):
+		return false
+	var spacing: int = town["spacing"]
+	return d.x == 0 or d.y == 0 or (spacing > 0 and (posmod(d.x, spacing) == 0 or posmod(d.y, spacing) == 0))
+
+
+func cell_type(cell: Vector2i) -> int:
+	var town: Dictionary = town_at(cell)
+	if town.is_empty():
+		return CellType.NONE
+	var kind: int = _world_map.cell_kind(cell)
+	if _is_street(town, cell):
+		return CellType.NONE if _is_lake(kind) else CellType.ROAD  # pas de rue sur un lac
+	var d: Vector2i = cell - (town["center"] as Vector2i)
+	if maxi(absi(d.x), absi(d.y)) == int(town["radius"]) \
+			and not WorldRng.chance(world_seed, WorldRng.LAYER_TOWN, cell.x, cell.y, 1, _outer_ring_keep):
+		return CellType.NONE  # bord irrégulier
+	if not _is_buildable(kind):
+		return CellType.NONE
+	for dir in DIRS:
+		var neighbor: Vector2i = cell + dir
+		if _is_street(town, neighbor) and not _is_lake(_world_map.cell_kind(neighbor)):
+			return CellType.LOT
+	return CellType.YARD
+
+
+## Masque des rues voisines (DIR_N | DIR_E | DIR_S | DIR_W) d'une cellule de route.
+func road_mask(cell: Vector2i) -> int:
+	var mask: int = 0
+	for i in DIRS.size():
+		if cell_type(cell + DIRS[i]) == CellType.ROAD:
+			mask |= 1 << i
+	return mask
+
+
+# --- Terrain des cases d'une cellule de route ou de parcelle ---
+
+func _is_water(terrain: int) -> bool:
+	return terrain == _t_water_sh or terrain == _t_water_dp or terrain == _t_swater_sh
+
+
+func _clear_tree(terrain: int) -> int:
+	return _t_grass if terrain == _t_tree else terrain
+
+
+## Terrain d'une case (lx, ly locaux) d'une cellule de route, selon le masque de connexions. `base` = terrain naturel :
+## l'eau sous la chaussée ou le trottoir devient un PONT ; hors de la route, les arbres sont enlevés.
+func road_terrain(mask: int, lx: int, ly: int, base: int) -> int:
+	var in_asphalt_cols: bool = lx >= ASPHALT_LO and lx <= ASPHALT_HI
+	var in_asphalt_rows: bool = ly >= ASPHALT_LO and ly <= ASPHALT_HI
+	var in_sidewalk_cols: bool = lx >= SIDEWALK_LO and lx <= SIDEWALK_HI
+	var in_sidewalk_rows: bool = ly >= SIDEWALK_LO and ly <= SIDEWALK_HI
+	var asphalt: bool = false
+	var sidewalk: bool = false
+	if mask == 0:  # rue isolée : petite place carrée
+		asphalt = in_asphalt_cols and in_asphalt_rows
+		sidewalk = in_sidewalk_cols and in_sidewalk_rows and not asphalt
+	else:
+		asphalt = in_asphalt_cols and in_asphalt_rows  # carrefour central
+		if mask & DIR_N != 0:
+			if in_asphalt_cols and ly <= ASPHALT_HI:
+				asphalt = true
+			elif in_sidewalk_cols and ly <= SIDEWALK_HI:
+				sidewalk = true
+		if mask & DIR_S != 0:
+			if in_asphalt_cols and ly >= ASPHALT_LO:
+				asphalt = true
+			elif in_sidewalk_cols and ly >= SIDEWALK_LO:
+				sidewalk = true
+		if mask & DIR_E != 0:
+			if in_asphalt_rows and lx >= ASPHALT_LO:
+				asphalt = true
+			elif in_sidewalk_rows and lx >= SIDEWALK_LO:
+				sidewalk = true
+		if mask & DIR_W != 0:
+			if in_asphalt_rows and lx <= ASPHALT_HI:
+				asphalt = true
+			elif in_sidewalk_rows and lx <= SIDEWALK_HI:
+				sidewalk = true
+	var water: bool = _is_water(base)
+	if asphalt:
+		if water:
+			return _t_bridge
+		if mask == (DIR_N | DIR_S) and (lx == LINE_A or lx == LINE_B) and ly % LINE_DASH_PERIOD < LINE_DASH_LENGTH:
+			return _t_pavement_y
+		if mask == (DIR_E | DIR_W) and (ly == LINE_A or ly == LINE_B) and lx % LINE_DASH_PERIOD < LINE_DASH_LENGTH:
+			return _t_pavement_y
+		return _t_pavement
+	if sidewalk:
+		return _t_bridge if water else _t_sidewalk
+	return _clear_tree(base)
+
+
+## Terrain d'une case de parcelle ou de jardin : les arbres sont enlevés (sauf quelques-uns).
+func lot_terrain(base: int, cell: Vector2i) -> int:
+	if base == _t_tree and not WorldRng.chance(world_seed, WorldRng.LAYER_TOWN, cell.x, cell.y, 2, _yard_tree_keep):
+		return _t_grass
+	return base
+
+
+# --- Point de départ ---
+
+## Départ du joueur : au bout d'une rue de la ville la plus proche de l'origine (à moins de SPAWN_MAX_DISTANCE cases),
+## sinon en pleine nature (WorldMap.spawn_cell()). Déterministe.
+func spawn_cell() -> Vector2i:
+	if not _spawn_ready:
+		_spawn = _find_spawn()
+		_spawn_ready = true
+	return _spawn
+
+
+## Ville la plus proche de l'origine (dictionnaire vide si aucune à portée).
+func nearest_town() -> Dictionary:
+	var best: Dictionary = {}
+	var best_distance: float = INF
+	var reach: int = ceili(float(SPAWN_MAX_DISTANCE) / float(_region_size * Chunk.SIZE)) + 1
+	for ry in range(-reach, reach + 1):
+		for rx in range(-reach, reach + 1):
+			for t: Dictionary in towns_in_region(Vector2i(rx, ry)):
+				var distance: float = Vector2((t["center"] as Vector2i) * Chunk.SIZE).length()
+				if distance <= SPAWN_MAX_DISTANCE and distance < best_distance:
+					best = t
+					best_distance = distance
+	return best
+
+
+func _find_spawn() -> Vector2i:
+	var town: Dictionary = nearest_town()
+	if town.is_empty():
+		return _world_map.spawn_cell()
+	var center: Vector2i = town["center"]
+	var radius: int = town["radius"]
+	var half: Vector2i = Vector2i(Chunk.SIZE / 2 - 1, Chunk.SIZE / 2 - 1)
+	for dir in [Vector2i.RIGHT, Vector2i.LEFT, Vector2i.DOWN, Vector2i.UP]:  # extrémités des rues principales
+		var cell: Vector2i = center + dir * radius
+		if cell_type(cell) == CellType.ROAD and _is_buildable(_world_map.cell_kind(cell)):
+			return cell * Chunk.SIZE + half
+	return _world_map.spawn_cell()

@@ -21,7 +21,7 @@ const COLOR_HEADER: Color = Color(0.95, 0.8, 0.4)
 const COLOR_MARKER: Color = Color(1.0, 0.25, 0.2)
 
 var player: Player
-var seed_text: String = "4444"
+var seed_text: String = ""
 
 var _view: Control
 var _is_open: bool = false
@@ -43,6 +43,7 @@ func _ready() -> void:
 	_view.draw.connect(_draw_view)
 	add_child(_view)
 	EventBus.minimap_requested.connect(_on_requested)
+
 
 func _on_requested() -> void:
 	if player == null or player.dead or _is_open or player.input_blocked:
@@ -67,16 +68,25 @@ func _close() -> void:
 ## Recalcule l'image : une couleur par échantillon, selon la nature de la case au centre de l'échantillon.
 func _rebuild() -> void:
 	var world_map: WorldMap = WorldMap.for_seed(player.world.world_seed)
+	var settlement: SettlementMap = SettlementMap.for_seed(player.world.world_seed)
 	var colors: Array[Color] = []
 	for kind in WorldMap.kind_count():
 		colors.append(WorldMap.kind_color(kind))
 	var zoom: int = ZOOMS[_zoom_index]
 	var half: int = SAMPLES / 2
+	var type_cache: Dictionary = {}  # cellule macro -> type (rue, parcelle, jardin)
 	var image := Image.create(SAMPLES, SAMPLES, false, Image.FORMAT_RGB8)
 	for j in SAMPLES:
 		for i in SAMPLES:
 			var cell := _center + Vector2i((i - half) * zoom, (j - half) * zoom)
-			image.set_pixel(i, j, colors[world_map.kind_at(cell)])
+			var color: Color = colors[world_map.kind_at(cell)]
+			var coord := Vector2i(floori(float(cell.x) / Chunk.SIZE), floori(float(cell.y) / Chunk.SIZE))
+			if not type_cache.has(coord):
+				type_cache[coord] = settlement.cell_type(coord)
+			var cell_type: int = type_cache[coord]
+			if cell_type != SettlementMap.CellType.NONE:
+				color = SettlementMap.overlay_color(cell_type)  # les villes se dessinent par-dessus les biomes
+			image.set_pixel(i, j, color)
 	_texture = ImageTexture.create_from_image(image)
 	_view.queue_redraw()
 
@@ -151,8 +161,11 @@ func _draw_view() -> void:
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, FONT_SIZE - 2, COLOR_TEXT)
 	var here: Vector2i = player.grid_pos
 	var here_chunk: Vector3i = ChunkManager.key_of(here)
-	_view.draw_string(font, panel.position + Vector2(16, 74), "Joueur : (%d, %d)   chunk (%d, %d)   %s" % \
-		[here.x, here.y, here_chunk.x, here_chunk.y, WorldMap.kind_name(world_map.kind_at(here))],
+	var settlement: SettlementMap = SettlementMap.for_seed(player.world.world_seed)
+	var here_town: Dictionary = settlement.town_at(Vector2i(here_chunk.x, here_chunk.y))
+	_view.draw_string(font, panel.position + Vector2(16, 74), "Joueur : (%d, %d)   chunk (%d, %d)   %s%s" % \
+		[here.x, here.y, here_chunk.x, here_chunk.y, WorldMap.kind_name(world_map.kind_at(here)),
+		("   —   " + String(here_town["name"])) if not here_town.is_empty() else ""],
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, FONT_SIZE - 2, COLOR_TEXT)
 
 	# Carte
@@ -174,10 +187,18 @@ func _draw_view() -> void:
 		_view.draw_rect(Rect2(legend_x, y, 16, 16), WorldMap.kind_color(kind))
 		_view.draw_string(font, Vector2(legend_x + 26, y + 14), WorldMap.kind_name(kind), HORIZONTAL_ALIGNMENT_LEFT, legend_width - 30.0, FONT_SIZE - 2, COLOR_TEXT)
 		y += 24.0
+	for entry in [[SettlementMap.CellType.ROAD, "Rue / route"], [SettlementMap.CellType.LOT, "Parcelle (maison)"], [SettlementMap.CellType.YARD, "Jardin"]]:
+		_view.draw_rect(Rect2(legend_x, y, 16, 16), SettlementMap.overlay_color(entry[0]))
+		_view.draw_string(font, Vector2(legend_x + 26, y + 14), String(entry[1]), HORIZONTAL_ALIGNMENT_LEFT, legend_width - 30.0, FONT_SIZE - 2, COLOR_TEXT)
+		y += 24.0
 	y += 14.0
 	if _hovering:
 		_view.draw_string(font, Vector2(legend_x, y + 14), "Curseur : (%d, %d)" % [_hover_cell.x, _hover_cell.y], HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_TEXT)
 		_view.draw_string(font, Vector2(legend_x, y + 36), WorldMap.kind_name(world_map.kind_at(_hover_cell)), HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_HEADER)
+		var hover_coord := Vector2i(floori(float(_hover_cell.x) / Chunk.SIZE), floori(float(_hover_cell.y) / Chunk.SIZE))
+		var hover_town: Dictionary = settlement.town_at(hover_coord)
+		if not hover_town.is_empty():
+			_view.draw_string(font, Vector2(legend_x, y + 58), "%s (rayon %d cellules)" % [hover_town["name"], hover_town["radius"]], HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_HEADER)
 	_view.draw_string(font, Vector2(panel.position.x + 16, panel.end.y - 14),
 		"+/− : zoom   8/2/4/6 (ou flèches) : déplacer la vue   5 : recentrer   m / Échap : fermer",
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, 14, COLOR_MUTED)
