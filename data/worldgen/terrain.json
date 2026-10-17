@@ -106,6 +106,24 @@
    "walkable": false,
    "opaque": false,
    "wall_link": true
+  },
+  "t_field": {
+   "name": "Champ",
+   "tile": "t_dirtmound",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_fence": {
+   "name": "Clôture",
+   "tile": "t_fence",
+   "walkable": false,
+   "opaque": false
+  },
+  "t_gas_pump": {
+   "name": "Pompe à essence",
+   "tile": "t_gas_pump",
+   "walkable": false,
+   "opaque": false
   }
  }
 }

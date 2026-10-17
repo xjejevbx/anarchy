@@ -1,16 +1,19 @@
 class_name MapgenDB
 extends RefCounted
-## Plans de maisons (docs/WORLD_GEN.md §5.5, jalon 3c), chargés depuis res://data/worldgen/mapgen/houses.json.
+## Plans de maisons (jalon 3c) et de lieux spéciaux (jalon 4), chargés depuis res://data/worldgen/mapgen/houses.json puis places.json.
+## Les plans de MAISON viennent en premier (indices 0 à plan_count() - 1, tirés par pick()) ; les plans de lieux suivent (retrouvés par plan_by_id()).
 ## Chaque plan (24 x 24 caractères, façade au SUD) est compilé une fois : un octet de terrain (index TerrainDB, ou NATURE =
 ## « garder le terrain naturel ») et un octet de mobilier (index FurnitureDB) par case. Les erreurs de plan sont listées par
 ## errors() et affichées au chargement : un plan invalide est ignoré, le jeu continue.
 
-const PATH: String = "res://data/worldgen/mapgen/houses.json"
+const PATHS: Array[String] = ["res://data/worldgen/mapgen/houses.json", "res://data/worldgen/mapgen/places.json"]
 const NATURE: int = 255
 const SIZE: int = 24
 
 static var _loaded: bool = false
 static var _plans: Array[Dictionary] = []   # {id, weight, terrain, furniture}
+static var _house_count: int = 0
+static var _by_id: Dictionary = {}
 static var _total_weight: float = 0.0
 static var _errors: Array[String] = []
 
@@ -19,16 +22,23 @@ static func _ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	if not FileAccess.file_exists(PATH):
-		_fail("%s introuvable." % PATH)
+	for i in PATHS.size():
+		_load_file(PATHS[i], i == 0)
+		if i == 0:
+			_house_count = _plans.size()
+
+
+static func _load_file(path: String, is_house: bool) -> void:
+	if not FileAccess.file_exists(path):
+		_fail("%s introuvable." % path)
 		return
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PATH))
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(parsed) != TYPE_DICTIONARY:
-		_fail("houses.json invalide.")
+		_fail("%s invalide." % path)
 		return
 	var palette: Dictionary = parsed.get("palette", {})
 	for plan: Dictionary in parsed.get("plans", []):
-		_compile(plan, palette)
+		_compile(plan, palette, is_house)
 
 
 static func _fail(message: String) -> void:
@@ -36,7 +46,7 @@ static func _fail(message: String) -> void:
 	push_error("MapgenDB : " + message)
 
 
-static func _compile(plan: Dictionary, palette: Dictionary) -> void:
+static func _compile(plan: Dictionary, palette: Dictionary, is_house: bool) -> void:
 	var id: String = String(plan.get("id", "?"))
 	var rows: Array = plan.get("rows", [])
 	if rows.size() != SIZE:
@@ -74,8 +84,10 @@ static func _compile(plan: Dictionary, palette: Dictionary) -> void:
 			terrain[y * SIZE + x] = t
 			furniture[y * SIZE + x] = f
 	var weight: float = maxf(float(plan.get("weight", 1.0)), 0.0)
+	_by_id[id] = _plans.size()
 	_plans.append({"id": id, "weight": weight, "terrain": terrain, "furniture": furniture})
-	_total_weight += weight
+	if is_house:
+		_total_weight += weight
 
 
 static func errors() -> Array[String]:
@@ -83,9 +95,33 @@ static func errors() -> Array[String]:
 	return _errors
 
 
+## Nombre de plans de MAISON (les plans de lieux spéciaux viennent après : voir total_count()).
 static func plan_count() -> int:
 	_ensure_loaded()
+	return _house_count
+
+
+## Nombre total de plans (maisons puis lieux spéciaux).
+static func total_count() -> int:
+	_ensure_loaded()
 	return _plans.size()
+
+
+## Indice d'un plan (maison ou lieu) par son id, -1 s'il n'existe pas.
+static func plan_by_id(id: String) -> int:
+	_ensure_loaded()
+	return int(_by_id.get(id, -1))
+
+
+## Le plan contient-il une porte ?
+static func has_door(plan: int) -> bool:
+	_ensure_loaded()
+	var door: int = TerrainDB.index_of("t_door")
+	var terrain: PackedByteArray = _plans[plan]["terrain"]
+	for i in terrain.size():
+		if terrain[i] == door:
+			return true
+	return false
 
 
 static func plan_id(plan: int) -> String:
@@ -96,15 +132,15 @@ static func plan_id(plan: int) -> String:
 ## Plan tiré par `roll` (réel dans [0, 1)), pondéré par "weight". -1 s'il n'y a aucun plan valide.
 static func pick(roll: float) -> int:
 	_ensure_loaded()
-	if _plans.is_empty() or _total_weight <= 0.0:
+	if _house_count == 0 or _total_weight <= 0.0:
 		return -1
 	var target: float = roll * _total_weight
 	var acc: float = 0.0
-	for i in _plans.size():
+	for i in _house_count:
 		acc += float(_plans[i]["weight"])
 		if target < acc:
 			return i
-	return _plans.size() - 1
+	return _house_count - 1
 
 
 ## Terrain (index TerrainDB, ou NATURE) à l'indice de plan `plan_index` (y * 24 + x, plan non tourné).

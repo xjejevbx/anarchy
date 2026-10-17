@@ -1,17 +1,83 @@
 {
  "_doc": "Mobilier (jalon 3c). tile : id de tuile UltiCa ; walkable : on peut marcher dessus (defaut false) ; opaque : bloque la vue (defaut false). L'ORDRE des entrees donne l'index stocke dans les chunks (1 = premier, 0 = pas de mobilier ; max 255). Ajouter a la suite pour ne rien renumeroter.",
  "furniture": {
-  "f_bed": {"name": "Lit", "tile": "f_bed", "walkable": false, "opaque": false},
-  "f_table": {"name": "Table", "tile": "f_table", "walkable": false, "opaque": false},
-  "f_chair": {"name": "Chaise", "tile": "f_chair", "walkable": true, "opaque": false},
-  "f_sofa": {"name": "Canapé", "tile": "f_sofa", "walkable": false, "opaque": false},
-  "f_bookcase": {"name": "Bibliothèque", "tile": "f_bookcase", "walkable": false, "opaque": false},
-  "f_fridge": {"name": "Réfrigérateur", "tile": "f_fridge", "walkable": false, "opaque": false},
-  "f_counter": {"name": "Comptoir", "tile": "f_counter", "walkable": false, "opaque": false},
-  "f_oven": {"name": "Cuisinière", "tile": "f_oven", "walkable": false, "opaque": false},
-  "f_dresser": {"name": "Commode", "tile": "f_dresser", "walkable": false, "opaque": false},
-  "f_sink": {"name": "Évier", "tile": "f_sink", "walkable": false, "opaque": false},
-  "f_toilet": {"name": "WC", "tile": "f_toilet", "walkable": false, "opaque": false},
-  "f_bathtub": {"name": "Baignoire", "tile": "f_bathtub", "walkable": false, "opaque": false}
+  "f_bed": {
+   "name": "Lit",
+   "tile": "f_bed",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_table": {
+   "name": "Table",
+   "tile": "f_table",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_chair": {
+   "name": "Chaise",
+   "tile": "f_chair",
+   "walkable": true,
+   "opaque": false
+  },
+  "f_sofa": {
+   "name": "Canapé",
+   "tile": "f_sofa",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_bookcase": {
+   "name": "Bibliothèque",
+   "tile": "f_bookcase",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_fridge": {
+   "name": "Réfrigérateur",
+   "tile": "f_fridge",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_counter": {
+   "name": "Comptoir",
+   "tile": "f_counter",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_oven": {
+   "name": "Cuisinière",
+   "tile": "f_oven",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_dresser": {
+   "name": "Commode",
+   "tile": "f_dresser",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_sink": {
+   "name": "Évier",
+   "tile": "f_sink",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_toilet": {
+   "name": "WC",
+   "tile": "f_toilet",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_bathtub": {
+   "name": "Baignoire",
+   "tile": "f_bathtub",
+   "walkable": false,
+   "opaque": false
+  },
+  "f_rack": {
+   "name": "Rayonnage",
+   "tile": "f_rack",
+   "walkable": false,
+   "opaque": false
+  }
  }
 }

@@ -14,7 +14,7 @@
   {"id": "town",    "name": "Ville",        "radius": 4, "street_spacing": 3, "weight": 0.22},
   {"id": "city",    "name": "Grande ville", "radius": 6, "street_spacing": 3, "weight": 0.08}
  ],
- "colors": {"road": "#5b5f66", "lot": "#c8a478", "yard": "#86a85c"},
+ "colors": {"road": "#5b5f66", "lot": "#c8a478", "yard": "#86a85c", "special": "#d65a5a"},
  "routes": {
   "near_count": 2,
   "near_count_by_size": {"city": 3},

@@ -26,7 +26,8 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 	var mask: int = settlement.road_mask(cell_coord) if cell_type == SettlementMap.CellType.ROAD else 0
 	var wild_road: bool = cell_type == SettlementMap.CellType.ROAD and settlement.is_wild_road(cell_coord)
 	var spawn: Vector2i = settlement.spawn_cell()
-	var house: Dictionary = settlement.lot_plan(cell_coord) if cell_type == SettlementMap.CellType.LOT else {}
+	var house: Dictionary = settlement.cell_plan(cell_coord) \
+			if cell_type == SettlementMap.CellType.LOT or cell_type == SettlementMap.CellType.SPECIAL else {}
 	var house_plan: int = int(house.get("plan", -1))
 	var house_rot: int = int(house.get("rot", 0))
 	var near_spawn: bool = absi(ChunkManager.key_of(spawn).x - key.x) <= 1 and absi(ChunkManager.key_of(spawn).y - key.y) <= 1
@@ -39,7 +40,7 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 			match cell_type:
 				SettlementMap.CellType.ROAD:
 					index = settlement.road_terrain(mask, lx, ly, index, wild_road)
-				SettlementMap.CellType.LOT, SettlementMap.CellType.YARD:
+				SettlementMap.CellType.LOT, SettlementMap.CellType.YARD, SettlementMap.CellType.SPECIAL:
 					index = settlement.lot_terrain(index, cell)
 			if house_plan >= 0:
 				var plan_terrain: int = MapgenDB.terrain_at(house_plan, MapgenDB.plan_index(lx, ly, house_rot))
@@ -84,7 +85,7 @@ static func generate_furniture(world_seed: int, key: Vector3i, arena: bool = fal
 	if arena or key.z != 0:
 		return data
 	var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
-	var house: Dictionary = settlement.lot_plan(Vector2i(key.x, key.y))
+	var house: Dictionary = settlement.cell_plan(Vector2i(key.x, key.y))
 	if house.is_empty():
 		return data
 	var plan: int = house["plan"]

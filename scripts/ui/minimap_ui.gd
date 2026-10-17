@@ -188,7 +188,7 @@ func _draw_view() -> void:
 		_view.draw_rect(Rect2(legend_x, y, 16, 16), WorldMap.kind_color(kind))
 		_view.draw_string(font, Vector2(legend_x + 26, y + 14), WorldMap.kind_name(kind), HORIZONTAL_ALIGNMENT_LEFT, legend_width - 30.0, FONT_SIZE - 2, COLOR_TEXT)
 		y += 24.0
-	for entry in [[SettlementMap.CellType.ROAD, "Rue / route"], [SettlementMap.CellType.LOT, "Parcelle (maison)"], [SettlementMap.CellType.YARD, "Jardin"]]:
+	for entry in [[SettlementMap.CellType.ROAD, "Rue / route"], [SettlementMap.CellType.LOT, "Parcelle (maison)"], [SettlementMap.CellType.YARD, "Jardin"], [SettlementMap.CellType.SPECIAL, "Lieu spécial"]]:
 		_view.draw_rect(Rect2(legend_x, y, 16, 16), SettlementMap.overlay_color(entry[0]))
 		_view.draw_string(font, Vector2(legend_x + 26, y + 14), String(entry[1]), HORIZONTAL_ALIGNMENT_LEFT, legend_width - 30.0, FONT_SIZE - 2, COLOR_TEXT)
 		y += 24.0
@@ -200,6 +200,9 @@ func _draw_view() -> void:
 		var hover_town: Dictionary = settlement.town_at(hover_coord)
 		if not hover_town.is_empty():
 			_view.draw_string(font, Vector2(legend_x, y + 58), "%s (rayon %d cellules)" % [hover_town["name"], hover_town["radius"]], HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_HEADER)
+		var hover_special: Dictionary = settlement.specials().special_cell(hover_coord)
+		if not hover_special.is_empty():
+			_view.draw_string(font, Vector2(legend_x, y + 80), settlement.specials().place_name(String(hover_special["place"])), HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_HEADER)
 	_view.draw_string(font, Vector2(panel.position.x + 16, panel.end.y - 14),
 		"+/− : zoom   8/2/4/6 (ou flèches) : déplacer la vue   5 : recentrer   m / Échap : fermer",
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, 14, COLOR_MUTED)

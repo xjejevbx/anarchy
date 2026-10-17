@@ -11,7 +11,7 @@ extends RefCounted
 
 const PATH: String = "res://data/worldgen/towns.json"
 
-enum CellType { NONE, ROAD, LOT, YARD }
+enum CellType { NONE, ROAD, LOT, YARD, SPECIAL }
 
 # Bits du masque de connexions d'une cellule de route (même ordre que DIRS).
 const DIR_N: int = 1
@@ -54,6 +54,7 @@ var _regions: Dictionary = {}   # Vector2i (région) -> Array de villes
 var _spawn: Vector2i = Vector2i.ZERO
 var _spawn_ready: bool = false
 var _routes: RouteMap
+var _specials: SpecialMap
 
 var _t_grass: int
 var _t_tree: int
@@ -107,6 +108,7 @@ func _init(seed_value: int = 0) -> void:
 	_t_sidewalk = TerrainDB.index_of("t_sidewalk")
 	_t_bridge = TerrainDB.index_of("t_bridge")
 	_routes = RouteMap.new(self)
+	_specials = SpecialMap.new(self)
 
 
 static func region_size_cells() -> int:
@@ -127,6 +129,8 @@ static func overlay_color(cell_type: int) -> Color:
 			return Color.html(String(colors["road"]))
 		CellType.LOT:
 			return Color.html(String(colors["lot"]))
+		CellType.SPECIAL:
+			return Color.html(String(colors.get("special", "#d65a5a")))
 		_:
 			return Color.html(String(colors["yard"]))
 
@@ -232,13 +236,42 @@ func routes() -> RouteMap:
 	return _routes
 
 
-## Nature d'une cellule : NONE / ROAD / LOT / YARD. Les routes entre villes (hors emprise des villes) sont des ROAD ;
+func specials() -> SpecialMap:
+	return _specials
+
+
+## {plan: indice MapgenDB, rot} de la cellule d'un lieu spécial, {} si elle n'en fait pas partie.
+func special_plan(cell: Vector2i) -> Dictionary:
+	var info: Dictionary = _specials.special_cell(cell)
+	if info.is_empty():
+		return {}
+	var plan: int = MapgenDB.plan_by_id(String(info["plan"]))
+	if plan < 0:
+		return {}
+	return {"plan": plan, "rot": int(info["rot"])}
+
+
+## Plan à poser sur une cellule (maison d'une parcelle ou cellule d'un lieu spécial) : {plan, rot} ou {}.
+func cell_plan(cell: Vector2i) -> Dictionary:
+	var type: int = cell_type(cell)
+	if type == CellType.LOT:
+		return lot_plan(cell)
+	if type == CellType.SPECIAL:
+		return special_plan(cell)
+	return {}
+
+
+## Nature d'une cellule : NONE / ROAD / LOT / YARD / SPECIAL (lieu spécial, jalon 4). Les routes entre villes (hors emprise des villes) sont des ROAD ;
 ## `with_routes` = false les ignore (mini-carte à grand zoom : le calcul des routes d'une région est coûteux).
-func cell_type(cell: Vector2i, with_routes: bool = true) -> int:
+func cell_type(cell: Vector2i, with_routes: bool = true, with_specials: bool = true) -> int:
 	var type: int = town_cell_type(cell)
-	if type == CellType.NONE and with_routes and is_wild_road(cell):
+	if type != CellType.NONE or not with_routes:
+		return type
+	if is_wild_road(cell):
 		return CellType.ROAD
-	return type
+	if with_specials and _specials.is_special(cell):
+		return CellType.SPECIAL
+	return CellType.NONE
 
 
 ## Cellule de route située hors de toute ville (route entre villes).
@@ -297,7 +330,7 @@ func lot_plan(cell: Vector2i) -> Dictionary:
 func road_mask(cell: Vector2i) -> int:
 	var mask: int = 0
 	for i in DIRS.size():
-		if cell_type(cell + DIRS[i]) == CellType.ROAD:
+		if cell_type(cell + DIRS[i], true, false) == CellType.ROAD:
 			mask |= 1 << i
 	return mask
 

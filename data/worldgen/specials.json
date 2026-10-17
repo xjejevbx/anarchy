@@ -1,0 +1,17 @@
+{
+ "_doc": "Lieux speciaux (jalon 4). attempts = tentatives de placement par lieu et par region. Pour chaque lieu : priority (le plus grand est place en premier), chance = probabilite qu'une region en tente un, max_per_region = nombre maximal par region, biomes = natures de case autorisees sous TOUTE l'empreinte (ids de biomes.json), near_road = une route doit longer la facade, min_town_distance / max_town_distance = distance (en cellules) entre l'empreinte et la ville la plus proche (-1 = pas de limite), cells = empreinte : offset [x, y] de chaque cellule (facade au sud, tournee vers la route) et plan (mapgen/places.json). Une empreinte ne franchit jamais une frontiere de region. Chaque plan contient son petit chemin (terre ou parking) qui relie la porte au bord de la cellule.",
+ "attempts": 40,
+ "places": {
+  "farm": {"name": "Ferme", "priority": 70, "chance": 0.35, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 3, "max_town_distance": 40, "max_per_region": 1,
+   "cells": [
+    {"offset": [0, 0], "mapgen": "farm_field"}, {"offset": [1, 0], "mapgen": "farm_field"},
+    {"offset": [0, 1], "mapgen": "farmhouse"}, {"offset": [1, 1], "mapgen": "barn"}]},
+  "motel": {"name": "Motel", "priority": 60, "chance": 0.25, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 2, "max_town_distance": 14, "max_per_region": 1,
+   "cells": [{"offset": [0, 0], "mapgen": "motel_office"}, {"offset": [1, 0], "mapgen": "motel_wing"}]},
+  "gas_station": {"name": "Station-service", "priority": 50, "chance": 0.4, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 1, "max_town_distance": 10, "max_per_region": 1,
+   "cells": [{"offset": [0, 0], "mapgen": "gas_station"}]}
+ }
+}
