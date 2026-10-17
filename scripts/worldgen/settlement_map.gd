@@ -19,6 +19,8 @@ const DIR_E: int = 2
 const DIR_S: int = 4
 const DIR_W: int = 8
 const DIRS: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
+# Rue voisine vers laquelle se tourne la façade d'une maison : indice = rotation du plan (0 sud, 1 ouest, 2 nord, 3 est).
+const HOUSE_FRONTS: Array[Vector2i] = [Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP, Vector2i.RIGHT]
 
 # --- Géométrie d'une cellule de route (cases locales 0..23) : chaussée de 8, trottoirs de 2 de chaque côté ---
 const ASPHALT_LO: int = 8
@@ -44,6 +46,7 @@ var _attempts: int
 var _min_land_ratio: float
 var _outer_ring_keep: float
 var _yard_tree_keep: float
+var _house_chance: float
 var _count_weights: Array = []
 var _sizes: Array = []
 var _size_weights: Array = []
@@ -89,6 +92,7 @@ func _init(seed_value: int = 0) -> void:
 	_min_land_ratio = _config["min_land_ratio"]
 	_outer_ring_keep = _config["outer_ring_keep"]
 	_yard_tree_keep = _config["yard_tree_keep"]
+	_house_chance = float(_config.get("house_chance", 0.85))
 	_count_weights = _config["count_weights"]
 	_sizes = _config["sizes"]
 	for size: Dictionary in _sizes:
@@ -261,6 +265,32 @@ func town_cell_type(cell: Vector2i) -> int:
 		if _is_street(town, neighbor) and not _is_lake(_world_map.cell_kind(neighbor)):
 			return CellType.LOT
 	return CellType.YARD
+
+
+## Maison d'une parcelle : {} si aucune, sinon {plan: indice MapgenDB, rot: 0..3}. FONCTION PURE de (seed, cellule).
+## La façade (le sud du plan) est tournée vers une rue voisine (voir HOUSE_FRONTS) ; s'il y en a plusieurs, le choix est tiré.
+## Pas de maison sur une berge, un marais ni une cellule d'eau (le plan écraserait l'eau).
+func lot_plan(cell: Vector2i) -> Dictionary:
+	if MapgenDB.plan_count() == 0 or town_cell_type(cell) != CellType.LOT:
+		return {}
+	var kind: int = _world_map.cell_kind(cell)
+	if kind != WorldMap.Kind.PLAIN and kind != WorldMap.Kind.FOREST:
+		return {}
+	if not WorldRng.chance(world_seed, WorldRng.LAYER_MAPGEN, cell.x, cell.y, 0, _house_chance):
+		return {}
+	var town: Dictionary = town_at(cell)
+	var fronts: Array[int] = []
+	for rot in HOUSE_FRONTS.size():
+		var neighbor: Vector2i = cell + HOUSE_FRONTS[rot]
+		if _is_street(town, neighbor) and not _is_lake(_world_map.cell_kind(neighbor)):
+			fronts.append(rot)
+	if fronts.is_empty():
+		return {}
+	var plan: int = MapgenDB.pick(WorldRng.unit(WorldRng.mix(world_seed, WorldRng.LAYER_MAPGEN, cell.x, cell.y, 1)))
+	if plan < 0:
+		return {}
+	var rot_roll: int = WorldRng.mix(world_seed, WorldRng.LAYER_MAPGEN, cell.x, cell.y, 2) & 0x7FFFFFFF
+	return {"plan": plan, "rot": fronts[rot_roll % fronts.size()]}
 
 
 ## Masque des rues voisines (DIR_N | DIR_E | DIR_S | DIR_W) d'une cellule de route.

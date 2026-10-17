@@ -84,3 +84,14 @@ static func ground_tile_of(index: int) -> String:
 static func autotile_of(index: int) -> String:
 	_ensure_loaded()
 	return String(_defs[index].get("autotile", "")) if index >= 0 and index < _defs.size() else ""
+
+
+## Les murs voisins se raccordent à ce terrain (porte, fenêtre) : champ "wall_link" de terrain.json.
+static func links_wall(index: int) -> bool:
+	_ensure_loaded()
+	return index >= 0 and index < _defs.size() and bool(_defs[index].get("wall_link", false))
+
+
+static func has_id(id: String) -> bool:
+	_ensure_loaded()
+	return _index.has(id)

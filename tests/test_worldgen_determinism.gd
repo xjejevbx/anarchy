@@ -111,9 +111,121 @@ func _initialize() -> void:
 		_check(asymmetric == 0, "seed %d : connexions des rues symétriques" % world_seed)
 		_check(isolated * 20 <= roads, "seed %d : peu de rues isolées (%d sur %d)" % [world_seed, isolated, roads])
 
+	# --- Routes entre villes (jalon 3b) ---
+	var route_regions: Array[Vector2i] = []   # fenêtre 5 x 5 régions pour le déterminisme
+	for ry in range(-2, 3):
+		for rx in range(-2, 3):
+			route_regions.append(Vector2i(rx, ry))
+	for world_seed in seeds:
+		var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
+		var routes: RouteMap = settlement.routes()
+		var world_map: WorldMap = WorldMap.for_seed(world_seed)
+		var total_towns: int = 0
+		var unlinked: int = 0
+		var bad_paths: int = 0
+		var path_on_lake: int = 0
+		for ry in range(-half_regions, half_regions + 1):
+			for rx in range(-half_regions, half_regions + 1):
+				for t: Dictionary in settlement.towns_in_region(Vector2i(rx, ry)):
+					var center: Vector2i = t["center"]
+					total_towns += 1
+					var partners: Array[Vector2i] = routes.partners_of(center)
+					if partners.is_empty():
+						unlinked += 1
+					for other: Vector2i in partners:
+						var path: Array[Vector2i] = routes.path_between(center, other)
+						var first: Vector2i = path[0]
+						var last: Vector2i = path[path.size() - 1]
+						if not ((first == center and last == other) or (first == other and last == center)):
+							bad_paths += 1
+						for i in path.size():
+							if i > 0 and absi(path[i].x - path[i - 1].x) + absi(path[i].y - path[i - 1].y) != 1:
+								bad_paths += 1
+							var nature: int = world_map.cell_kind(path[i])
+							if nature == WorldMap.Kind.LAKE_DEEP or nature == WorldMap.Kind.LAKE_SHALLOW:
+								path_on_lake += 1
+		_check(unlinked == 0, "seed %d : toute ville reliée à au moins une autre (%d villes, %d isolées)" % [world_seed, total_towns, unlinked])
+		_check(bad_paths == 0, "seed %d : chaque route va d'un centre de ville à l'autre, case par case (%d anomalies)" % [world_seed, bad_paths])
+		var route_cells: int = 0
+		var bad_cells: int = 0
+		var isolated_cells: int = 0
+		var asymmetric_cells: int = 0
+		var cells_on_lake: int = 0
+		for ry in range(-3, 4):
+			for rx in range(-3, 4):
+				for cell: Vector2i in routes.region_cells(Vector2i(rx, ry)):
+					route_cells += 1
+					var cell_nature: int = world_map.cell_kind(cell)
+					if cell_nature == WorldMap.Kind.LAKE_DEEP or cell_nature == WorldMap.Kind.LAKE_SHALLOW:
+						cells_on_lake += 1
+					if not settlement.town_at(cell).is_empty() or settlement.cell_type(cell) != SettlementMap.CellType.ROAD:
+						bad_cells += 1
+					var route_mask: int = settlement.road_mask(cell)
+					if route_mask == 0:
+						isolated_cells += 1
+					for i in SettlementMap.DIRS.size():
+						var next_cell: Vector2i = cell + SettlementMap.DIRS[i]
+						if (route_mask & (1 << i)) != 0 and (settlement.road_mask(next_cell) & (1 << ((i + 2) % 4))) == 0:
+							asymmetric_cells += 1
+		_check(route_cells > 0, "seed %d : %d cellules de route hors ville sur 7 x 7 régions" % [world_seed, route_cells])
+		_check(path_on_lake == 0 and cells_on_lake == 0, "seed %d : aucune route sur un lac" % world_seed)
+		_check(bad_cells == 0, "seed %d : les cellules de route sont des ROAD hors emprise de ville" % world_seed)
+		_check(asymmetric_cells == 0, "seed %d : connexions des routes symétriques" % world_seed)
+		_check(isolated_cells == 0, "seed %d : aucune cellule de route isolée" % world_seed)
+		# Déterminisme : 3 ordres de génération, sur des instances neuves (caches vides).
+		var reference: Dictionary = _route_prints(SettlementMap.new(world_seed), route_regions)
+		var reversed_regions: Array[Vector2i] = route_regions.duplicate()
+		reversed_regions.reverse()
+		var by_distance_regions: Array[Vector2i] = route_regions.duplicate()
+		by_distance_regions.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+			return a.x * a.x + a.y * a.y < b.x * b.x + b.y * b.y)
+		_check(reference == _route_prints(SettlementMap.new(world_seed), reversed_regions), "seed %d : routes identiques, ordre inversé" % world_seed)
+		_check(reference == _route_prints(SettlementMap.new(world_seed), by_distance_regions), "seed %d : routes identiques, ordre par distance" % world_seed)
+		_check(reference == _route_prints(settlement, route_regions), "seed %d : routes identiques sur l'instance partagée" % world_seed)
+	# Coût du calcul des routes : 1re région (villes + routes à froid), puis 6 régions voisines (ce qu'on vit en marchant).
+	for world_seed in seeds:
+		var bench_settlement := SettlementMap.new(world_seed)
+		var bench: RouteMap = bench_settlement.routes()
+		var cold: Dictionary = bench.benchmark_region(Vector2i.ZERO)
+		var walk_total: int = 0
+		var walk_max: int = 0
+		for step in range(1, 7):
+			var m: Dictionary = bench.benchmark_region(Vector2i(step, 0))
+			var us: int = int(m["towns_us"]) + int(m["routes_us"])
+			walk_total += us
+			walk_max = maxi(walk_max, us)
+		print("       perf routes seed %d : 1re région %.1f ms (villes %.1f + routes %.1f, %d A*) ; 6 régions voisines : moyenne %.1f ms, max %.1f ms" % [
+			world_seed, (int(cold["towns_us"]) + int(cold["routes_us"])) / 1000.0, int(cold["towns_us"]) / 1000.0,
+			int(cold["routes_us"]) / 1000.0, int(cold["astar_runs"]), walk_total / 6000.0, walk_max / 1000.0])
+
 	# --- Terrains de route ---
 	for id in ["t_pavement", "t_pavement_y", "t_sidewalk", "t_bridge"]:
 		_check(TerrainDB.is_walkable(TerrainDB.index_of(id)), "%s praticable" % id)
+
+	# --- Maisons (jalon 3c) ---
+	_check_house_plans()
+	_warn_missing_sprites()
+	for world_seed in seeds:
+		var house_settlement: SettlementMap = SettlementMap.for_seed(world_seed)
+		var checked: int = 0
+		var problems: int = 0
+		for ry in range(-half_regions, half_regions + 1):
+			for rx in range(-half_regions, half_regions + 1):
+				for t: Dictionary in house_settlement.towns_in_region(Vector2i(rx, ry)):
+					var radius: int = t["radius"]
+					for dy in range(-radius, radius + 1):
+						for dx in range(-radius, radius + 1):
+							if checked >= 40:
+								continue
+							var lot: Vector2i = (t["center"] as Vector2i) + Vector2i(dx, dy)
+							var house: Dictionary = house_settlement.lot_plan(lot)
+							if house.is_empty():
+								continue
+							checked += 1
+							if not _house_is_sound(world_seed, lot, int(house["rot"])):
+								problems += 1
+		_check(checked > 0, "seed %d : des maisons sont générées (%d contrôlées)" % [world_seed, checked])
+		_check(problems == 0, "seed %d : maisons contrôlées (porte côté rue, case devant la porte praticable, mobilier présent) : %d anomalies" % [world_seed, problems])
 
 	# --- Répartition des biomes (relevé grossier) : rivières, gués, lacs, forêts, plaines, marais ---
 	var totals: Array[int] = []
@@ -163,6 +275,148 @@ func _fingerprints(world_seed: int, keys: Array[Vector3i]) -> Dictionary:
 	for key in keys:
 		result[key] = ChunkGenerator.fingerprint(world_seed, key)
 	return result
+
+
+func _route_prints(settlement: SettlementMap, regions: Array[Vector2i]) -> Dictionary:
+	var result: Dictionary = {}
+	for region in regions:
+		result[region] = settlement.routes().region_fingerprint(region)
+	return result
+
+
+## Contrôle d'une maison générée (chunk réel) : porte de façade côté rue, case devant la porte praticable, mobilier présent.
+func _house_is_sound(world_seed: int, lot: Vector2i, rot: int) -> bool:
+	var key := Vector3i(lot.x, lot.y, 0)
+	var terrain: PackedByteArray = ChunkGenerator.generate(world_seed, key)
+	var furniture: PackedByteArray = ChunkGenerator.generate_furniture(world_seed, key)
+	var door: int = TerrainDB.index_of("t_door")
+	var best: Vector2i = Vector2i(-1, -1)
+	var best_score: int = -1000
+	var has_furniture: bool = false
+	for i in Chunk.CELLS:
+		if furniture[i] != 0:
+			has_furniture = true
+		if terrain[i] != door:
+			continue
+		var lx: int = i % Chunk.SIZE
+		var ly: int = floori(float(i) / Chunk.SIZE)
+		var score: int = ly
+		match rot:
+			1:
+				score = -lx
+			2:
+				score = -ly
+			3:
+				score = lx
+		if score > best_score:
+			best_score = score
+			best = Vector2i(lx, ly)
+	if best.x < 0 or not has_furniture:
+		return false
+	var front: Vector2i = best + SettlementMap.HOUSE_FRONTS[rot]
+	if front.x < 0 or front.y < 0 or front.x >= Chunk.SIZE or front.y >= Chunk.SIZE:
+		return false
+	return TerrainDB.is_walkable(terrain[front.y * Chunk.SIZE + front.x])
+
+
+## Case du chunk correspondant à une case du plan non tourné (quarts de tour horaires).
+func _rotate_plan_cell(cell: Vector2i, rot: int) -> Vector2i:
+	var last: int = Chunk.SIZE - 1
+	match rot:
+		1:
+			return Vector2i(last - cell.y, cell.x)
+		2:
+			return Vector2i(last - cell.x, last - cell.y)
+		3:
+			return Vector2i(cell.y, last - cell.x)
+	return cell
+
+
+func _check_house_plans() -> void:
+	var wall: int = TerrainDB.index_of("t_wall_house")
+	var door: int = TerrainDB.index_of("t_door")
+	var floor_terrain: int = TerrainDB.index_of("t_floor")
+	var errors: Array[String] = MapgenDB.errors()
+	_check(errors.is_empty(), "plans de maison : aucune erreur de chargement %s" % str(errors))
+	_check(MapgenDB.plan_count() >= 4, "au moins 4 plans de maison valides (%d)" % MapgenDB.plan_count())
+	var last: int = Chunk.SIZE - 1
+	for plan in MapgenDB.plan_count():
+		var plan_name: String = MapgenDB.plan_id(plan)
+		var structure_ok: bool = true
+		var front_door: Vector2i = Vector2i(-1, -1)
+		for py in Chunk.SIZE:
+			for px in Chunk.SIZE:
+				var t: int = MapgenDB.terrain_at(plan, py * Chunk.SIZE + px)
+				var f: int = MapgenDB.furniture_at(plan, py * Chunk.SIZE + px)
+				if (t == wall or t == door) and (px < 1 or py < 1 or px > last - 1 or py > last - 1):
+					structure_ok = false
+				if f != 0 and t != floor_terrain:
+					structure_ok = false
+				if t == door and py > front_door.y:
+					front_door = Vector2i(px, py)
+		_check(structure_ok, "plan %s : murs à l'intérieur du chunk, mobilier posé sur du sol" % plan_name)
+		var has_front: bool = front_door.x >= 0 and front_door.y < last
+		_check(has_front, "plan %s : porte de façade présente" % plan_name)
+		if not has_front:
+			continue
+		var access_ok: bool = true
+		var mapping_ok: bool = true
+		for rot in 4:
+			var walk := PackedByteArray()
+			walk.resize(Chunk.CELLS)
+			var visited := PackedByteArray()
+			visited.resize(Chunk.CELLS)
+			var used: Dictionary = {}
+			for ly in Chunk.SIZE:
+				for lx in Chunk.SIZE:
+					var plan_cell: int = MapgenDB.plan_index(lx, ly, rot)
+					used[plan_cell] = true
+					var terrain_here: int = MapgenDB.terrain_at(plan, plan_cell)
+					var open: bool = terrain_here == MapgenDB.NATURE or TerrainDB.is_walkable(terrain_here)
+					walk[ly * Chunk.SIZE + lx] = 1 if open and FurnitureDB.is_walkable(MapgenDB.furniture_at(plan, plan_cell)) else 0
+			if used.size() != Chunk.CELLS:
+				mapping_ok = false
+			var start: Vector2i = _rotate_plan_cell(front_door + Vector2i.DOWN, rot)
+			var stack: Array[Vector2i] = []
+			if walk[start.y * Chunk.SIZE + start.x] == 1:
+				visited[start.y * Chunk.SIZE + start.x] = 1
+				stack.append(start)
+			else:
+				access_ok = false
+			while not stack.is_empty():
+				var current: Vector2i = stack.pop_back()
+				for step: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+					var next: Vector2i = current + step
+					if next.x < 0 or next.y < 0 or next.x >= Chunk.SIZE or next.y >= Chunk.SIZE:
+						continue
+					var next_index: int = next.y * Chunk.SIZE + next.x
+					if walk[next_index] == 1 and visited[next_index] == 0:
+						visited[next_index] = 1
+						stack.append(next)
+			for ly in Chunk.SIZE:
+				for lx in Chunk.SIZE:
+					var cell_index: int = ly * Chunk.SIZE + lx
+					if MapgenDB.terrain_at(plan, MapgenDB.plan_index(lx, ly, rot)) == floor_terrain and walk[cell_index] == 1 and visited[cell_index] == 0:
+						access_ok = false
+		_check(mapping_ok, "plan %s : la rotation couvre chaque case du chunk une fois (4 rotations)" % plan_name)
+		_check(access_ok, "plan %s : tout le sol est atteignable depuis la porte (4 rotations)" % plan_name)
+
+
+## Avertit (sans échec) des tuiles absentes du pack : il faut alors régénérer assets/ avec tools/build_ultica_pack.py.
+func _warn_missing_sprites() -> void:
+	var missing: Array[String] = []
+	var i: int = 0
+	while TerrainDB.id_of(i) != "":
+		var tile: String = TerrainDB.tile_of(i)
+		if tile != "" and UlticaTiles.pick_sprite(tile, "fg", 0) == "":
+			missing.append("%s (%s)" % [TerrainDB.id_of(i), tile])
+		i += 1
+	for f in range(1, FurnitureDB.count() + 1):
+		var furniture_tile: String = FurnitureDB.tile_of(f)
+		if UlticaTiles.pick_sprite(furniture_tile, "fg", 0) == "":
+			missing.append("%s (%s)" % [FurnitureDB.id_of(f), furniture_tile])
+	if not missing.is_empty():
+		print("  AVERTISSEMENT - tuiles absentes du pack (relancer tools/build_ultica_pack.py) : ", ", ".join(missing))
 
 
 func _check(condition: bool, label: String) -> void:

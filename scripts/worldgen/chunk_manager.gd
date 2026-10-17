@@ -73,6 +73,7 @@ func _load(key: Vector3i) -> void:
 		seen.resize(Chunk.CELLS)
 	var chunk := Chunk.new()
 	chunk.setup(key, ChunkGenerator.generate(world_seed, key, arena), seen, self, _entities)
+	chunk.furniture = ChunkGenerator.generate_furniture(world_seed, key, arena)
 	_root.add_child(chunk)
 	chunks[key] = chunk
 	if chunk.has_autotile:  # les murs des chunks voisins doivent se raccorder
@@ -107,11 +108,19 @@ func has_terrain(cell: Vector2i) -> bool:
 
 
 func is_walkable(cell: Vector2i) -> bool:
-	return TerrainDB.is_walkable(terrain_index(cell))
+	var chunk: Chunk = chunk_at(cell)
+	if chunk == null:
+		return false
+	var i: int = index_of(cell)
+	return TerrainDB.is_walkable(chunk.terrain[i]) and FurnitureDB.is_walkable(chunk.furniture[i])
 
 
 func is_opaque(cell: Vector2i) -> bool:
-	return TerrainDB.is_opaque(terrain_index(cell))
+	var chunk: Chunk = chunk_at(cell)
+	if chunk == null:
+		return true
+	var i: int = index_of(cell)
+	return TerrainDB.is_opaque(chunk.terrain[i]) or FurnitureDB.is_opaque(chunk.furniture[i])
 
 
 func is_seen(cell: Vector2i) -> bool:
@@ -128,7 +137,8 @@ func mark_seen(cell: Vector2i) -> void:
 # --- Murs : choix du sprite selon les murs voisins ---
 
 func _is_wall(cell: Vector2i) -> bool:
-	return TerrainDB.autotile_of(terrain_index(cell)) == "wall"
+	var index: int = terrain_index(cell)
+	return TerrainDB.autotile_of(index) == "wall" or TerrainDB.links_wall(index)  # portes et fenêtres se raccordent aux murs
 
 
 ## Convention UltiCa/CDDA : « corner_nw » est le coin nord-ouest d'une structure (il relie l'est et le sud).
@@ -150,6 +160,23 @@ func wall_sprite(cell: Vector2i) -> String:
 		return "t_wall_corner_se"
 	if e and n and not w and not s:
 		return "t_wall_corner_sw"
+	var links: int = int(n) + int(e) + int(s) + int(w)
+	if links == 3:  # jonction en T : le nom du sprite est le côté SANS mur (convention à vérifier à l'œil ; inverser ici si besoin)
+		if not n:
+			return "t_wall_t_connection_n"
+		if not e:
+			return "t_wall_t_connection_e"
+		if not s:
+			return "t_wall_t_connection_s"
+		return "t_wall_t_connection_w"
+	if links == 1:  # extrémité : le nom du sprite est le côté libre (opposé au mur relié)
+		if s:
+			return "t_wall_end_piece_n"
+		if n:
+			return "t_wall_end_piece_s"
+		if w:
+			return "t_wall_end_piece_e"
+		return "t_wall_end_piece_w"
 	if n and s:
 		return "t_wall_edge_ns"
 	if e and w:

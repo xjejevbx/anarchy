@@ -74,10 +74,21 @@ Le terrain d'une case et la cellule macro (24 x 24, échantillonnée en son cent
 - **Départ** : au bout d'une rue principale de la ville la plus proche de l'origine (à moins de 600 cases), sinon en pleine nature
   (`WorldMap.spawn_cell()`). Les arbres sont enlevés autour du départ (`ChunkGenerator`).
 
-### 5.3 Routes entre villes
-Chaque ville se relie à ses 2 ou 3 plus proches voisines (y compris dans les régions voisines, connues par leurs centres). Chemin : A* sur la
-carte macro avec un coût par biome (forêt chère, rivière interdite sauf **pont**). Le résultat est une fonction pure des deux centres, donc
-identique quel que soit l'ordre de génération ; il est mis en cache.
+### 5.3 Routes entre villes (jalon 3b, tel que construit)
+- **Graphe** : chaque ville se relie à ses 2 plus proches voisines (3 pour une grande ville), cherchées dans les régions voisines (leurs
+  centres se calculent sans générer de chunk), à moins de 80 cellules. Arête (a, b) = b parmi les plus proches de a OU a parmi les plus
+  proches de b. Départage déterministe par (distance², x, y) du centre.
+- **Chemin** : A* en 4 directions sur les cellules macro, coûts entiers (plaine 10, berge 12, forêt 30, marais 80, rivière 40 avec pont
+  automatique, lac interdit). Heuristique pondérée (A* glouton : rapide, chemins un peu moins optimaux ; départage « plus proche du but
+  d'abord » pour des tracés plutôt droits). Dans l'emprise d'une ville, seules ses rues sont franchissables : la route entre par un bout
+  de rue et rejoint le centre par le réseau existant. Le chemin est une fonction pure des deux centres (calcul toujours du centre le plus
+  petit vers l'autre), mis en cache par arête.
+- **Index par région** : les cellules de route d'une région sont l'union des chemins des arêtes dont la boîte englobante (+ marge de
+  16 cellules) la recoupe ; les villes concernées tiennent dans ±3 régions (valeur déduite de distance maximale + marge). Une route qui
+  traverse une région sans ville est donc bien prise en compte, quel que soit l'ordre d'exploration.
+- **Rendu** : `SettlementMap.cell_type()` renvoie ROAD pour ces cellules ; masque de connexions, chaussée, trottoirs et ponts sont ceux des
+  rues. Hors ville, seule la route est dessinée : arbres et terrain naturel restent autour de la chaussée.
+- Réglages : section `routes` de `data/worldgen/towns.json`.
 
 ### 5.4 Lieux spéciaux (motel, ferme, centrale…)
 Définis en données (§6.2). Algorithme déterministe par région : on parcourt les lieux **triés par priorité puis par id** ; pour chacun,
@@ -240,3 +251,29 @@ Météo, saisons, cycle jour/nuit détaillé et éclairage, hordes errantes, vé
   connexions des rues symétriques, peu de rues isolées, départ praticable, chunks autour du départ identiques dans 2 ordres.
 - Réglages initiaux posés « à l'aveugle » : à ajuster avec la mini-carte (`count_weights`, `sizes`, `min_land_ratio`).
 - Limites : pas encore de maisons (les parcelles sont de l'herbe), pas de routes entre villes ni de ponts hors des villes (3b), pas de mobilier (3c).
+
+### Jalon 3b — routes entre villes et ponts (fait)
+- `RouteMap` (`worldgen/route_map.gd`, une instance par `SettlementMap`) + section `routes` de `data/worldgen/towns.json` ; `SettlementMap`
+  expose `routes()`, `cell_type(cell, with_routes)`, `town_cell_type()` (sans routes) et `is_wild_road()` ; `road_terrain` garde la nature
+  autour d'une route hors ville (`keep_nature`) ; `ChunkGenerator` le transmet.
+- Mini-carte (`m`) : les routes s'affichent jusqu'au zoom `MiniMapUI.ROUTES_MAX_ZOOM` (16).
+- Test étendu : toute ville reliée, chemins de centre à centre, aucune route sur un lac, cellules de route = ROAD hors ville, connexions
+  symétriques, aucune cellule isolée, déterminisme dans 3 ordres sur des instances neuves, et MESURE du coût (`perf routes` : 1re région,
+  puis 6 régions voisines) à relever pour décider d'une anticipation ou d'un thread.
+- Réglages initiaux posés « à l'aveugle » : à ajuster avec la mini-carte (`max_link_distance`, `costs`, `near_count`).
+- Limites : une ville dont les voisines sont séparées par un grand lac peut rester sans route (la recherche est bornée) ; les routes
+  zigzaguent parfois en escalier (pas de pénalité de virage) ; pas de maisons (3c).
+
+### Jalon 3c — maisons avec intérieur et mobilier (fait)
+- `MapgenDB` (`worldgen/mapgen_db.gd`) + `data/worldgen/mapgen/houses.json` : palette et plans ASCII 24 x 24 (façade au sud), compilés une fois ;
+  4 plans (petite maison, maison familiale, pavillon, cabanon). `FurnitureDB` + `data/worldgen/furniture.json` : mobilier (index 1-based, 0 = rien).
+- `SettlementMap.lot_plan(cell)` : 85 % des parcelles en plaine ou forêt reçoivent une maison ; plan tiré par `mix(seed, LAYER_MAPGEN, x, y, 1)`,
+  rotation vers une rue voisine (`mix(..., 2)`). `ChunkGenerator` pose le terrain du plan, `generate_furniture()` le mobilier (inclus dans
+  l'empreinte de test). `Chunk.furniture` stocke et dessine le mobilier ; `ChunkManager` combine terrain et mobilier pour praticable / opaque.
+- Terrains ajoutés (`terrain.json`, à la suite) : `t_floor`, `t_wall_house`, `t_door`, `t_window` (champ `wall_link` : les murs se raccordent
+  aux portes et fenêtres). Sprites ajoutés à `tools/build_ultica_pack.py` : à relancer pour régénérer `assets/`.
+- Test étendu : plans valides (taille, palette, murs à l'intérieur, mobilier sur du sol), rotation bijective, tout le sol atteignable depuis la
+  porte dans les 4 rotations, porte de façade côté rue et case devant praticable sur des maisons générées ; avertissement si des tuiles
+  manquent dans le pack.
+- Limites : pas de loot ni de monstres dans les maisons (jalon 6) ; porte sans état ouvert / fermé ; pas d'étage ni de toit (jalon 8) ; une
+  maison ne se génère pas sur une cellule dont le centre est berge, marais ou eau ; une même maison peut recouvrir un coin d'eau voisin.

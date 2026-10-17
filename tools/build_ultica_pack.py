@@ -30,6 +30,10 @@ IDS = [
     "t_water_sh", "t_water_dp", "t_swater_sh", "t_mud", "t_dirt", "t_sand",
     # routes et villes (jalon 3)
     "t_pavement", "t_pavement_y", "t_sidewalk", "t_bridge",
+    # maisons (jalon 3c) : sol, porte, fenêtre et mobilier
+    "t_floor", "t_door_c", "t_window",
+    "f_bed", "f_table", "f_chair", "f_sofa", "f_bookcase", "f_fridge",
+    "f_counter", "f_oven", "f_dresser", "f_sink", "f_toilet", "f_bathtub",
 ]
 
 # Dossiers dont on copie TOUS les sprites, pour les utiliser directement par nom

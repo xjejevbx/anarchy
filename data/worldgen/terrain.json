@@ -80,6 +80,32 @@
    "tile": "t_bridge",
    "walkable": true,
    "opaque": false
+  },
+  "t_floor": {
+   "name": "Plancher",
+   "tile": "t_floor",
+   "walkable": true,
+   "opaque": false
+  },
+  "t_wall_house": {
+   "name": "Mur de maison",
+   "autotile": "wall",
+   "walkable": false,
+   "opaque": true
+  },
+  "t_door": {
+   "name": "Porte",
+   "tile": "t_door_c",
+   "walkable": true,
+   "opaque": true,
+   "wall_link": true
+  },
+  "t_window": {
+   "name": "Fenêtre",
+   "tile": "t_window",
+   "walkable": false,
+   "opaque": false,
+   "wall_link": true
   }
  }
 }

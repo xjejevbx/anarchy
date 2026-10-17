@@ -26,6 +26,9 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 	var mask: int = settlement.road_mask(cell_coord) if cell_type == SettlementMap.CellType.ROAD else 0
 	var wild_road: bool = cell_type == SettlementMap.CellType.ROAD and settlement.is_wild_road(cell_coord)
 	var spawn: Vector2i = settlement.spawn_cell()
+	var house: Dictionary = settlement.lot_plan(cell_coord) if cell_type == SettlementMap.CellType.LOT else {}
+	var house_plan: int = int(house.get("plan", -1))
+	var house_rot: int = int(house.get("rot", 0))
 	var near_spawn: bool = absi(ChunkManager.key_of(spawn).x - key.x) <= 1 and absi(ChunkManager.key_of(spawn).y - key.y) <= 1
 	var grass: int = TerrainDB.index_of("t_grass")
 	var tree: int = TerrainDB.index_of("t_tree")
@@ -38,6 +41,10 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 					index = settlement.road_terrain(mask, lx, ly, index, wild_road)
 				SettlementMap.CellType.LOT, SettlementMap.CellType.YARD:
 					index = settlement.lot_terrain(index, cell)
+			if house_plan >= 0:
+				var plan_terrain: int = MapgenDB.terrain_at(house_plan, MapgenDB.plan_index(lx, ly, house_rot))
+				if plan_terrain != MapgenDB.NATURE:
+					index = plan_terrain
 			if near_spawn and index == tree and Vector2(cell).distance_to(Vector2(spawn)) <= WorldMap.SPAWN_CLEAR_RADIUS:
 				index = grass  # le point de départ est dégagé
 			data[ly * Chunk.SIZE + lx] = index
@@ -65,4 +72,24 @@ static func fingerprint(world_seed: int, key: Vector3i, arena: bool = false) -> 
 	var h: int = -3750763034362895579
 	for byte: int in generate(world_seed, key, arena):
 		h = (h ^ byte) * 1099511628211
+	for byte: int in generate_furniture(world_seed, key, arena):
+		h = (h ^ byte) * 1099511628211
 	return h
+
+
+## Mobilier d'un chunk (un octet par case : 0 = rien, sinon index FurnitureDB). FONCTION PURE comme generate().
+static func generate_furniture(world_seed: int, key: Vector3i, arena: bool = false) -> PackedByteArray:
+	var data := PackedByteArray()
+	data.resize(Chunk.CELLS)
+	if arena or key.z != 0:
+		return data
+	var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
+	var house: Dictionary = settlement.lot_plan(Vector2i(key.x, key.y))
+	if house.is_empty():
+		return data
+	var plan: int = house["plan"]
+	var rot: int = house["rot"]
+	for ly in Chunk.SIZE:
+		for lx in Chunk.SIZE:
+			data[ly * Chunk.SIZE + lx] = MapgenDB.furniture_at(plan, MapgenDB.plan_index(lx, ly, rot))
+	return data

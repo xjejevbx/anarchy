@@ -10,6 +10,7 @@ const CELLS: int = SIZE * SIZE
 var key: Vector3i = Vector3i.ZERO
 var terrain: PackedByteArray = PackedByteArray()
 var seen: PackedByteArray = PackedByteArray()
+var furniture: PackedByteArray = PackedByteArray()   # mobilier : 0 = rien, sinon index FurnitureDB (rempli par ChunkManager)
 var has_autotile: bool = false   # contient des murs (leur sprite dépend des chunks voisins)
 
 var _manager: ChunkManager
@@ -82,3 +83,7 @@ func _draw() -> void:
 			sprite_name = UlticaTiles.pick_sprite(TerrainDB.ground_tile_of(t), "fg", cell_seed(cell))
 		var local := Vector2(i % SIZE, floori(float(i) / SIZE)) * World.TILE_SIZE
 		UlticaTiles.draw_sprite(self, sprite_name, local)
+		if furniture.size() == CELLS and furniture[i] != 0:
+			var furniture_tile: String = FurnitureDB.tile_of(furniture[i])
+			UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(furniture_tile, "bg", 0), local)
+			UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(furniture_tile, "fg", cell_seed(cell)), local)

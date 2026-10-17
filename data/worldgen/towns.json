@@ -1,5 +1,5 @@
 {
- "_doc": "Villes (jalon 3). Le monde est découpé en régions de region_size x region_size cellules (1 cellule = 1 chunk = 24 x 24 cases). Chaque région tire 0 à 2 villes (count_weights = poids pour 0, 1, 2 villes) ; une ville tient entièrement dans sa région (marge incluse). sizes : radius en cellules (la ville couvre (2*radius+1)^2 cellules), street_spacing = écart des rues secondaires (0 = seulement la croix principale), weight = poids du tirage. Un site est refusé s'il y a moins de min_land_ratio de terre constructible sous la ville. outer_ring_keep = part des cellules du bord conservées (bords irréguliers). yard_tree_keep = part d'arbres conservés dans les parcelles. colors = couleurs de la mini-carte.",
+ "_doc": "Villes (jalon 3). Le monde est découpé en régions de region_size x region_size cellules (1 cellule = 1 chunk = 24 x 24 cases). Chaque région tire 0 à 2 villes (count_weights = poids pour 0, 1, 2 villes) ; une ville tient entièrement dans sa région (marge incluse). sizes : radius en cellules (la ville couvre (2*radius+1)^2 cellules), street_spacing = écart des rues secondaires (0 = seulement la croix principale), weight = poids du tirage. Un site est refusé s'il y a moins de min_land_ratio de terre constructible sous la ville. outer_ring_keep = part des cellules du bord conservées (bords irréguliers). yard_tree_keep = part d'arbres conservés dans les parcelles. house_chance = part des parcelles (LOT) qui reçoivent une maison (plans : data/worldgen/mapgen/houses.json). colors = couleurs de la mini-carte. routes (jalon 3b) : liaisons entre villes. near_count = nombre de voisines les plus proches reliées à chaque ville (near_count_by_size : valeur par taille) ; une arête (a,b) existe si b est parmi les plus proches de a OU a parmi les plus proches de b ; neighbor_window = régions cherchées autour de la ville pour trouver ses voisines ; max_link_distance = distance maximale d'une liaison (cellules) ; margin = marge de la boîte de recherche du chemin (cellules) ; max_expansions = garde-fou de l'A* ; heuristic_cost = poids de l'heuristique (supérieur au coût de la plaine : A* glouton, plus rapide, chemins un peu moins optimaux) ; road_cost = coût d'une rue de ville ; costs = coût d'une cellule par nature de case (-1 = interdit). Entiers uniquement (aucun flottant dans les décisions).",
  "region_size": 32,
  "margin": 1,
  "attempts": 8,
@@ -7,11 +7,24 @@
  "min_land_ratio": 0.7,
  "outer_ring_keep": 0.6,
  "yard_tree_keep": 0.03,
+ "house_chance": 0.85,
  "sizes": [
   {"id": "hamlet",  "name": "Hameau",       "radius": 1, "street_spacing": 0, "weight": 0.35},
   {"id": "village", "name": "Village",      "radius": 2, "street_spacing": 0, "weight": 0.35},
   {"id": "town",    "name": "Ville",        "radius": 4, "street_spacing": 3, "weight": 0.22},
   {"id": "city",    "name": "Grande ville", "radius": 6, "street_spacing": 3, "weight": 0.08}
  ],
- "colors": {"road": "#5b5f66", "lot": "#c8a478", "yard": "#86a85c"}
+ "colors": {"road": "#5b5f66", "lot": "#c8a478", "yard": "#86a85c"},
+ "routes": {
+  "near_count": 2,
+  "near_count_by_size": {"city": 3},
+  "neighbor_window": 2,
+  "max_link_distance": 80,
+  "margin": 16,
+  "max_expansions": 20000,
+  "heuristic_cost": 20,
+  "road_cost": 4,
+  "costs": {"plain": 10, "shore_lake": 12, "bank_river": 12, "forest": 30, "swamp": 80,
+            "river_deep": 40, "river_shallow": 40, "lake_deep": -1, "lake_shallow": -1}
+ }
 }
