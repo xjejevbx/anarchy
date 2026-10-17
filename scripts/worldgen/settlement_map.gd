@@ -7,6 +7,7 @@ extends RefCounted
 ## chaque région tire 0 à 2 villes, qui tiennent entièrement dans la région (marge comprise). Une ville est une croix de rues
 ## principales plus, pour les grandes, une grille de rues secondaires ; les cellules voisines d'une rue sont des parcelles
 ## (LOT : futures maisons), les autres des jardins (YARD). Réglages dans data/worldgen/towns.json.
+## Jalon 3b : les routes entre villes (RouteMap) sont aussi des cellules ROAD, hors de l'emprise des villes.
 
 const PATH: String = "res://data/worldgen/towns.json"
 
@@ -49,6 +50,7 @@ var _size_weights: Array = []
 var _regions: Dictionary = {}   # Vector2i (région) -> Array de villes
 var _spawn: Vector2i = Vector2i.ZERO
 var _spawn_ready: bool = false
+var _routes: RouteMap
 
 var _t_grass: int
 var _t_tree: int
@@ -100,11 +102,17 @@ func _init(seed_value: int = 0) -> void:
 	_t_pavement_y = TerrainDB.index_of("t_pavement_y")
 	_t_sidewalk = TerrainDB.index_of("t_sidewalk")
 	_t_bridge = TerrainDB.index_of("t_bridge")
+	_routes = RouteMap.new(self)
 
 
 static func region_size_cells() -> int:
 	_load_config()
 	return _config["region_size"]
+
+
+static func route_config() -> Dictionary:
+	_load_config()
+	return _config.get("routes", {})
 
 
 static func overlay_color(cell_type: int) -> Color:
@@ -216,7 +224,26 @@ static func _is_street(town: Dictionary, cell: Vector2i) -> bool:
 	return d.x == 0 or d.y == 0 or (spacing > 0 and (posmod(d.x, spacing) == 0 or posmod(d.y, spacing) == 0))
 
 
-func cell_type(cell: Vector2i) -> int:
+func routes() -> RouteMap:
+	return _routes
+
+
+## Nature d'une cellule : NONE / ROAD / LOT / YARD. Les routes entre villes (hors emprise des villes) sont des ROAD ;
+## `with_routes` = false les ignore (mini-carte à grand zoom : le calcul des routes d'une région est coûteux).
+func cell_type(cell: Vector2i, with_routes: bool = true) -> int:
+	var type: int = town_cell_type(cell)
+	if type == CellType.NONE and with_routes and is_wild_road(cell):
+		return CellType.ROAD
+	return type
+
+
+## Cellule de route située hors de toute ville (route entre villes).
+func is_wild_road(cell: Vector2i) -> bool:
+	return town_at(cell).is_empty() and _routes.is_route(cell)
+
+
+## Nature d'une cellule SANS les routes entre villes (ne dépend que des villes : utilisé par RouteMap).
+func town_cell_type(cell: Vector2i) -> int:
 	var town: Dictionary = town_at(cell)
 	if town.is_empty():
 		return CellType.NONE
@@ -257,7 +284,7 @@ func _clear_tree(terrain: int) -> int:
 
 ## Terrain d'une case (lx, ly locaux) d'une cellule de route, selon le masque de connexions. `base` = terrain naturel :
 ## l'eau sous la chaussée ou le trottoir devient un PONT ; hors de la route, les arbres sont enlevés.
-func road_terrain(mask: int, lx: int, ly: int, base: int) -> int:
+func road_terrain(mask: int, lx: int, ly: int, base: int, keep_nature: bool = false) -> int:
 	var in_asphalt_cols: bool = lx >= ASPHALT_LO and lx <= ASPHALT_HI
 	var in_asphalt_rows: bool = ly >= ASPHALT_LO and ly <= ASPHALT_HI
 	var in_sidewalk_cols: bool = lx >= SIDEWALK_LO and lx <= SIDEWALK_HI
@@ -300,7 +327,7 @@ func road_terrain(mask: int, lx: int, ly: int, base: int) -> int:
 		return _t_pavement
 	if sidewalk:
 		return _t_bridge if water else _t_sidewalk
-	return _clear_tree(base)
+	return base if keep_nature else _clear_tree(base)  # route entre villes : la nature reste autour de la chaussée
 
 
 ## Terrain d'une case de parcelle ou de jardin : les arbres sont enlevés (sauf quelques-uns).

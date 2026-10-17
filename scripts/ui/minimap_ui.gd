@@ -9,6 +9,7 @@ extends CanvasLayer
 const SAMPLES: int = 160                       # échantillons par côté (160 x 160 = 25 600 calculs par rafraîchissement)
 const ZOOMS: Array[int] = [4, 8, 16, 32, 64]   # cases du monde par échantillon
 const START_ZOOM_INDEX: int = 1
+const ROUTES_MAX_ZOOM: int = 16                # routes entre villes affichées jusqu'à ce zoom (au-delà : trop de régions à calculer)
 const PAN_SAMPLES: int = 20                    # déplacement de la vue, en échantillons
 const FONT_SIZE: int = 16
 
@@ -82,7 +83,7 @@ func _rebuild() -> void:
 			var color: Color = colors[world_map.kind_at(cell)]
 			var coord := Vector2i(floori(float(cell.x) / Chunk.SIZE), floori(float(cell.y) / Chunk.SIZE))
 			if not type_cache.has(coord):
-				type_cache[coord] = settlement.cell_type(coord)
+				type_cache[coord] = settlement.cell_type(coord, zoom <= ROUTES_MAX_ZOOM)
 			var cell_type: int = type_cache[coord]
 			if cell_type != SettlementMap.CellType.NONE:
 				color = SettlementMap.overlay_color(cell_type)  # les villes se dessinent par-dessus les biomes

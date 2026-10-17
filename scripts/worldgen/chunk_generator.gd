@@ -24,6 +24,7 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 	var cell_coord := Vector2i(key.x, key.y)  # une cellule macro = un chunk
 	var cell_type: int = settlement.cell_type(cell_coord) if key.z == 0 else SettlementMap.CellType.NONE
 	var mask: int = settlement.road_mask(cell_coord) if cell_type == SettlementMap.CellType.ROAD else 0
+	var wild_road: bool = cell_type == SettlementMap.CellType.ROAD and settlement.is_wild_road(cell_coord)
 	var spawn: Vector2i = settlement.spawn_cell()
 	var near_spawn: bool = absi(ChunkManager.key_of(spawn).x - key.x) <= 1 and absi(ChunkManager.key_of(spawn).y - key.y) <= 1
 	var grass: int = TerrainDB.index_of("t_grass")
@@ -34,7 +35,7 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 			var index: int = world_map.terrain_at(cell, key.z)
 			match cell_type:
 				SettlementMap.CellType.ROAD:
-					index = settlement.road_terrain(mask, lx, ly, index)
+					index = settlement.road_terrain(mask, lx, ly, index, wild_road)
 				SettlementMap.CellType.LOT, SettlementMap.CellType.YARD:
 					index = settlement.lot_terrain(index, cell)
 			if near_spawn and index == tree and Vector2(cell).distance_to(Vector2(spawn)) <= WorldMap.SPAWN_CLEAR_RADIUS:
