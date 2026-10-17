@@ -13,6 +13,8 @@ var hp: float = 1.0
 var next_action_time: float = 0.0
 var has_target: bool = false            # sait où est (ou était) le joueur
 var target_cell: Vector2i = Vector2i.ZERO
+var spotted: bool = false               # déjà signalé au joueur (message « Vous apercevez... »)
+var hidden_since: float = 0.0           # moment (points d'action) où il est sorti du champ de vision
 
 var _rng := RandomNumberGenerator.new()
 var _bg_sprite: String = ""
@@ -33,7 +35,8 @@ func take_turn() -> float:
 	var distance: int = maxi(absi(delta.x), absi(delta.y))  # distance en cases (diagonales incluses)
 	# Le joueur et le monstre se voient mutuellement : on s'appuie sur le champ de vision du
 	# joueur (les arbres et les murs bloquent donc aussi la vue des monstres).
-	if distance <= data.detect_range and world.is_visible_cell(grid_pos):
+	var reach: float = data.detect_range * player.get_detect_factor()  # posture du joueur : sprint = plus loin, accroupi = moins loin
+	if distance <= reach and world.is_visible_cell(grid_pos):
 		alert(player.grid_pos)
 	if World.are_adjacent(grid_pos, player.grid_pos):
 		return _attack_player()

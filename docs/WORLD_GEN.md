@@ -90,12 +90,17 @@ Le terrain d'une case et la cellule macro (24 x 24, échantillonnée en son cent
   rues. Hors ville, seule la route est dessinée : arbres et terrain naturel restent autour de la chaussée.
 - Réglages : section `routes` de `data/worldgen/towns.json`.
 
-### 5.4 Lieux spéciaux (motel, ferme, centrale…)
-Définis en données (§6.2). Algorithme déterministe par région : on parcourt les lieux **triés par priorité puis par id** ; pour chacun,
-des tentatives de placement tirées avec `mix(seed, LAYER_SPECIAL, rx, ry, id)` ; un candidat est valide si biome, distance aux villes,
-adjacence à une route, empreinte libre (multi-cellules, rotation) et quota (max par région / rareté globale) sont respectés.
-Une **empreinte ne franchit jamais une frontière de région** (règle simple qui évite toute dépendance entre régions).
-Un lieu isolé reçoit un **chemin d'accès** (A* local vers la route la plus proche).
+### 5.4 Lieux spéciaux (jalon 4, tel que construit)
+- **Données** : `data/worldgen/specials.json` (priorité, chance par région, biomes, `near_road`, distances min / max à la ville la plus proche,
+  `max_per_region`, cellules de l'empreinte avec leur plan) ; plans ASCII 24 x 24 dans `data/worldgen/mapgen/places.json` (même format que les maisons).
+- **Placement** (`SpecialMap`, fonction pure de la seed et de la région) : lieux triés par (priorité décroissante, id) ; pour chacun, `max_per_region`
+  fois, avec la probabilité `chance`, jusqu'à 40 tentatives tirées par `mix(seed, LAYER_SPECIAL, rx, ry, hash(id))` (rotation puis position). Valide si,
+  sous toute l'empreinte : hors ville, hors rue ou route, biome autorisé, cellules libres ; si la façade touche une rue ou une route (`near_road`) ;
+  et si la distance à la ville la plus proche est dans l'intervalle. Une empreinte ne franchit jamais une frontière de région.
+- **Rotation** : la façade (sud des plans) est tournée vers la route ; les plans de chaque cellule tournent avec l'empreinte.
+- **Accès** : pas de piste dédiée : tous les lieux longent une route, et chaque plan contient son petit chemin (terre ou parking) de la porte au bord
+  de la cellule.
+- **Rendu** : `SettlementMap.cell_type()` renvoie SPECIAL ; `ChunkGenerator` pose terrain et mobilier du plan (`cell_plan`).
 
 ### 5.5 Mapgen d'un chunk
 À la demande : on lit le type de la cellule macro, on choisit un plan (avec rotation) et on remplit les 576 cases :
@@ -128,8 +133,8 @@ Un lieu isolé reçoit un **chemin d'accès** (A* local vers la route la plus pr
 ```json
 { "id": "motel_main", "size": [24, 24], "z": 0,
   "palette": { ".": {"terrain": "t_grass"}, "#": {"terrain": "t_wall_brick"}, "+": {"terrain": "t_door"},
-               "b": {"terrain": "t_floor", "furniture": "f_bed", "items": "motel_room"},
-               "Z": {"terrain": "t_floor", "monsters": "zombies_few"} },
+			   "b": {"terrain": "t_floor", "furniture": "f_bed", "items": "motel_room"},
+			   "Z": {"terrain": "t_floor", "monsters": "zombies_few"} },
   "rows": [ "........................", "..######+#######+######.", "…" ] }
 ```
 Les lieux multi-étages auront un plan par `z` (voir §10). Les plans admettent rotation 90 / 180 / 270 et, plus tard, symétrie.
@@ -277,3 +282,31 @@ Météo, saisons, cycle jour/nuit détaillé et éclairage, hordes errantes, vé
   manquent dans le pack.
 - Limites : pas de loot ni de monstres dans les maisons (jalon 6) ; porte sans état ouvert / fermé ; pas d'étage ni de toit (jalon 8) ; une
   maison ne se génère pas sur une cellule dont le centre est berge, marais ou eau ; une même maison peut recouvrir un coin d'eau voisin.
+
+### Jalon 4 — lieux spéciaux (fait)
+- `SpecialMap` (`worldgen/special_map.gd`) + `data/worldgen/specials.json` ; plans `data/worldgen/mapgen/places.json` ; `MapgenDB` charge maintenant
+  plusieurs fichiers (plans de maison d'abord, puis de lieux : `plan_by_id`, `total_count`, `has_door`).
+- Lieux : station-service (1 cellule), motel (2 cellules : accueil + aile de chambres), ferme (2 x 2 : deux champs clôturés, maison, grange).
+- Terrains ajoutés : `t_field`, `t_fence`, `t_gas_pump` ; mobilier `f_rack` ; sprites ajoutés à `tools/build_ultica_pack.py` (à relancer).
+- `SettlementMap` : `CellType.SPECIAL`, `cell_type(cell, with_routes, with_specials)`, `specials()`, `special_plan()`, `cell_plan()` ; mini-carte : couleur,
+  légende et nom du lieu sous le curseur.
+- Test étendu : plans de lieux valides et accessibles (4 rotations), aucune empreinte hors région, sur terrain libre et biome autorisé, route devant
+  chaque façade, bâtiments générés cohérents, au moins un lieu de chaque type sur 7 x 7 régions, déterminisme dans 3 ordres sur instances neuves.
+- Réglages initiaux posés « à l'aveugle » : à ajuster avec la mini-carte (`chance`, distances, `attempts`).
+- Limites : pas de loot ni de monstres dans les lieux (jalon 6) ; une seule variante de plan par bâtiment ; pas de piste d'accès (les lieux longent
+  une route) ; sprites de champ, clôture et pompe à vérifier à l'œil.
+
+### Jalon 5 — grands lieux (fait)
+- Dix lieux supplémentaires, uniquement en données : `data/worldgen/specials.json` (entrées ajoutées) et `data/worldgen/mapgen/big_places.json`
+  (24 plans, chargé par `MapgenDB` après `places.json`).
+- **Centrale nucléaire** (3 x 3 cellules, très rare, à au moins 6 cellules d'une ville) : enceinte clôturée avec portail et guérite tournés vers la
+  route, bâtiment du réacteur (cœur infranchissable, consoles, machines), salle de contrôle, salle des turbines, entrepôt, poste de transformateurs, parking.
+- **Autres lieux** : ranch (2 x 2), usine (2 x 2), station d'épuration (2 x 2, bassins d'eau profonde), camping (2 x 1), entrepôt (2 x 1), cimetière,
+  chapelle, poste électrique, cabane. Champ `common` de `specials.json` : `false` = rare, exempté du contrôle « au moins un lieu par fenêtre » du test.
+- Terrains ajoutés : `t_concrete`, `t_grave`, `t_reactor` ; mobilier `f_console`, `f_machinery_light` ; ids ajoutés à `tools/build_ultica_pack.py`
+  (`t_chainfence` remplace `t_fence`, absent d'UltiCa : la tuile du terrain `t_fence` pointe désormais dessus).
+- **Repli coloré** : une tuile ou un meuble sans sprite dans le pack est dessiné en carré coloré (champ `color` de `terrain.json` et `furniture.json`) ;
+  `build_ultica_pack.py` n'échoue plus sur un id introuvable (avertissement), sauf si plus de la moitié manquent.
+- Réglages initiaux posés « à l'aveugle » : à ajuster avec la mini-carte (`chance`, distances).
+- Limites : pas de loot ni de monstres dans les lieux (jalon 6) ; une seule variante de plan par bâtiment ; ids UltiCa de réacteur, console, machine,
+  tombe et béton à vérifier à l'œil (repli coloré sinon).

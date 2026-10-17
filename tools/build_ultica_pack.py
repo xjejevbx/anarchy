@@ -34,6 +34,10 @@ IDS = [
     "t_floor", "t_door_c", "t_window",
     "f_bed", "f_table", "f_chair", "f_sofa", "f_bookcase", "f_fridge",
     "f_counter", "f_oven", "f_dresser", "f_sink", "f_toilet", "f_bathtub",
+    # lieux spéciaux (jalon 4) : champ, clôture, pompe, rayonnage
+    "t_dirtmound", "t_chainfence", "t_gas_pump", "f_rack",
+    # grands lieux (jalon 5) : cloture grillagee, beton, tombe, reacteur, console, machine
+    "t_chainfence", "t_rock_floor", "t_grave", "t_reactor", "f_console", "f_machinery_light",
 ]
 
 # Dossiers dont on copie TOUS les sprites, pour les utiliser directement par nom
@@ -99,8 +103,10 @@ def main(src: Path, out: Path) -> None:
                     tiles[tid] = {"fg": normalize_layer(entry.get("fg")), "bg": normalize_layer(entry.get("bg"))}
 
     missing = [i for i in IDS if i not in tiles]
+    if len(missing) > len(IDS) // 2:
+        sys.exit(f"Trop d'ids introuvables (dossier non récupéré ?) : {missing}")
     if missing:
-        sys.exit(f"Ids introuvables (dossier non récupéré ?) : {missing}")
+        print(f"AVERTISSEMENT : ids introuvables dans UltiCa (le jeu dessinera un repli coloré) : {missing}")
 
     wanted = set()
     for t in tiles.values():

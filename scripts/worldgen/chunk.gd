@@ -83,7 +83,12 @@ func _draw() -> void:
 			sprite_name = UlticaTiles.pick_sprite(TerrainDB.ground_tile_of(t), "fg", cell_seed(cell))
 		var local := Vector2(i % SIZE, floori(float(i) / SIZE)) * World.TILE_SIZE
 		UlticaTiles.draw_sprite(self, sprite_name, local)
+		if sprite_name == "" or UlticaTiles.get_texture(sprite_name) == null:  # repli : carré coloré du terrain
+			draw_rect(Rect2(local, Vector2(World.TILE_SIZE, World.TILE_SIZE)), TerrainDB.color_of(t))
 		if furniture.size() == CELLS and furniture[i] != 0:
 			var furniture_tile: String = FurnitureDB.tile_of(furniture[i])
 			UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(furniture_tile, "bg", 0), local)
-			UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(furniture_tile, "fg", cell_seed(cell)), local)
+			var furniture_sprite: String = UlticaTiles.pick_sprite(furniture_tile, "fg", cell_seed(cell))
+			UlticaTiles.draw_sprite(self, furniture_sprite, local)
+			if furniture_sprite == "" or UlticaTiles.get_texture(furniture_sprite) == null:  # repli : petit carré coloré
+				draw_rect(Rect2(local + Vector2(6, 6), Vector2(20, 20)), FurnitureDB.color_of(furniture[i]))

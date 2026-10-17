@@ -1,0 +1,9 @@
+{
+ "_doc": "Caracteristiques du joueur (onglet Stats de l'ecran personnage, touche c). base = valeur au depart. Pour ajouter une stat : ajouter une entree ici (l'ordre donne l'ordre d'affichage). Pour l'instant les stats n'ont AUCUN effet sur le jeu : elles servent d'affichage et de base aux futurs systemes (competences, charge, degats...).",
+ "stats": {
+  "strength": {"name": "Force", "base": 8, "description": "Puissance physique (effets à venir : charge, dégâts de mêlée)."},
+  "dexterity": {"name": "Dextérité", "base": 8, "description": "Agilité et précision (effets à venir)."},
+  "intelligence": {"name": "Intelligence", "base": 8, "description": "Capacité à apprendre et à fabriquer (effets à venir)."},
+  "perception": {"name": "Perception", "base": 8, "description": "Sens de l'observation (effets à venir)."}
+ }
+}

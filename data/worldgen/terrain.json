@@ -85,7 +85,8 @@
    "name": "Plancher",
    "tile": "t_floor",
    "walkable": true,
-   "opaque": false
+   "opaque": false,
+   "color": "#a89878"
   },
   "t_wall_house": {
    "name": "Mur de maison",
@@ -98,32 +99,58 @@
    "tile": "t_door_c",
    "walkable": true,
    "opaque": true,
-   "wall_link": true
+   "wall_link": true,
+   "color": "#7a5230"
   },
   "t_window": {
    "name": "Fenêtre",
    "tile": "t_window",
    "walkable": false,
    "opaque": false,
-   "wall_link": true
+   "wall_link": true,
+   "color": "#7fb4d8"
   },
   "t_field": {
    "name": "Champ",
    "tile": "t_dirtmound",
    "walkable": true,
-   "opaque": false
+   "opaque": false,
+   "color": "#8a6a3a"
   },
   "t_fence": {
    "name": "Clôture",
-   "tile": "t_fence",
+   "tile": "t_chainfence",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#8c8c8c"
   },
   "t_gas_pump": {
    "name": "Pompe à essence",
    "tile": "t_gas_pump",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#c0392b"
+  },
+  "t_concrete": {
+   "name": "Béton",
+   "tile": "t_rock_floor",
+   "walkable": true,
+   "opaque": false,
+   "color": "#9a9a9a"
+  },
+  "t_grave": {
+   "name": "Tombe",
+   "tile": "t_grave",
+   "walkable": false,
+   "opaque": false,
+   "color": "#6b6b6b"
+  },
+  "t_reactor": {
+   "name": "Cœur de réacteur",
+   "tile": "t_reactor",
+   "walkable": false,
+   "opaque": false,
+   "color": "#e67e22"
   }
  }
 }

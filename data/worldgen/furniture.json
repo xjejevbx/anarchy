@@ -5,79 +5,106 @@
    "name": "Lit",
    "tile": "f_bed",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#a05050"
   },
   "f_table": {
    "name": "Table",
    "tile": "f_table",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#8b6b3a"
   },
   "f_chair": {
    "name": "Chaise",
    "tile": "f_chair",
    "walkable": true,
-   "opaque": false
+   "opaque": false,
+   "color": "#8b6b3a"
   },
   "f_sofa": {
    "name": "Canapé",
    "tile": "f_sofa",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#5a6a9a"
   },
   "f_bookcase": {
    "name": "Bibliothèque",
    "tile": "f_bookcase",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#6b4a2a"
   },
   "f_fridge": {
    "name": "Réfrigérateur",
    "tile": "f_fridge",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#d0d8e0"
   },
   "f_counter": {
    "name": "Comptoir",
    "tile": "f_counter",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#9a8a6a"
   },
   "f_oven": {
    "name": "Cuisinière",
    "tile": "f_oven",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#555555"
   },
   "f_dresser": {
    "name": "Commode",
    "tile": "f_dresser",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#7b5a3a"
   },
   "f_sink": {
    "name": "Évier",
    "tile": "f_sink",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#a0c0d0"
   },
   "f_toilet": {
    "name": "WC",
    "tile": "f_toilet",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#e8e8e8"
   },
   "f_bathtub": {
    "name": "Baignoire",
    "tile": "f_bathtub",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#d8e8f0"
   },
   "f_rack": {
    "name": "Rayonnage",
    "tile": "f_rack",
    "walkable": false,
-   "opaque": false
+   "opaque": false,
+   "color": "#7a7a7a"
+  },
+  "f_console": {
+   "name": "Console",
+   "tile": "f_console",
+   "walkable": false,
+   "opaque": false,
+   "color": "#3a6a8a"
+  },
+  "f_machinery_light": {
+   "name": "Machine",
+   "tile": "f_machinery_light",
+   "walkable": false,
+   "opaque": false,
+   "color": "#8a8a3a"
   }
  }
 }

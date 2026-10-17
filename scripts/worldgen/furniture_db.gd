@@ -76,3 +76,11 @@ static func tile_of(index: int) -> String:
 static func name_of(index: int) -> String:
 	_ensure_loaded()
 	return String(_defs[index - 1].get("name", "")) if index >= 1 and index <= _defs.size() else ""
+
+
+## Couleur de repli (champ "color" de furniture.json), dessinée quand le meuble n'a pas de sprite dans le pack.
+static func color_of(index: int) -> Color:
+	_ensure_loaded()
+	if index >= 1 and index <= _defs.size() and _defs[index - 1].has("color"):
+		return Color.html(String(_defs[index - 1]["color"]))
+	return Color(0.85, 0.7, 0.3)

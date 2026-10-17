@@ -89,7 +89,7 @@ func _add_place(id: String, def: Dictionary) -> void:
 		"chance": float(def.get("chance", 1.0)), "biomes": biomes, "near_road": bool(def.get("near_road", false)),
 		"min_town_distance": int(def.get("min_town_distance", -1)), "max_town_distance": int(def.get("max_town_distance", -1)),
 		"max_per_region": int(def.get("max_per_region", 1)), "cells": cells, "width": width, "height": height,
-		"hash": WorldRng.seed_from_text(id),
+		"hash": WorldRng.seed_from_text(id), "common": bool(def.get("common", true)),
 	}
 	_by_id[id] = place
 	_places.append(place)
@@ -121,6 +121,11 @@ func place_name(id: String) -> String:
 
 func place_needs_road(id: String) -> bool:
 	return bool((_by_id.get(id, {}) as Dictionary).get("near_road", false))
+
+
+## Lieu assez fréquent pour être attendu dans toute fenêtre de 7 x 7 régions (faux : rare, exempté de ce contrôle du test).
+func place_is_common(id: String) -> bool:
+	return bool((_by_id.get(id, {}) as Dictionary).get("common", true))
 
 
 func biome_ok(id: String, kind: int) -> bool:

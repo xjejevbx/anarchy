@@ -227,6 +227,64 @@ func _initialize() -> void:
 		_check(checked > 0, "seed %d : des maisons sont générées (%d contrôlées)" % [world_seed, checked])
 		_check(problems == 0, "seed %d : maisons contrôlées (porte côté rue, case devant la porte praticable, mobilier présent) : %d anomalies" % [world_seed, problems])
 
+	# --- Lieux spéciaux (jalon 4) ---
+	_check_special_plans()
+	var special_regions: Array[Vector2i] = []   # fenêtre 3 x 3 régions pour le déterminisme
+	for ry in range(-1, 2):
+		for rx in range(-1, 2):
+			special_regions.append(Vector2i(rx, ry))
+	var region_size: int = SettlementMap.region_size_cells()
+	for world_seed in seeds:
+		var place_settlement: SettlementMap = SettlementMap.for_seed(world_seed)
+		var specials: SpecialMap = place_settlement.specials()
+		var place_world: WorldMap = WorldMap.for_seed(world_seed)
+		var counts: Dictionary = {}
+		var placed_total: int = 0
+		var out_of_region: int = 0
+		var bad_site: int = 0
+		var no_road: int = 0
+		var chunk_checked: int = 0
+		var chunk_problems: int = 0
+		for ry in range(-3, 4):
+			for rx in range(-3, 4):
+				var region := Vector2i(rx, ry)
+				for place: Dictionary in specials.region_places(region):
+					var place_id: String = place["id"]
+					placed_total += 1
+					counts[place_id] = int(counts.get(place_id, 0)) + 1
+					var footprint: Array = place["cells"]
+					for cell: Vector2i in footprint:
+						if Vector2i(floori(float(cell.x) / region_size), floori(float(cell.y) / region_size)) != region:
+							out_of_region += 1
+						if not specials.biome_ok(place_id, place_world.cell_kind(cell)) or place_settlement.cell_type(cell, true, false) != SettlementMap.CellType.NONE:
+							bad_site += 1
+						if chunk_checked < 30:
+							var info: Dictionary = place_settlement.special_plan(cell)
+							if not info.is_empty() and MapgenDB.has_door(int(info["plan"])):
+								chunk_checked += 1
+								if not _house_is_sound(world_seed, cell, int(info["rot"])):
+									chunk_problems += 1
+					if specials.place_needs_road(place_id) and not specials.front_touches_road(footprint, int(place["rot"])):
+						no_road += 1
+		_check(specials.errors().is_empty(), "seed %d : specials.json valide %s" % [world_seed, str(specials.errors())])
+		_check(placed_total > 0, "seed %d : %d lieux spéciaux sur 7 x 7 régions" % [world_seed, placed_total])
+		for place_id in specials.place_ids():
+			_check(int(counts.get(place_id, 0)) > 0 or not specials.place_is_common(place_id), "seed %d : au moins un lieu « %s » (%d ; lieux rares exemptés)" % [world_seed, place_id, int(counts.get(place_id, 0))])
+		_check(out_of_region == 0, "seed %d : aucune empreinte ne franchit une frontière de région" % world_seed)
+		_check(bad_site == 0, "seed %d : empreintes sur terrain libre (hors ville, rue, route), biome autorisé (%d anomalies)" % [world_seed, bad_site])
+		_check(no_road == 0, "seed %d : chaque lieu near_road a une route devant sa façade" % world_seed)
+		_check(chunk_problems == 0, "seed %d : bâtiments des lieux contrôlés (porte côté route, case devant praticable) : %d sur %d en défaut" % [world_seed, chunk_problems, chunk_checked])
+		# Déterminisme : 3 ordres de génération, sur des instances neuves (caches vides).
+		var special_reference: Dictionary = _special_prints(SettlementMap.new(world_seed), special_regions)
+		var special_reversed: Array[Vector2i] = special_regions.duplicate()
+		special_reversed.reverse()
+		var special_by_distance: Array[Vector2i] = special_regions.duplicate()
+		special_by_distance.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+			return a.x * a.x + a.y * a.y < b.x * b.x + b.y * b.y)
+		_check(special_reference == _special_prints(SettlementMap.new(world_seed), special_reversed), "seed %d : lieux identiques, ordre inversé" % world_seed)
+		_check(special_reference == _special_prints(SettlementMap.new(world_seed), special_by_distance), "seed %d : lieux identiques, ordre par distance" % world_seed)
+		_check(special_reference == _special_prints(place_settlement, special_regions), "seed %d : lieux identiques sur l'instance partagée" % world_seed)
+
 	# --- Répartition des biomes (relevé grossier) : rivières, gués, lacs, forêts, plaines, marais ---
 	var totals: Array[int] = []
 	totals.resize(WorldMap.kind_count())
@@ -417,6 +475,79 @@ func _warn_missing_sprites() -> void:
 			missing.append("%s (%s)" % [FurnitureDB.id_of(f), furniture_tile])
 	if not missing.is_empty():
 		print("  AVERTISSEMENT - tuiles absentes du pack (relancer tools/build_ultica_pack.py) : ", ", ".join(missing))
+
+
+func _special_prints(settlement: SettlementMap, regions: Array[Vector2i]) -> Dictionary:
+	var result: Dictionary = {}
+	for region in regions:
+		result[region] = settlement.specials().region_fingerprint(region)
+	return result
+
+
+## Tout le sol du plan est-il atteignable depuis la case devant la porte de façade, pour la rotation donnée ?
+func _plan_floor_reachable(plan: int, rot: int, front_door: Vector2i, floor_terrain: int) -> bool:
+	var walk := PackedByteArray()
+	walk.resize(Chunk.CELLS)
+	var visited := PackedByteArray()
+	visited.resize(Chunk.CELLS)
+	for ly in Chunk.SIZE:
+		for lx in Chunk.SIZE:
+			var plan_cell: int = MapgenDB.plan_index(lx, ly, rot)
+			var terrain_here: int = MapgenDB.terrain_at(plan, plan_cell)
+			var open: bool = terrain_here == MapgenDB.NATURE or TerrainDB.is_walkable(terrain_here)
+			walk[ly * Chunk.SIZE + lx] = 1 if open and FurnitureDB.is_walkable(MapgenDB.furniture_at(plan, plan_cell)) else 0
+	var start: Vector2i = _rotate_plan_cell(front_door + Vector2i.DOWN, rot)
+	if walk[start.y * Chunk.SIZE + start.x] != 1:
+		return false
+	var stack: Array[Vector2i] = [start]
+	visited[start.y * Chunk.SIZE + start.x] = 1
+	while not stack.is_empty():
+		var current: Vector2i = stack.pop_back()
+		for step: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+			var next: Vector2i = current + step
+			if next.x < 0 or next.y < 0 or next.x >= Chunk.SIZE or next.y >= Chunk.SIZE:
+				continue
+			var next_index: int = next.y * Chunk.SIZE + next.x
+			if walk[next_index] == 1 and visited[next_index] == 0:
+				visited[next_index] = 1
+				stack.append(next)
+	for ly in Chunk.SIZE:
+		for lx in Chunk.SIZE:
+			var cell_index: int = ly * Chunk.SIZE + lx
+			if MapgenDB.terrain_at(plan, MapgenDB.plan_index(lx, ly, rot)) == floor_terrain and walk[cell_index] == 1 and visited[cell_index] == 0:
+				return false
+	return true
+
+
+## Plans des lieux spéciaux (ceux qui suivent les plans de maison) : structure, et accès au sol pour les bâtiments.
+func _check_special_plans() -> void:
+	var wall: int = TerrainDB.index_of("t_wall_house")
+	var door: int = TerrainDB.index_of("t_door")
+	var floor_terrain: int = TerrainDB.index_of("t_floor")
+	var last: int = Chunk.SIZE - 1
+	_check(MapgenDB.total_count() > MapgenDB.plan_count(), "plans de lieux spéciaux chargés (%d)" % (MapgenDB.total_count() - MapgenDB.plan_count()))
+	for plan in range(MapgenDB.plan_count(), MapgenDB.total_count()):
+		var plan_name: String = MapgenDB.plan_id(plan)
+		var structure_ok: bool = true
+		var front_door: Vector2i = Vector2i(-1, -1)
+		for py in Chunk.SIZE:
+			for px in Chunk.SIZE:
+				var t: int = MapgenDB.terrain_at(plan, py * Chunk.SIZE + px)
+				var f: int = MapgenDB.furniture_at(plan, py * Chunk.SIZE + px)
+				if (t == wall or t == door) and (px < 1 or py < 1 or px > last - 1 or py > last - 1):
+					structure_ok = false
+				if f != 0 and t != floor_terrain:
+					structure_ok = false
+				if t == door and py > front_door.y:
+					front_door = Vector2i(px, py)
+		_check(structure_ok, "lieu %s : murs à l'intérieur du chunk, mobilier posé sur du sol" % plan_name)
+		if front_door.x < 0:
+			continue  # pas de bâtiment (champ...)
+		var access_ok: bool = front_door.y < last
+		for rot in 4:
+			if access_ok and not _plan_floor_reachable(plan, rot, front_door, floor_terrain):
+				access_ok = false
+		_check(access_ok, "lieu %s : tout le sol est atteignable depuis la porte (4 rotations)" % plan_name)
 
 
 func _check(condition: bool, label: String) -> void:

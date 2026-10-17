@@ -11,7 +11,7 @@ Tileset provisoire : UltiCa (CC BY-SA 3.0, voir assets/ultica/CREDITS.txt). Les 
   - ratio < 1 : se déplacer ET attendre REGAGNENT de la stamina, de moins en moins vite (`regen_max × (1 − ratio)`).
   - ratio = 1 : effet nul.
   - ratio > 1 : se déplacer ET attendre FONT PERDRE de la stamina, de plus en plus vite
-    (`2.0 × dépassement + 4.0 × dépassement²`).
+	(`2.0 × dépassement + 4.0 × dépassement²`).
   - Attendre coûte 1 pt comme un déplacement, avec un peu plus de gain (`WAIT_REGEN_MAX = 0.85` vs `MOVE_REGEN_MAX = 0.6`).
 - **Diagonales** : pas de déplacement diagonal spécial. « Bas + gauche » = deux pas orthogonaux (2 actions, chacune avec son
   temps/sa stamina, les monstres peuvent agir entre les deux). Valable pour le joueur ET les monstres (A* en 4 directions).
@@ -21,41 +21,46 @@ Tileset provisoire : UltiCa (CC BY-SA 3.0, voir assets/ultica/CREDITS.txt). Les 
 - **Vue** : champ de vision par shadowcasting (rayon 20). Murs et arbres bloquent la vue. Brouillard : visible / mémoire
   (assombri) / jamais vu (noir). Les monstres hors de vue sont cachés et ne repèrent le joueur que s'ils sont dans son champ
   de vision (vue symétrique) ; sinon ils vont à la dernière position connue. Un monstre frappé sait où tu es.
-- **Touche maintenue** = appuis répétés (délai 0,25 s puis 1 action / 0,07 s). La répétition s'arrête quand un ennemi
+- **Touche maintenue** (marche automatique INTELLIGENTE : tout droit tant que c'est libre, sinon un chemin court qui contourne les arbres et obstacles connus, `AutoPath`) = appuis répétés (délai 0,25 s puis 1 action / 0,07 s). La répétition s'arrête quand un ennemi
   apparaît dans la vue ou quand le joueur est blessé (il faut relâcher et réappuyer).
 - **Inventaire (style Project Zomboid)** : un objet = nom, poids (kg), taille [longueur, largeur] (cm), id de tuile UltiCa.
   - Conteneurs (sacs, vêtements à poches) : poids propre fixe, taille max d'objet (longueur/largeur, l'objet peut être tourné),
-    limite de poids de contenu RÉEL, et `weight_ratio` : le contenu pèse réel / ratio, que le conteneur soit équipé ou
-    simplement porté sur soi (sac militaire ÷3, sac en rideau ÷1,2).
+	limite de poids de contenu RÉEL, et `weight_ratio` : le contenu pèse réel / ratio, que le conteneur soit équipé ou
+	simplement porté sur soi (sac militaire ÷3, sac en rideau ÷1,2).
   - « Sur soi » = hors conteneur, poids plein, sans limite de taille.
   - Conteneur dans un conteneur : seulement s'il est VIDE ; et un conteneur lui-même rangé dans un autre ne peut rien
-    recevoir. Un sac ramassé n'est jamais rangé automatiquement (il reste sur soi). Exception prévue plus tard : holster
-    attaché à une ceinture.
+	recevoir. Un sac ramassé n'est jamais rangé automatiquement (il reste sur soi). Exception prévue plus tard : holster
+	attaché à une ceinture.
   - Portée : la case du joueur + les 8 autour sont « à portée de main » (aucun coût supplémentaire).
   - Équipement : 1 objet par emplacement (tête, haut, veste, jambes, pieds, dos). Les vêtements s'affichent sur le sprite.
   - Ramasser va dans le meilleur conteneur équipé qui convient (réduction la plus forte), sinon sur soi. On peut se surcharger.
   - Coûts de base (points d'action, x pénalité de stamina) : ramasser = 1 + 0,8 x poids réel ; équiper/retirer = 3 + 0,4 x poids ;
-    ranger / sortir / poser DEPUIS un conteneur = 1 + 0,4 x poids ; **poser au sol un objet « sur soi » = gratuit**.
+	ranger / sortir / poser DEPUIS un conteneur = 1 + 0,4 x poids ; **poser au sol un objet « sur soi » = gratuit**.
   - **Le temps n'est PAS compté geste par geste** : les modifications sont immédiates, mais à la fermeture de l'inventaire on
-    compare l'état de départ et l'état final (`InventoryLedger`) : un objet remis à sa place ne coûte rien, un objet déplacé
-    plusieurs fois ne coûte que son déplacement net (origine -> destination ; depuis le sol = ramassage). Une popup affiche
-    « Coût en temps : x secondes » avec « Validé » (le temps passe d'un coup) ou « Annulé » (rouvre l'inventaire, rien n'est
-    défait). Aucun déplacement net = pas de popup. L'écran affiche le temps cumulé en direct.
+	compare l'état de départ et l'état final (`InventoryLedger`) : un objet remis à sa place ne coûte rien, un objet déplacé
+	plusieurs fois ne coûte que son déplacement net (origine -> destination ; depuis le sol = ramassage). Une popup affiche
+	« Coût en temps : x secondes » avec « Validé » (le temps passe d'un coup) ou « Annulé » (rouvre l'inventaire, rien n'est
+	défait). Aucun déplacement net = pas de popup. L'écran affiche le temps cumulé en direct.
   - **Ramassage préparé** : rien n'est modifié dans le monde avant la validation. Les objets choisis restent listés, grisés
-    « déplacé vers l'inventaire (rangement auto / en main / équipé) » (ou « n/m déplacés »), et `U` annule. Ramasser puis équiper
-    directement coûte ramassage + équipement.
+	« déplacé vers l'inventaire (rangement auto / en main / équipé) » (ou « n/m déplacés »), et `U` annule. Ramasser puis équiper
+	directement coûte ramassage + équipement.
   - **Poser au sol** : l'objet quitte l'inventaire tout de suite (poids à jour) mais n'apparaît au sol qu'à la validation ; il est
-    listé dans « À POSER AU SOL » avec `U` pour le reprendre.
+	listé dans « À POSER AU SOL » avec `U` pour le reprendre.
   - **Chaque objet est sa propre action** : une pile de 4 conserves = 4 étapes, chacune avec son coût (base + poids de CETTE
-    unité : 4 conserves coûtent donc 4 x la base de manipulation). Idem pour ranger, sortir, équiper et poser.
+	unité : 4 conserves coûtent donc 4 x la base de manipulation). Idem pour ranger, sortir, équiper et poser.
   - **Validation animée** : à « Validé », les étapes sont jouées une par une avec un délai (`STEP_DELAY` en haut de
-    `inventory_ui.gd`, 0,6 s ; deviendra une option de jeu), bannière centrée en haut (« Dépôt de X au sol (case 5)  (2/4) » +
-    icône de chargement). **Le temps de chaque étape passe à ce moment-là** (`Player.spend_inventory_time`) : les monstres
-    avancent entre deux étapes. Une touche saute l'animation (le temps passe quand même) ; si le joueur meurt, la séquence
-    s'arrête. Les cases sont nommées par leur chiffre du pavé numérique (« AU SOL (case 4) » = case de gauche).
+	`inventory_ui.gd`, 0,6 s ; deviendra une option de jeu), bannière centrée en haut (« Dépôt de X au sol (case 5)  (2/4) » +
+	icône de chargement). **Le temps de chaque étape passe à ce moment-là** (`Player.spend_inventory_time`) : les monstres
+	avancent entre deux étapes. Une touche saute l'animation (le temps passe quand même) ; si le joueur meurt, la séquence
+	s'arrête. Les cases sont nommées par leur chiffre du pavé numérique (« AU SOL (case 4) » = case de gauche).
   - **Annuler** : `u` annule les déplacements de l'objet sous le curseur (au sol : le ramassage préparé ; en inventaire :
-    retour à son emplacement de départ), `U` remet tout à zéro. La popup propose « Validé [Entrée] », « Annulé [Échap] »
-    (continuer) et « Tout annuler [U] » (rien ne change, aucune seconde perdue).
+	retour à son emplacement de départ), `U` remet tout à zéro. La popup propose « Validé [Entrée] », « Annulé [Échap] »
+	(continuer) et « Tout annuler [U] » (rien ne change, aucune seconde perdue).
+- **Posture** (touche `|`) : Marche (référence), Sprint (pas ×0,7 de durée, stamina −1 par pas, les monstres te détectent de ×1,5 plus loin), Accroupi (pas ×1,5, stamina +0,3 par pas, détection ×0,5). Changer de posture est gratuit. Valeurs : constantes `POSTURE_*` de `player.gd`.
+- **Stats du joueur** : `data/stats.json` (Force, Dextérité, Intelligence, Perception, base 8) affichées dans l'écran personnage (`c`) ; elles n'ont pas encore d'effet. Pour en ajouter : une entrée dans le JSON.
+- **Zoom** : `+` / `-` (5 paliers de 0,5 à 3). Le champ de vision ne change pas : le brouillard couvre simplement plus de cases.
+- **Double-clic** sur une case VISIBLE et praticable : déplacement automatique (un vrai pas par action, les monstres jouent). Il s'arrête si un ennemi apparaît, si le joueur est blessé, si le chemin est bloqué ou à la moindre touche.
+- **Alerte « Vous apercevez X »** : une fois par monstre ; elle revient seulement s'il est resté dans le brouillard au moins `World.ALERT_REARM_POINTS` (5 s). La marche automatique s'arrête, elle, à chaque apparition.
 - **Jauge de suspense** (PLUS TARD) : indicateur 0-100 % comme si quelqu'un nous observait et pariait sur nos chances de survie
   (100 % = on ne sait pas quand tu vas mourir, 0 % = déjà mort). Valeur calculée (PV, stamina, menaces, charge, etc.).
 
@@ -64,7 +69,7 @@ Tileset provisoire : UltiCa (CC BY-SA 3.0, voir assets/ultica/CREDITS.txt). Les 
 - Sauvegarde = seed + modifications (deltas par chunk) ; le terrain se régénère. Pas de `randi()` global dans la génération.
 - Contenu en données (`data/worldgen/*.json`) : villes, routes, motels, fermes, centrales nucléaires, etc.
 - Étages / sous-sols / tour radio prévus plus tard : les clés de chunk portent déjà une coordonnée `z`.
-- Statut : **jalons 1 et 2 faits** (chunks, A* borné, arène de test en option ; biomes, lacs, rivières, gués, mini-carte de debug) ; **jalon 3 fait** : 3a (villes et rues, départ en lisière de ville), 3b (routes entre villes, ponts) et 3c (maisons avec intérieur et mobilier) ; jalons 4 à 8 ensuite.
+- Statut : **jalons 1 et 2 faits** (chunks, A* borné, arène de test en option ; biomes, lacs, rivières, gués, mini-carte de debug) ; **jalon 3 fait** : 3a (villes et rues, départ en lisière de ville), 3b (routes entre villes, ponts) et 3c (maisons avec intérieur et mobilier) ; **jalon 4 fait** : lieux spéciaux (station-service, motel, ferme) ; **jalon 5 fait** : grands lieux (centrale nucléaire, ranch, usine, station d'épuration, camping, entrepôt, cimetière, chapelle, poste électrique, cabane) ; jalons 6 à 8 ensuite.
 - Réglages de partie en haut de `main.gd` : `WORLD_SEED_TEXT` (nombre ou texte) et `USE_TEST_ARENA` (true = ancienne carte fermée 60 x 40).
 
 ## Contrôles
@@ -86,7 +91,8 @@ pile), `-` retire 1. Curseur sur un conteneur : `6` = déplace 1 unité de chaqu
 sélection ; ce qui ne rentre pas reste sélectionné. `6` sur un objet sélectionné = le retire de la sélection. Avec une
 sélection : `e` équiper/retirer (ex. un jean et un sac à dos d'un coup), `t` sortir, `r` ranger auto, `g` poser au sol ; les objets
 équipés (sac équipé, etc.) sont sélectionnables comme les autres (même quantités). Depuis le sol, `Entrée`/`w`/`W` s'appliquent à la sélection.
-Souris : lecture seule (survol du diviseur dans « Poids : 0.40 kg ÷ 2 × 4 = 0.80 kg » = infobulle du conteneur).
+Souris : lecture seule dans les menus (survol du diviseur dans « Poids : 0.40 kg ÷ 2 × 4 = 0.80 kg » = infobulle du conteneur) ; dans le monde, double-clic gauche sur une case visible = s'y rendre.
+Zoom `+` / `-` (par le caractère tapé, donc aussi en AZERTY ; pavé numérique accepté). `c` = écran du personnage (4 / 6 ou flèches : onglets, `c` / Échap : fermer). `|` = menu de posture (Marche / Sprint / Accroupi) : la posture suivante est présélectionnée, `|` ou 8 / 2 changent la sélection, Entrée valide, Échap ferme.
 
 ## Architecture (scripts/)
 - `main.gd` : assemble monde, joueur, HUD, zombies de test.
@@ -102,7 +108,7 @@ Souris : lecture seule (survol du diviseur dans « Poids : 0.40 kg ÷ 2 × 4 = 0
   `settlement_map.gd` (`SettlementMap` : villes par région de 32 x 32 cellules, rues en croix + grille, parcelles / jardins, géométrie des
   cellules de route (chaussée, trottoirs, lignes, ponts sur l'eau), point de départ en lisière de ville ; réglages `data/worldgen/towns.json`),
   `route_map.gd` (`RouteMap` : routes entre villes — graphe des plus proches voisines, A* sur les cellules macro avec coûts entiers par biome, cache par arête et par région ; `SettlementMap.cell_type()` les renvoie comme ROAD hors des villes ; réglages : section `routes` de `data/worldgen/towns.json`),
-  `mapgen_db.gd` (`MapgenDB` : plans ASCII 24 x 24 de maisons, `data/worldgen/mapgen/houses.json`, compilés en terrain + mobilier et validés au chargement ; `SettlementMap.lot_plan()` choisit plan et rotation pour tourner la façade vers une rue), `furniture_db.gd` (`FurnitureDB` : mobilier, `data/worldgen/furniture.json`, un octet par case dans `Chunk.furniture`, dessiné par-dessus le sol ; praticable / opaque combinés au terrain par `ChunkManager`),
+  `special_map.gd` (`SpecialMap` : lieux spéciaux placés par région, empreintes multi-cellules tournées vers la route, `data/worldgen/specials.json` ; `SettlementMap.cell_type()` renvoie SPECIAL pour leurs cellules, `cell_plan()` donne le plan à poser), `mapgen_db.gd` (`MapgenDB` : plans ASCII 24 x 24 de maisons, `data/worldgen/mapgen/houses.json`, compilés en terrain + mobilier et validés au chargement ; `SettlementMap.lot_plan()` choisit plan et rotation pour tourner la façade vers une rue), `furniture_db.gd` (`FurnitureDB` : mobilier, `data/worldgen/furniture.json`, un octet par case dans `Chunk.furniture`, dessiné par-dessus le sol ; praticable / opaque combinés au terrain par `ChunkManager`),
   `world_map.gd` (`WorldMap` : champs de bruit continus altitude / humidité / rivière -> nature d'une case (`Kind` : plaine, forêt, marais,
   lac profond / peu profond, rivière profonde / gué, berges), terrain d'une case, cellule macro, point de départ ; une instance par seed).
   Réglages en données : `data/worldgen/biomes.json` (bruits, seuils, densité d'arbres, couleurs de la mini-carte).
@@ -121,7 +127,9 @@ Souris : lecture seule (survol du diviseur dans « Poids : 0.40 kg ÷ 2 × 4 = 0
   sélection/déplacement d'objets (`_held`), pause du jeu, détails + coût de chaque action, infobulles au survol.
 - `entities/monster.gd` + `data/monster_data.gd` : IA et données (zombie défini en code, à passer en JSON/.tres).
 - `render/ultica_tiles.gd` (`UlticaTiles`) : accès aux sprites UltiCa (id de tuile -> sprite, variantes pondérées, décalages).
-- `ui/hud.gd` : texte de stats, journal de messages, infobulle des monstres.
+- `ui/character_ui.gd` (`CharacterUI`, touche `c`) : écran du personnage à onglets (Stats : caractéristiques + état). `data/stats.json` + `data/stat_db.gd` (`StatDB`) : définition des stats. `ui/posture_ui.gd` (`PostureUI`, touche `|`) : menu de posture.
+- `world/auto_path.gd` (`AutoPath`) : BFS 4 directions sur les cases connues (marche automatique, double-clic). `world/fog_layer.gd` : brouillard dessiné par rangées fusionnées, zone calculée d'après la taille de fenêtre et le zoom.
+- `ui/hud.gd` : texte de stats (posture comprise), journal de messages, infobulle des monstres.
 - `tools/build_ultica_pack.py` : régénère assets/ultica (copie les PNG d'une liste d'ids CDDA depuis le dépôt
   I-am-Erk/CDDA-tilesets, dossier gfx/UltimateCataclysm, + écrit tiles.json). Ajouter un id dans IDS puis relancer.
 

@@ -1,6 +1,7 @@
 class_name Player
 extends Node2D
-## Joueur : déplacement, combat de base, stamina, charge portée (inventaire), coût des actions en temps.
+## Joueur : déplacement, combat de base, stamina, charge portée (inventaire), coût des actions en temps,
+## posture (marche / sprint / accroupi), zoom de la caméra, déplacements automatiques (touche maintenue, double-clic).
 
 # --- Santé ---
 const HP_MAX: float = 100.0
@@ -21,6 +22,22 @@ const WAIT_REGEN_MAX: float = 0.85      # gain max en attendant (à vide) : un p
 const OVERLOAD_DRAIN_LINEAR: float = 2.0
 const OVERLOAD_DRAIN_QUAD: float = 4.0
 const CAPACITY_BASE: float = 20.0       # kg portables sans équipement (+ bonus d'équipement éventuels)
+
+# --- Posture (touche |) : indices de Posture ---
+enum Posture { WALK, SPRINT, CROUCH }
+const POSTURE_NAMES: Array[String] = ["Marche", "Sprint", "Accroupi"]
+const POSTURE_TIME_FACTOR: Array[float] = [1.0, 0.7, 1.5]     # multiplie la durée d'un déplacement
+const POSTURE_MOVE_STAMINA: Array[float] = [0.0, -1.0, 0.3]   # ajouté à la variation de stamina de chaque déplacement
+const POSTURE_DETECT_FACTOR: Array[float] = [1.0, 1.5, 0.5]   # multiplie la portée de détection des monstres
+
+# --- Zoom de la caméra (touches + et -) ---
+const ZOOM_LEVELS: Array[float] = [0.5, 1.0, 1.5, 2.0, 3.0]
+const ZOOM_START_INDEX: int = 1
+
+# --- Déplacements automatiques ---
+const AUTO_LOOKAHEAD: int = 12          # touche maintenue : on vise la case la plus lointaine connue dans cette direction
+const AUTO_CLEAR_RANGE: int = 4         # tant que ces cases devant sont libres, on avance tout droit
+const TRAVEL_MAX_RADIUS: int = 45       # double-clic : le chemin reste dans ce carré autour du joueur
 
 # --- Inventaire : coûts en points d'action (avant pénalité de stamina) ---
 const PICKUP_BASE_COST: float = 1.0     # ramasser = base + poids réel de l'objet (kg) x coût/kg
@@ -51,12 +68,18 @@ var dead: bool = false
 var stamina: float = STAMINA_MAX
 var inventory := Inventory.new()
 var pending_drops: Array[Dictionary] = []  # {item, cell} : posés au sol seulement à la validation de l'inventaire
-var input_blocked: bool = false         # vrai quand une interface (inventaire) est ouverte
+var input_blocked: bool = false         # vrai quand une interface (inventaire, écran personnage...) est ouverte
+var camera: Camera2D
+var zoom_index: int = ZOOM_START_INDEX
+var posture: int = Posture.WALK
+var stats: Dictionary = {}              # id de stat (data/stats.json) -> valeur
 
 var _bg_sprite: String = ""
 var _fg_sprite: String = ""
 var _held_key: Key = KEY_NONE
 var _repeat_timer: float = 0.0
+var _travel_path: Array[Vector2i] = []  # déplacement automatique en cours (double-clic) : cases restant à parcourir
+var _travel_timer: float = 0.0
 
 const MOVE_KEYS: Dictionary = {
 	KEY_KP_8: Vector2i.UP, KEY_KP_2: Vector2i.DOWN, KEY_KP_4: Vector2i.LEFT, KEY_KP_6: Vector2i.RIGHT,
@@ -68,6 +91,8 @@ const WAIT_KEYS: Array = [KEY_SPACE, KEY_PERIOD, KEY_KP_5]
 
 
 func _ready() -> void:
+	for stat_id: String in StatDB.ids():
+		stats[stat_id] = StatDB.base_of(stat_id)
 	for item_id: String in START_EQUIPMENT:
 		inventory.equip(Item.create(item_id))
 	for item_id: String in START_LOOSE:
@@ -75,19 +100,26 @@ func _ready() -> void:
 	position = Vector2(grid_pos * World.TILE_SIZE)
 	_bg_sprite = UlticaTiles.pick_sprite("player_male", "bg", 0)
 	_fg_sprite = UlticaTiles.pick_sprite("player_male", "fg", 0)
-	var camera := Camera2D.new()
+	camera = Camera2D.new()
 	add_child(camera)
 	camera.position = Vector2(World.TILE_SIZE, World.TILE_SIZE) / 2.0
+	camera.zoom = Vector2.ONE * ZOOM_LEVELS[zoom_index]
 	EventBus.hostile_spotted.connect(func(_m: Node) -> void: _stop_repeat())
 	_emit_stamina()
 	_emit_load()
 	EventBus.health_changed.emit(hp, HP_MAX)
+	EventBus.posture_changed.emit(posture_name())
 	world.update_fov()  # vue initiale (sans ça, tout reste noir jusqu'au premier pas)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if dead:
+		return
+	if event is InputEventMouseButton:
+		_on_mouse_button(event as InputEventMouseButton)
+		return
 	var key_event := event as InputEventKey
-	if dead or key_event == null:
+	if key_event == null:
 		return
 	if input_blocked:
 		_held_key = KEY_NONE
@@ -99,12 +131,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if key_event.echo:
 		return  # la répétition est gérée par _process (cadence fixe, indépendante de l'OS)
-	if MOVE_KEYS.has(key) or WAIT_KEYS.has(key):
+	_travel_path.clear()  # toute touche interrompt un déplacement automatique
+	var zoom_step: int = _zoom_direction(key_event)
+	if zoom_step != 0:
+		_change_zoom(zoom_step)
+	elif MOVE_KEYS.has(key) or WAIT_KEYS.has(key):
 		_held_key = key  # avant l'action : elle peut interrompre la répétition
 		_repeat_timer = REPEAT_DELAY
 		_do_repeatable_action(key)
 	elif KeyUtil.is_letter(key_event, "m"):  # lettre tapée (en AZERTY, le M n'est pas à la même place physique)
 		EventBus.minimap_requested.emit()
+	elif KeyUtil.is_letter(key_event, "c"):
+		EventBus.character_requested.emit()
+	elif key_event.unicode == 124:  # « | » (AltGr + 6 en AZERTY) : détecté par le caractère tapé
+		EventBus.posture_requested.emit()
 	elif key == KEY_I:
 		EventBus.inventory_requested.emit()
 	elif key == KEY_G:
@@ -114,11 +154,75 @@ func _unhandled_input(event: InputEvent) -> void:
 			EventBus.ground_requested.emit()
 
 
+## +1 (zoomer), -1 (dézoomer), 0 sinon. Détecté par le caractère tapé (en AZERTY, « - » est sur la touche 6) ou le pavé numérique.
+func _zoom_direction(event: InputEventKey) -> int:
+	if event.physical_keycode == KEY_KP_ADD or event.unicode == 43 or event.unicode == 61:
+		return 1
+	if event.physical_keycode == KEY_KP_SUBTRACT or event.unicode == 45:
+		return -1
+	return 0
+
+
+## Le champ de vision ne change pas : en dézoomant, le brouillard (FogLayer) couvre simplement plus de cases.
+func _change_zoom(step: int) -> void:
+	var index: int = clampi(zoom_index + step, 0, ZOOM_LEVELS.size() - 1)
+	if index == zoom_index:
+		return
+	zoom_index = index
+	camera.zoom = Vector2.ONE * ZOOM_LEVELS[zoom_index]
+	world.fog.queue_redraw()
+
+
+## Double-clic gauche sur une case visible : déplacement automatique (une vraie action par pas).
+func _on_mouse_button(button: InputEventMouseButton) -> void:
+	if input_blocked or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT or not button.double_click:
+		return
+	_start_travel(Vector2i((world.get_global_mouse_position() / World.TILE_SIZE).floor()))
+
+
+func _start_travel(cell: Vector2i) -> void:
+	if cell == grid_pos:
+		return
+	if not world.is_visible_cell(cell):
+		EventBus.message_logged.emit("Vous ne voyez pas cette case.")
+		return
+	if not world.is_walkable(cell) or world.get_monster_at(cell) != null:
+		EventBus.message_logged.emit("Impossible de s'y rendre.")
+		return
+	var path: Array[Vector2i] = AutoPath.find(world, grid_pos, cell, TRAVEL_MAX_RADIUS)
+	if path.size() < 2:
+		EventBus.message_logged.emit("Aucun chemin connu vers cette case.")
+		return
+	_stop_repeat()
+	path.remove_at(0)
+	_travel_path = path
+	_travel_timer = 0.0
+
+
+func _travel_step() -> void:
+	var next: Vector2i = _travel_path[0]
+	var step: Vector2i = next - grid_pos
+	if absi(step.x) + absi(step.y) != 1 or not world.is_walkable(next) or world.get_monster_at(next) != null:
+		_travel_path.clear()  # chemin bloqué
+		return
+	_travel_path.remove_at(0)
+	_try_move(step)
+
+
 ## Touche maintenue : chaque répétition est une action complète (temps, stamina, monstres...).
 func _process(delta: float) -> void:
 	if input_blocked:
 		_held_key = KEY_NONE
-	if dead or _held_key == KEY_NONE:
+		_travel_path.clear()
+	if dead:
+		return
+	if not _travel_path.is_empty():
+		_travel_timer -= delta
+		if _travel_timer <= 0.0:
+			_travel_timer = REPEAT_INTERVAL
+			_travel_step()
+		return
+	if _held_key == KEY_NONE:
 		return
 	if not Input.is_physical_key_pressed(_held_key):
 		_held_key = KEY_NONE
@@ -126,13 +230,14 @@ func _process(delta: float) -> void:
 	_repeat_timer -= delta
 	if _repeat_timer <= 0.0:
 		_repeat_timer = REPEAT_INTERVAL
-		_do_repeatable_action(_held_key)
+		_repeat_action(_held_key)
 
 
-## Arrête la répétition (il faut relâcher puis réappuyer pour reprendre).
+## Arrête la répétition et tout déplacement automatique (il faut relâcher puis réappuyer pour reprendre).
 ## Déclenché quand un ennemi apparaît ou quand on est blessé.
 func _stop_repeat() -> void:
 	_held_key = KEY_NONE
+	_travel_path.clear()
 
 
 func _do_repeatable_action(key: Key) -> void:
@@ -144,6 +249,62 @@ func _do_repeatable_action(key: Key) -> void:
 			_try_move(dir)
 	else:
 		_wait()
+
+
+## Répétition d'une touche maintenue : tout droit tant que c'est libre, sinon un chemin qui contourne les obstacles connus.
+func _repeat_action(key: Key) -> void:
+	if not MOVE_KEYS.has(key):
+		_wait()
+		return
+	var dir: Vector2i = MOVE_KEYS[key]
+	if _ray_clear(dir):
+		_do_repeatable_action(key)
+		return
+	var target: Vector2i = _lookahead_target(dir)
+	if target != grid_pos:
+		var path: Array[Vector2i] = AutoPath.find(world, grid_pos, target, AUTO_LOOKAHEAD + 6, dir)
+		if path.size() >= 2 and world.get_monster_at(path[1]) == null:
+			_try_move(path[1] - grid_pos)
+			return
+	_stop_repeat()  # rien de praticable devant
+
+
+func _ray_clear(dir: Vector2i) -> bool:
+	for k in range(1, AUTO_CLEAR_RANGE + 1):
+		if not world.is_known_walkable(grid_pos + dir * k):
+			return false
+	return true
+
+
+## Case connue et praticable la plus lointaine dans la direction (jusqu'à AUTO_LOOKAHEAD), grid_pos s'il n'y en a aucune.
+func _lookahead_target(dir: Vector2i) -> Vector2i:
+	for k in range(AUTO_LOOKAHEAD, 0, -1):
+		var cell: Vector2i = grid_pos + dir * k
+		if world.is_known_walkable(cell):
+			return cell
+	return grid_pos
+
+
+# --- Posture ---
+
+func posture_name() -> String:
+	return POSTURE_NAMES[posture]
+
+
+## Facteur appliqué à la portée de détection des monstres (sprint : ils entendent de plus loin ; accroupi : de moins loin).
+func get_detect_factor() -> float:
+	return POSTURE_DETECT_FACTOR[posture]
+
+
+## Changer de posture est gratuit (aucun temps), mais interrompt un déplacement automatique.
+func set_posture(new_posture: int) -> void:
+	new_posture = clampi(new_posture, 0, POSTURE_NAMES.size() - 1)
+	if new_posture == posture:
+		return
+	posture = new_posture
+	_stop_repeat()
+	EventBus.posture_changed.emit(posture_name())
+	EventBus.message_logged.emit("Posture : %s." % posture_name())
 
 
 ## Pénalité de temps actuelle (0.0, 0.1, 0.2 ou 0.3).
@@ -167,10 +328,10 @@ func get_load_ratio() -> float:
 	return get_carry_weight() / maxf(get_carry_capacity(), 0.001)
 
 
-## Variation de stamina pour UN déplacement, selon la charge.
+## Variation de stamina pour UN déplacement, selon la charge et la posture.
 ## Positive = gain, négative = perte.
 func get_move_stamina_delta() -> float:
-	return _load_stamina_delta(MOVE_REGEN_MAX)
+	return _load_stamina_delta(MOVE_REGEN_MAX) + POSTURE_MOVE_STAMINA[posture]
 
 
 ## Idem pour UNE attente : mêmes contraintes de charge, récupération un peu meilleure.
@@ -227,7 +388,7 @@ func _try_move(dir: Vector2i) -> void:
 	grid_pos = target
 	position = Vector2(grid_pos * World.TILE_SIZE)
 	world.update_fov()  # avant que le temps passe : les monstres réagissent à ce que tu viens de révéler
-	_perform_action("Déplacement", MOVE_BASE_COST, get_move_stamina_delta())
+	_perform_action("Déplacement", MOVE_BASE_COST * POSTURE_TIME_FACTOR[posture], get_move_stamina_delta())
 
 
 func _attack(monster: Monster) -> void:

@@ -1,1219 +1,1278 @@
 {
- "tile_size": 32,
+ "tile_size": 128,
  "sprites": {
   "2x4": {
-   "file": "sprites/2x4.png",
+   "file": "sprites/2x/2x4.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "backpack": {
-   "file": "sprites/backpack.png",
+   "file": "sprites/2x/backpack.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "backpack_m": {
-   "file": "sprites/backpack_m.png",
+   "file": "sprites/2x/backpack_m.png",
    "offset": [
-    0,
-    -8
+	0,
+	-128
    ]
   },
   "backpack_tactical_large_m": {
-   "file": "sprites/backpack_tactical_large_m.png",
+   "file": "sprites/2x/backpack_tactical_large_m.png",
    "offset": [
-    0,
-    -8
+	0,
+	-128
    ]
   },
   "bag_plastic": {
-   "file": "sprites/bag_plastic.png",
+   "file": "sprites/2x/bag_plastic.png",
    "offset": [
-    6,
-    0
+	96,
+	0
    ]
   },
   "beans_cooked": {
-   "file": "sprites/beans_cooked.png",
+   "file": "sprites/2x/beans_cooked.png",
    "offset": [
-    6,
-    0
+	96,
+	0
    ]
   },
   "bottle_plastic": {
-   "file": "sprites/bottle_plastic.png",
+   "file": "sprites/2x/bottle_plastic.png",
    "offset": [
-    6,
-    0
+	96,
+	0
    ]
   },
   "f_bathtub_unconnected": {
-   "file": "sprites/f_bathtub_unconnected.png",
+   "file": "sprites/2x/f_bathtub_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_bed_unconnected": {
-   "file": "sprites/f_bed_unconnected.png",
+   "file": "sprites/2x/f_bed_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_bookcase": {
-   "file": "sprites/f_bookcase.png",
+   "file": "sprites/2x/f_bookcase.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "f_chair_faceE": {
-   "file": "sprites/f_chair_faceE.png",
+   "file": "sprites/2x/f_chair_faceE.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_chair_faceN": {
-   "file": "sprites/f_chair_faceN.png",
+   "file": "sprites/2x/f_chair_faceN.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_chair_faceS": {
-   "file": "sprites/f_chair_faceS.png",
+   "file": "sprites/2x/f_chair_faceS.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_chair_faceW": {
-   "file": "sprites/f_chair_faceW.png",
+   "file": "sprites/2x/f_chair_faceW.png",
    "offset": [
-    0,
-    0
+	0,
+	0
+   ]
+  },
+  "f_console_unconnected": {
+   "file": "sprites/2x/f_console_unconnected.png",
+   "offset": [
+	0,
+	-128
    ]
   },
   "f_counter_unconnected": {
-   "file": "sprites/f_counter_unconnected.png",
+   "file": "sprites/2x/f_counter_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_dresser_faceE": {
-   "file": "sprites/f_dresser_faceE.png",
+   "file": "sprites/2x/f_dresser_faceE.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "f_dresser_faceN": {
-   "file": "sprites/f_dresser_faceN.png",
+   "file": "sprites/2x/f_dresser_faceN.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "f_dresser_faceS": {
-   "file": "sprites/f_dresser_faceS.png",
+   "file": "sprites/2x/f_dresser_faceS.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "f_dresser_faceW": {
-   "file": "sprites/f_dresser_faceW.png",
+   "file": "sprites/2x/f_dresser_faceW.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "f_fridge_faceE": {
-   "file": "sprites/f_fridge_faceE.png",
+   "file": "sprites/2x/f_fridge_faceE.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "f_fridge_faceN": {
-   "file": "sprites/f_fridge_faceN.png",
+   "file": "sprites/2x/f_fridge_faceN.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "f_fridge_faceS": {
-   "file": "sprites/f_fridge_faceS.png",
+   "file": "sprites/2x/f_fridge_faceS.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "f_fridge_faceW": {
-   "file": "sprites/f_fridge_faceW.png",
+   "file": "sprites/2x/f_fridge_faceW.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
+   ]
+  },
+  "f_machinery_light": {
+   "file": "sprites/2x/f_machinery_light.png",
+   "offset": [
+	0,
+	-128
+   ]
+  },
+  "f_machinery_light-2": {
+   "file": "sprites/2x/f_machinery_light-2.png",
+   "offset": [
+	0,
+	-128
    ]
   },
   "f_rack": {
-   "file": "sprites/f_rack.png",
+   "file": "sprites/2x/f_rack.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_sink_unconnected": {
-   "file": "sprites/f_sink_unconnected.png",
+   "file": "sprites/2x/f_sink_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_sofa_unconnected": {
-   "file": "sprites/f_sofa_unconnected.png",
+   "file": "sprites/2x/f_sofa_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_table_unconnected": {
-   "file": "sprites/f_table_unconnected.png",
+   "file": "sprites/2x/f_table_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "f_toilet": {
-   "file": "sprites/f_toilet.png",
+   "file": "sprites/2x/f_toilet.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "hat_ball_m": {
-   "file": "sprites/hat_ball_m.png",
+   "file": "sprites/2x/hat_ball_m.png",
    "offset": [
-    0,
-    -8
+	0,
+	-128
    ]
   },
   "heavy_stick": {
-   "file": "sprites/heavy_stick.png",
+   "file": "sprites/2x/heavy_stick.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "jacket_light_m": {
-   "file": "sprites/jacket_light_m.png",
+   "file": "sprites/2x/jacket_light_m.png",
    "offset": [
-    0,
-    -8
+	0,
+	-128
    ]
   },
   "jeans_m": {
-   "file": "sprites/jeans_m.png",
+   "file": "sprites/2x/jeans_m.png",
    "offset": [
-    0,
-    -8
+	0,
+	-128
    ]
   },
   "knife_butter": {
-   "file": "sprites/knife_butter.png",
+   "file": "sprites/2x/knife_butter.png",
    "offset": [
-    6,
-    0
+	96,
+	0
    ]
   },
   "mon_zombie_1": {
-   "file": "sprites/mon_zombie_1.png",
+   "file": "sprites/2x/mon_zombie_1.png",
    "offset": [
-    0,
-    -16
+	0,
+	-64
    ]
   },
   "mon_zombie_2": {
-   "file": "sprites/mon_zombie_2.png",
+   "file": "sprites/2x/mon_zombie_2.png",
    "offset": [
-    0,
-    -16
+	0,
+	-64
    ]
   },
   "mon_zombie_3": {
-   "file": "sprites/mon_zombie_3.png",
+   "file": "sprites/2x/mon_zombie_3.png",
    "offset": [
-    0,
-    -16
+	0,
+	-64
    ]
   },
   "mon_zombie_4": {
-   "file": "sprites/mon_zombie_4.png",
+   "file": "sprites/2x/mon_zombie_4.png",
    "offset": [
-    0,
-    -16
+	0,
+	-64
    ]
   },
   "mon_zombie_5": {
-   "file": "sprites/mon_zombie_5.png",
+   "file": "sprites/2x/mon_zombie_5.png",
    "offset": [
-    0,
-    -16
+	0,
+	-64
    ]
   },
   "oven_faceE": {
-   "file": "sprites/oven_faceE.png",
+   "file": "sprites/2x/oven_faceE.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "oven_faceN": {
-   "file": "sprites/oven_faceN.png",
+   "file": "sprites/2x/oven_faceN.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "oven_faceS": {
-   "file": "sprites/oven_faceS.png",
+   "file": "sprites/2x/oven_faceS.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "oven_faceW": {
-   "file": "sprites/oven_faceW.png",
+   "file": "sprites/2x/oven_faceW.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "pants_cargo_m": {
-   "file": "sprites/pants_cargo_m.png",
+   "file": "sprites/2x/pants_cargo_m.png",
    "offset": [
-    0,
-    -8
+	0,
+	-128
    ]
   },
   "pipe": {
-   "file": "sprites/pipe.png",
+   "file": "sprites/2x/pipe.png",
    "offset": [
-    6,
-    0
+	96,
+	0
    ]
   },
   "rope_6": {
-   "file": "sprites/rope_6.png",
+   "file": "sprites/2x/rope_6.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
-  "shadow_32x48_normal": {
-   "file": "sprites/shadow_32x48_normal.png",
+  "shadow_128x48_normal": {
+   "file": "sprites/2x/shadow_128x48_normal.png",
    "offset": [
-    0,
-    -16
+	0,
+	-64
    ]
   },
   "sheet_metal_small": {
-   "file": "sprites/sheet_metal_small.png",
+   "file": "sprites/2x/sheet_metal_small.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "skin_brown_m": {
-   "file": "sprites/skin_brown_m.png",
+   "file": "sprites/2x/skin_brown_m.png",
    "offset": [
-    0,
-    -16
+	0,
+	-64
    ]
   },
   "sneakers_m": {
-   "file": "sprites/sneakers_m.png",
+   "file": "sprites/2x/sneakers_m.png",
    "offset": [
-    0,
-    -8
+	0,
+	-128
    ]
   },
   "t_bridge_unconnected": {
-   "file": "sprites/t_bridge_unconnected.png",
+   "file": "sprites/2x/t_bridge_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_chainfence_unconnected": {
-   "file": "sprites/t_chainfence_unconnected.png",
+   "file": "sprites/2x/t_chainfence_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_dirt_unconnected": {
-   "file": "sprites/t_dirt_unconnected.png",
+   "file": "sprites/2x/t_dirt_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_dirtmound": {
-   "file": "sprites/t_dirtmound.png",
+   "file": "sprites/2x/t_dirtmound.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_door_c": {
-   "file": "sprites/t_door_c.png",
+   "file": "sprites/2x/t_door_c.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_door_frame": {
-   "file": "sprites/t_door_frame.png",
+   "file": "sprites/2x/t_door_frame.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_floor_unconnected": {
-   "file": "sprites/t_floor_unconnected.png",
+   "file": "sprites/2x/t_floor_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_gas_pump": {
-   "file": "sprites/t_gas_pump.png",
+   "file": "sprites/2x/t_gas_pump.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "t_grass": {
-   "file": "sprites/t_grass.png",
+   "file": "sprites/2x/t_grass.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_grass_center": {
-   "file": "sprites/t_grass_center.png",
+   "file": "sprites/2x/t_grass_center.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_grass_center2": {
-   "file": "sprites/t_grass_center2.png",
+   "file": "sprites/2x/t_grass_center2.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_grass_center3": {
-   "file": "sprites/t_grass_center3.png",
+   "file": "sprites/2x/t_grass_center3.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_grass_center4": {
-   "file": "sprites/t_grass_center4.png",
+   "file": "sprites/2x/t_grass_center4.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_grass_giant": {
-   "file": "sprites/t_grass_giant.png",
+   "file": "sprites/2x/t_grass_giant.png",
    "offset": [
-    -32,
-    -64
+	-128,
+	-64
    ]
   },
   "t_mud": {
-   "file": "sprites/t_mud.png",
+   "file": "sprites/2x/t_mud.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_pavement": {
-   "file": "sprites/t_pavement.png",
+   "file": "sprites/2x/t_pavement.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_pavement_tall": {
-   "file": "sprites/t_pavement_tall.png",
+   "file": "sprites/2x/t_pavement_tall.png",
    "offset": [
-    0,
-    -32
+	0,
+	-128
    ]
   },
   "t_pavement_y": {
-   "file": "sprites/t_pavement_y.png",
+   "file": "sprites/2x/t_pavement_y.png",
    "offset": [
-    0,
-    0
+	0,
+	0
+   ]
+  },
+  "t_rock_floor_unconnected": {
+   "file": "sprites/2x/t_rock_floor_unconnected.png",
+   "offset": [
+	0,
+	0
    ]
   },
   "t_sand_unconnected": {
-   "file": "sprites/t_sand_unconnected.png",
+   "file": "sprites/2x/t_sand_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_sidewalk_unconnected": {
-   "file": "sprites/t_sidewalk_unconnected.png",
+   "file": "sprites/2x/t_sidewalk_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_tree_season_spring": {
-   "file": "sprites/t_tree_season_spring.png",
+   "file": "sprites/2x/t_tree_season_spring.png",
    "offset": [
-    -32,
-    -64
+	-128,
+	-64
    ]
   },
   "t_wall_corner_ne": {
-   "file": "sprites/t_wall_corner_ne.png",
+   "file": "sprites/2x/t_wall_corner_ne.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_corner_nw": {
-   "file": "sprites/t_wall_corner_nw.png",
+   "file": "sprites/2x/t_wall_corner_nw.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_corner_se": {
-   "file": "sprites/t_wall_corner_se.png",
+   "file": "sprites/2x/t_wall_corner_se.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_corner_sw": {
-   "file": "sprites/t_wall_corner_sw.png",
+   "file": "sprites/2x/t_wall_corner_sw.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_edge_ew": {
-   "file": "sprites/t_wall_edge_ew.png",
+   "file": "sprites/2x/t_wall_edge_ew.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_edge_ns": {
-   "file": "sprites/t_wall_edge_ns.png",
+   "file": "sprites/2x/t_wall_edge_ns.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_end_piece_e": {
-   "file": "sprites/t_wall_end_piece_e.png",
+   "file": "sprites/2x/t_wall_end_piece_e.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_end_piece_n": {
-   "file": "sprites/t_wall_end_piece_n.png",
+   "file": "sprites/2x/t_wall_end_piece_n.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_end_piece_s": {
-   "file": "sprites/t_wall_end_piece_s.png",
+   "file": "sprites/2x/t_wall_end_piece_s.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_end_piece_w": {
-   "file": "sprites/t_wall_end_piece_w.png",
+   "file": "sprites/2x/t_wall_end_piece_w.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_t_connection_e": {
-   "file": "sprites/t_wall_t_connection_e.png",
+   "file": "sprites/2x/t_wall_t_connection_e.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_t_connection_n": {
-   "file": "sprites/t_wall_t_connection_n.png",
+   "file": "sprites/2x/t_wall_t_connection_n.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_t_connection_s": {
-   "file": "sprites/t_wall_t_connection_s.png",
+   "file": "sprites/2x/t_wall_t_connection_s.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_t_connection_w": {
-   "file": "sprites/t_wall_t_connection_w.png",
+   "file": "sprites/2x/t_wall_t_connection_w.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_wall_unconnected": {
-   "file": "sprites/t_wall_unconnected.png",
+   "file": "sprites/2x/t_wall_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_water_dp_unconnected": {
-   "file": "sprites/t_water_dp_unconnected.png",
+   "file": "sprites/2x/t_water_dp_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_water_sh_unconnected": {
-   "file": "sprites/t_water_sh_unconnected.png",
+   "file": "sprites/2x/t_water_sh_unconnected.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "t_window": {
-   "file": "sprites/t_window.png",
+   "file": "sprites/2x/t_window.png",
    "offset": [
-    0,
-    0
+	0,
+	0
    ]
   },
   "undershirt_m": {
-   "file": "sprites/undershirt_m.png",
+   "file": "sprites/2x/undershirt_m.png",
    "offset": [
-    0,
-    -8
+	0,
+	-128
    ]
   }
  },
  "tiles": {
   "t_tree": {
    "fg": [
-    {
-     "sprite": "t_tree_season_spring",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_tree_season_spring",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "t_grass_giant",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_grass_giant",
+	 "weight": 1
+	}
    ]
   },
   "overlay_male_worn_backpack": {
    "fg": [
-    {
-     "sprite": "backpack_m",
-     "weight": 1
-    }
+	{
+	 "sprite": "backpack_m",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "overlay_male_worn_backpack_tactical_large": {
    "fg": [
-    {
-     "sprite": "backpack_tactical_large_m",
-     "weight": 1
-    }
+	{
+	 "sprite": "backpack_tactical_large_m",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "overlay_male_worn_hat_ball": {
    "fg": [
-    {
-     "sprite": "hat_ball_m",
-     "weight": 1
-    }
+	{
+	 "sprite": "hat_ball_m",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "overlay_male_worn_jacket_light": {
    "fg": [
-    {
-     "sprite": "jacket_light_m",
-     "weight": 1
-    }
+	{
+	 "sprite": "jacket_light_m",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "overlay_male_worn_sneakers": {
    "fg": [
-    {
-     "sprite": "sneakers_m",
-     "weight": 1
-    }
+	{
+	 "sprite": "sneakers_m",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "overlay_male_worn_jeans": {
    "fg": [
-    {
-     "sprite": "jeans_m",
-     "weight": 1
-    }
+	{
+	 "sprite": "jeans_m",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "overlay_male_worn_pants_cargo": {
    "fg": [
-    {
-     "sprite": "pants_cargo_m",
-     "weight": 1
-    }
+	{
+	 "sprite": "pants_cargo_m",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "overlay_male_worn_undershirt": {
    "fg": [
-    {
-     "sprite": "undershirt_m",
-     "weight": 1
-    }
+	{
+	 "sprite": "undershirt_m",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "player_male": {
    "fg": [
-    {
-     "sprite": "skin_brown_m",
-     "weight": 1
-    }
+	{
+	 "sprite": "skin_brown_m",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "shadow_32x48_normal",
-     "weight": 1
-    }
+	{
+	 "sprite": "shadow_128x48_normal",
+	 "weight": 1
+	}
    ]
   },
   "mon_zombie": {
    "fg": [
-    {
-     "sprite": "mon_zombie_1",
-     "weight": 100
-    },
-    {
-     "sprite": "mon_zombie_2",
-     "weight": 150
-    },
-    {
-     "sprite": "mon_zombie_3",
-     "weight": 100
-    },
-    {
-     "sprite": "mon_zombie_4",
-     "weight": 100
-    },
-    {
-     "sprite": "mon_zombie_5",
-     "weight": 150
-    }
+	{
+	 "sprite": "mon_zombie_1",
+	 "weight": 100
+	},
+	{
+	 "sprite": "mon_zombie_2",
+	 "weight": 150
+	},
+	{
+	 "sprite": "mon_zombie_3",
+	 "weight": 100
+	},
+	{
+	 "sprite": "mon_zombie_4",
+	 "weight": 100
+	},
+	{
+	 "sprite": "mon_zombie_5",
+	 "weight": 150
+	}
    ],
    "bg": [
-    {
-     "sprite": "shadow_32x48_normal",
-     "weight": 1
-    }
+	{
+	 "sprite": "shadow_128x48_normal",
+	 "weight": 1
+	}
    ]
   },
   "f_bathtub": {
    "fg": [
-    {
-     "sprite": "f_bathtub_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_bathtub_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_bed": {
    "fg": [
-    {
-     "sprite": "f_bed_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_bed_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_chair": {
    "fg": [
-    {
-     "sprite": "f_chair_faceS",
-     "weight": 1
-    },
-    {
-     "sprite": "f_chair_faceW",
-     "weight": 1
-    },
-    {
-     "sprite": "f_chair_faceN",
-     "weight": 1
-    },
-    {
-     "sprite": "f_chair_faceE",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_chair_faceS",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_chair_faceW",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_chair_faceN",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_chair_faceE",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_counter": {
    "fg": [
-    {
-     "sprite": "f_counter_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_counter_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_rack": {
    "fg": [
-    {
-     "sprite": "f_rack",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_rack",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_sofa": {
    "fg": [
-    {
-     "sprite": "f_sofa_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_sofa_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_table": {
    "fg": [
-    {
-     "sprite": "f_table_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_table_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_toilet": {
    "fg": [
-    {
-     "sprite": "f_toilet",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_toilet",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "2x4": {
    "fg": [
-    {
-     "sprite": "2x4",
-     "weight": 1
-    }
+	{
+	 "sprite": "2x4",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "backpack": {
    "fg": [
-    {
-     "sprite": "backpack",
-     "weight": 1
-    }
+	{
+	 "sprite": "backpack",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "sheet_metal_small": {
    "fg": [
-    {
-     "sprite": "sheet_metal_small",
-     "weight": 1
-    }
+	{
+	 "sprite": "sheet_metal_small",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "stick": {
    "fg": [
-    {
-     "sprite": "heavy_stick",
-     "weight": 1
-    }
+	{
+	 "sprite": "heavy_stick",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_bridge": {
    "fg": [
-    {
-     "sprite": "t_bridge_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_bridge_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_chainfence": {
    "fg": [
-    {
-     "sprite": "t_chainfence_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_chainfence_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "t_pavement",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_pavement",
+	 "weight": 1
+	}
    ]
   },
   "t_dirt": {
    "fg": [
-    {
-     "sprite": "t_dirt_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_dirt_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_door_c": {
    "fg": [
-    {
-     "sprite": "t_door_c",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_door_c",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "t_door_frame",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_door_frame",
+	 "weight": 1
+	}
    ]
   },
   "t_floor": {
    "fg": [
-    {
-     "sprite": "t_floor_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_floor_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_grass": {
    "fg": [
-    {
-     "sprite": "t_grass_center",
-     "weight": 1
-    },
-    {
-     "sprite": "t_grass_center2",
-     "weight": 1
-    },
-    {
-     "sprite": "t_grass_center3",
-     "weight": 1
-    },
-    {
-     "sprite": "t_grass_center4",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_grass_center",
+	 "weight": 1
+	},
+	{
+	 "sprite": "t_grass_center2",
+	 "weight": 1
+	},
+	{
+	 "sprite": "t_grass_center3",
+	 "weight": 1
+	},
+	{
+	 "sprite": "t_grass_center4",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_mud": {
    "fg": [
-    {
-     "sprite": "t_mud",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_mud",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_pavement": {
    "fg": [
-    {
-     "sprite": "t_pavement",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_pavement",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_pavement_y": {
    "fg": [
-    {
-     "sprite": "t_pavement_y",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_pavement_y",
+	 "weight": 1
+	}
+   ],
+   "bg": []
+  },
+  "t_rock_floor": {
+   "fg": [
+	{
+	 "sprite": "t_rock_floor_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_sand": {
    "fg": [
-    {
-     "sprite": "t_sand_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_sand_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "t_grass",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_grass",
+	 "weight": 1
+	}
    ]
   },
   "t_sidewalk": {
    "fg": [
-    {
-     "sprite": "t_sidewalk_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_sidewalk_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_water_dp": {
    "fg": [
-    {
-     "sprite": "t_water_dp_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_water_dp_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "t_grass",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_grass",
+	 "weight": 1
+	}
    ]
   },
   "t_water_sh": {
    "fg": [
-    {
-     "sprite": "t_water_sh_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_water_sh_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "t_grass",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_grass",
+	 "weight": 1
+	}
    ]
   },
   "t_swater_sh": {
    "fg": [
-    {
-     "sprite": "t_water_sh_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_water_sh_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "t_grass",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_grass",
+	 "weight": 1
+	}
    ]
   },
   "t_window": {
    "fg": [
-    {
-     "sprite": "t_window",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_window",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "bag_plastic": {
    "fg": [
-    {
-     "sprite": "bag_plastic",
-     "weight": 1
-    }
+	{
+	 "sprite": "bag_plastic",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "bottle_plastic": {
    "fg": [
-    {
-     "sprite": "bottle_plastic",
-     "weight": 1
-    }
+	{
+	 "sprite": "bottle_plastic",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "pipe": {
    "fg": [
-    {
-     "sprite": "pipe",
-     "weight": 1
-    }
+	{
+	 "sprite": "pipe",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "can_beans": {
    "fg": [
-    {
-     "sprite": "beans_cooked",
-     "weight": 1
-    }
+	{
+	 "sprite": "beans_cooked",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "knife_butter": {
    "fg": [
-    {
-     "sprite": "knife_butter",
-     "weight": 1
-    }
+	{
+	 "sprite": "knife_butter",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_bookcase": {
    "fg": [
-    {
-     "sprite": "f_bookcase",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_bookcase",
+	 "weight": 1
+	}
+   ],
+   "bg": []
+  },
+  "f_console": {
+   "fg": [
+	{
+	 "sprite": "f_console_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_dresser": {
    "fg": [
-    {
-     "sprite": "f_dresser_faceS",
-     "weight": 1
-    },
-    {
-     "sprite": "f_dresser_faceW",
-     "weight": 1
-    },
-    {
-     "sprite": "f_dresser_faceN",
-     "weight": 1
-    },
-    {
-     "sprite": "f_dresser_faceE",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_dresser_faceS",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_dresser_faceW",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_dresser_faceN",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_dresser_faceE",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_fridge": {
    "fg": [
-    {
-     "sprite": "f_fridge_faceS",
-     "weight": 1
-    },
-    {
-     "sprite": "f_fridge_faceE",
-     "weight": 1
-    },
-    {
-     "sprite": "f_fridge_faceN",
-     "weight": 1
-    },
-    {
-     "sprite": "f_fridge_faceW",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_fridge_faceS",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_fridge_faceE",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_fridge_faceN",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_fridge_faceW",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_gas_pump": {
    "fg": [
-    {
-     "sprite": "t_gas_pump",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_gas_pump",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "t_pavement_tall",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_pavement_tall",
+	 "weight": 1
+	}
    ]
+  },
+  "f_machinery_light": {
+   "fg": [
+	{
+	 "sprite": "f_machinery_light",
+	 "weight": 100
+	},
+	{
+	 "sprite": "f_machinery_light-2",
+	 "weight": 100
+	}
+   ],
+   "bg": []
   },
   "f_oven": {
    "fg": [
-    {
-     "sprite": "oven_faceS",
-     "weight": 1
-    },
-    {
-     "sprite": "oven_faceE",
-     "weight": 1
-    },
-    {
-     "sprite": "oven_faceN",
-     "weight": 1
-    },
-    {
-     "sprite": "oven_faceW",
-     "weight": 1
-    }
+	{
+	 "sprite": "oven_faceS",
+	 "weight": 1
+	},
+	{
+	 "sprite": "oven_faceE",
+	 "weight": 1
+	},
+	{
+	 "sprite": "oven_faceN",
+	 "weight": 1
+	},
+	{
+	 "sprite": "oven_faceW",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "f_sink": {
    "fg": [
-    {
-     "sprite": "f_sink_unconnected",
-     "weight": 1
-    }
+	{
+	 "sprite": "f_sink_unconnected",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "rope_6": {
    "fg": [
-    {
-     "sprite": "rope_6",
-     "weight": 1
-    }
+	{
+	 "sprite": "rope_6",
+	 "weight": 1
+	}
    ],
    "bg": []
   },
   "t_dirtmound": {
    "fg": [
-    {
-     "sprite": "t_dirtmound",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_dirtmound",
+	 "weight": 1
+	}
    ],
    "bg": [
-    {
-     "sprite": "t_grass",
-     "weight": 1
-    }
+	{
+	 "sprite": "t_grass",
+	 "weight": 1
+	}
    ]
   }
  }

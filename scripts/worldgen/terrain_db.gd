@@ -95,3 +95,11 @@ static func links_wall(index: int) -> bool:
 static func has_id(id: String) -> bool:
 	_ensure_loaded()
 	return _index.has(id)
+
+
+## Couleur de repli (champ "color" de terrain.json), dessinée quand la tuile n'a pas de sprite dans le pack.
+static func color_of(index: int) -> Color:
+	_ensure_loaded()
+	if index >= 0 and index < _defs.size() and _defs[index].has("color"):
+		return Color.html(String(_defs[index]["color"]))
+	return Color(0.8, 0.2, 0.8)

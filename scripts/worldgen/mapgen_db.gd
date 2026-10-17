@@ -6,7 +6,8 @@ extends RefCounted
 ## « garder le terrain naturel ») et un octet de mobilier (index FurnitureDB) par case. Les erreurs de plan sont listées par
 ## errors() et affichées au chargement : un plan invalide est ignoré, le jeu continue.
 
-const PATHS: Array[String] = ["res://data/worldgen/mapgen/houses.json", "res://data/worldgen/mapgen/places.json"]
+const PATHS: Array[String] = ["res://data/worldgen/mapgen/houses.json", "res://data/worldgen/mapgen/places.json",
+	"res://data/worldgen/mapgen/big_places.json"]
 const NATURE: int = 255
 const SIZE: int = 24
 

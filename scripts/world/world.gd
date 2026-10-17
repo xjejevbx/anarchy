@@ -14,6 +14,7 @@ extends Node2D
 ## les décalages de chaque sprite (personnages 32x48, arbres 96x96...).
 
 const TILE_SIZE: int = 32
+const ALERT_REARM_POINTS: float = 5.0    # secondes hors de vue (dans le brouillard) avant qu'un monstre puisse être signalé à nouveau ; 0 = dès qu'il sort de vue
 const VIEW_RADIUS: int = 20              # portée de vue en cases (plein jour pour l'instant)
 
 var world_seed: int = 4444                  # à fixer AVANT add_child()
@@ -144,6 +145,11 @@ func is_visible_cell(pos: Vector2i) -> bool:
 	return visible_cells.has(pos)
 
 
+## Case praticable ET connue du joueur (visible ou déjà vue) : sert aux déplacements automatiques, qui ne « devinent » pas l'inconnu.
+func is_known_walkable(pos: Vector2i) -> bool:
+	return is_walkable(pos) and (visible_cells.has(pos) or is_seen(pos))
+
+
 ## Case déjà vue au moins une fois (mémoire de la carte).
 func is_seen(pos: Vector2i) -> bool:
 	return chunks.is_seen(pos)
@@ -166,8 +172,14 @@ func _refresh_monster_visibility() -> void:
 	for m in monsters:
 		var now_visible: bool = visible_cells.has(m.grid_pos)
 		if now_visible and not m.visible:
-			EventBus.message_logged.emit("Vous apercevez %s." % m.data.display_name)
-			EventBus.hostile_spotted.emit(m)
+			# Le message n'apparaît qu'une fois par monstre ; il revient seulement si le monstre est resté hors de vue
+			# (dans le brouillard) au moins ALERT_REARM_POINTS : un monstre qui clignote en bord de vue ne spamme pas.
+			if not m.spotted or GameClock.elapsed_points - m.hidden_since >= ALERT_REARM_POINTS:
+				EventBus.message_logged.emit("Vous apercevez %s." % m.data.display_name)
+				m.spotted = true
+			EventBus.hostile_spotted.emit(m)  # arrête toujours la marche automatique
+		elif not now_visible and m.visible:
+			m.hidden_since = GameClock.elapsed_points
 		m.visible = now_visible
 
 
@@ -197,6 +209,7 @@ func spawn_monster(data: MonsterData, near: Vector2i) -> Monster:
 	m.hp = data.max_hp
 	m.grid_pos = find_free_cell_near(near)
 	m.next_action_time = GameClock.elapsed_points
+	m.hidden_since = GameClock.elapsed_points
 	m.visible = false  # update_fov() décidera
 	entities.add_child(m)
 	monsters.append(m)

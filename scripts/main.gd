@@ -30,6 +30,14 @@ func _ready() -> void:
 	minimap.seed_text = WORLD_SEED_TEXT
 	add_child(minimap)
 
+	var character_ui := CharacterUI.new()
+	character_ui.player = player
+	add_child(character_ui)
+
+	var posture_ui := PostureUI.new()
+	posture_ui.player = player
+	add_child(posture_ui)
+
 	var hud := CanvasLayer.new()
 	hud.set_script(load("res://scripts/ui/hud.gd"))
 	add_child(hud)

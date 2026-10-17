@@ -4,24 +4,55 @@ extends Node2D
 ##   case visible              -> rien
 ##   case déjà vue (mémoire)   -> assombrie
 ##   case jamais vue / chunk non chargé -> noire
-## Le monde est infini : on ne dessine que les cases proches du joueur (au-delà, rien n'est affichable à l'écran).
+## Le monde est infini : on ne dessine que les cases affichables à l'écran, autour du joueur. Cette zone dépend de la taille de
+## la fenêtre ET du zoom de la caméra : en dézoomant, le brouillard reste identique (rien de plus n'est visible), il couvre juste
+## plus de cases. Les cases d'une même rangée et de même teinte sont fusionnées en un seul rectangle.
 
-const DRAW_RADIUS: int = 40  # en cases autour du joueur (doit dépasser la moitié de la fenêtre, en cases)
+const MARGIN_CELLS: int = 3        # cases dessinées en plus du bord de l'écran
+const MAX_HALF_CELLS: int = 200    # garde-fou (très grand écran, zoom minimal)
+
+const NONE: Color = Color(0, 0, 0, 0)
+const REMEMBERED: Color = Color(0, 0, 0, 0.6)
 
 var world: World
+
+
+func _ready() -> void:
+	get_viewport().size_changed.connect(queue_redraw)
+
+
+## Demi-taille de la zone affichée, en cases (x, y), selon la fenêtre et le zoom de la caméra.
+func _half_extent() -> Vector2i:
+	var zoom: float = 1.0
+	if world.player != null and world.player.camera != null:
+		zoom = maxf(world.player.camera.zoom.x, 0.05)
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var cells: float = World.TILE_SIZE * zoom
+	return Vector2i(
+		mini(ceili(size.x / (2.0 * cells)) + MARGIN_CELLS, MAX_HALF_CELLS),
+		mini(ceili(size.y / (2.0 * cells)) + MARGIN_CELLS, MAX_HALF_CELLS))
+
+
+func _color_at(pos: Vector2i) -> Color:
+	if world.visible_cells.has(pos):
+		return NONE
+	return REMEMBERED if world.chunks.is_seen(pos) else Color.BLACK
 
 
 func _draw() -> void:
 	if world == null or world.player == null:
 		return
 	var center: Vector2i = world.player.grid_pos
-	var cell_size := Vector2(World.TILE_SIZE, World.TILE_SIZE)
-	var remembered := Color(0, 0, 0, 0.6)
-	var chunks: ChunkManager = world.chunks
-	for y in range(center.y - DRAW_RADIUS, center.y + DRAW_RADIUS + 1):
-		for x in range(center.x - DRAW_RADIUS, center.x + DRAW_RADIUS + 1):
-			var pos := Vector2i(x, y)
-			if world.visible_cells.has(pos):
-				continue
-			var color: Color = remembered if chunks.is_seen(pos) else Color.BLACK
-			draw_rect(Rect2(Vector2(pos * World.TILE_SIZE), cell_size), color)
+	var half: Vector2i = _half_extent()
+	var left: int = center.x - half.x
+	var right: int = center.x + half.x
+	for y in range(center.y - half.y, center.y + half.y + 1):
+		var run_start: int = left
+		var run_color: Color = NONE
+		for x in range(left, right + 2):   # une case de plus : vide la dernière suite de la rangée
+			var color: Color = _color_at(Vector2i(x, y)) if x <= right else NONE
+			if color != run_color:
+				if run_color.a > 0.0:
+					draw_rect(Rect2(Vector2(run_start, y) * World.TILE_SIZE, Vector2(x - run_start, 1) * World.TILE_SIZE), run_color)
+				run_start = x
+				run_color = color

@@ -1,5 +1,5 @@
 {
- "_doc": "Lieux speciaux (jalon 4). attempts = tentatives de placement par lieu et par region. Pour chaque lieu : priority (le plus grand est place en premier), chance = probabilite qu'une region en tente un, max_per_region = nombre maximal par region, biomes = natures de case autorisees sous TOUTE l'empreinte (ids de biomes.json), near_road = une route doit longer la facade, min_town_distance / max_town_distance = distance (en cellules) entre l'empreinte et la ville la plus proche (-1 = pas de limite), cells = empreinte : offset [x, y] de chaque cellule (facade au sud, tournee vers la route) et plan (mapgen/places.json). Une empreinte ne franchit jamais une frontiere de region. Chaque plan contient son petit chemin (terre ou parking) qui relie la porte au bord de la cellule.",
+ "_doc": "Lieux speciaux (jalon 4). attempts = tentatives de placement par lieu et par region. Pour chaque lieu : priority (le plus grand est place en premier), chance = probabilite qu'une region en tente un, max_per_region = nombre maximal par region, biomes = natures de case autorisees sous TOUTE l'empreinte (ids de biomes.json), near_road = une route doit longer la facade, min_town_distance / max_town_distance = distance (en cellules) entre l'empreinte et la ville la plus proche (-1 = pas de limite), cells = empreinte : offset [x, y] de chaque cellule (facade au sud, tournee vers la route) et plan (mapgen/places.json). Une empreinte ne franchit jamais une frontiere de region. Chaque plan contient son petit chemin (terre ou parking) qui relie la porte au bord de la cellule. common = false : lieu rare (le test n'exige pas d'en trouver un par fenetre de 7 x 7 regions) ; defaut true.",
  "attempts": 40,
  "places": {
   "farm": {"name": "Ferme", "priority": 70, "chance": 0.35, "biomes": ["plain", "forest"], "near_road": true,
@@ -12,6 +12,45 @@
    "cells": [{"offset": [0, 0], "mapgen": "motel_office"}, {"offset": [1, 0], "mapgen": "motel_wing"}]},
   "gas_station": {"name": "Station-service", "priority": 50, "chance": 0.4, "biomes": ["plain", "forest"], "near_road": true,
    "min_town_distance": 1, "max_town_distance": 10, "max_per_region": 1,
-   "cells": [{"offset": [0, 0], "mapgen": "gas_station"}]}
+   "cells": [{"offset": [0, 0], "mapgen": "gas_station"}]},
+  "nuclear_plant": {"name": "Centrale nucléaire", "priority": 90, "chance": 0.08, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 6, "max_town_distance": 60, "max_per_region": 1,
+   "cells": [
+    {"offset": [0, 0], "mapgen": "npp_turbine"}, {"offset": [1, 0], "mapgen": "npp_transformers"}, {"offset": [2, 0], "mapgen": "npp_storage"},
+    {"offset": [0, 1], "mapgen": "npp_yard"}, {"offset": [1, 1], "mapgen": "npp_reactor"}, {"offset": [2, 1], "mapgen": "npp_control"},
+    {"offset": [0, 2], "mapgen": "npp_guard"}, {"offset": [1, 2], "mapgen": "npp_gate"}, {"offset": [2, 2], "mapgen": "npp_parking"}]},
+  "ranch": {"name": "Ranch", "priority": 68, "chance": 0.2, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 4, "max_town_distance": 60, "max_per_region": 1,
+   "cells": [
+    {"offset": [0, 0], "mapgen": "pasture"}, {"offset": [1, 0], "mapgen": "pasture"},
+    {"offset": [0, 1], "mapgen": "farmhouse"}, {"offset": [1, 1], "mapgen": "stable"}]},
+  "factory": {"name": "Usine", "priority": 62, "chance": 0.12, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 2, "max_town_distance": 16, "max_per_region": 1,
+   "cells": [
+    {"offset": [0, 0], "mapgen": "factory_hall"}, {"offset": [1, 0], "mapgen": "factory_hall"},
+    {"offset": [0, 1], "mapgen": "factory_office"}, {"offset": [1, 1], "mapgen": "factory_yard"}]},
+  "sewage_plant": {"name": "Station d'épuration", "priority": 58, "chance": 0.1, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 1, "max_town_distance": 14, "max_per_region": 1,
+   "cells": [
+    {"offset": [0, 0], "mapgen": "sewage_basin"}, {"offset": [1, 0], "mapgen": "sewage_basin"},
+    {"offset": [0, 1], "mapgen": "sewage_building"}, {"offset": [1, 1], "mapgen": "sewage_yard"}]},
+  "campground": {"name": "Camping", "priority": 55, "chance": 0.12, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 4, "max_town_distance": 60, "max_per_region": 1,
+   "cells": [{"offset": [0, 0], "mapgen": "camp_office"}, {"offset": [1, 0], "mapgen": "camp_sites"}]},
+  "warehouse": {"name": "Entrepôt", "priority": 52, "chance": 0.2, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 1, "max_town_distance": 12, "max_per_region": 1,
+   "cells": [{"offset": [0, 0], "mapgen": "warehouse"}, {"offset": [1, 0], "mapgen": "warehouse"}]},
+  "cemetery": {"name": "Cimetière", "priority": 45, "chance": 0.2, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 1, "max_town_distance": 20, "max_per_region": 1,
+   "cells": [{"offset": [0, 0], "mapgen": "cemetery"}]},
+  "chapel": {"name": "Chapelle", "priority": 44, "chance": 0.15, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 1, "max_town_distance": 15, "max_per_region": 1,
+   "cells": [{"offset": [0, 0], "mapgen": "chapel"}]},
+  "substation": {"name": "Poste électrique", "priority": 42, "chance": 0.2, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 1, "max_town_distance": 15, "max_per_region": 1,
+   "cells": [{"offset": [0, 0], "mapgen": "substation"}]},
+  "cabin": {"name": "Cabane", "priority": 40, "chance": 0.3, "common": false, "biomes": ["plain", "forest"], "near_road": true,
+   "min_town_distance": 3, "max_town_distance": 80, "max_per_region": 1,
+   "cells": [{"offset": [0, 0], "mapgen": "cabin"}]}
  }
 }

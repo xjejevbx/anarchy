@@ -16,6 +16,7 @@ var _penalty: float = 0.0
 var _weight: float = 0.0
 var _capacity: float = 1.0
 var _last_action: String = ""
+var _posture: String = "Marche"
 var _messages: Array[String] = []
 var _hovered: Monster = null
 
@@ -43,6 +44,7 @@ func _ready() -> void:
 	EventBus.health_changed.connect(_on_health_changed)
 	EventBus.action_performed.connect(_on_action_performed)
 	EventBus.message_logged.connect(_on_message_logged)
+	EventBus.posture_changed.connect(_on_posture_changed)
 	EventBus.monster_hovered.connect(func(m: Node) -> void: _hovered = m as Monster)
 	_refresh()
 
@@ -94,11 +96,17 @@ func _refresh() -> void:
 	var load_text: String = "Charge : %.1f / %.1f kg (%d%%)" % [_weight, _capacity, roundi(ratio * 100.0)]
 	if ratio > 1.0:
 		load_text += "  SURCHARGE !"
-	_label.text = "%s\nPV : %d / %d\nStamina : %d%%   Pénalité de temps : +%d%%\n%s\nDernière action : %s" % [
+	_label.text = "%s\nPV : %d / %d\nStamina : %d%%   Pénalité de temps : +%d%%\n%s\nPosture : %s\nDernière action : %s" % [
 		GameClock.get_time_string(),
 		ceili(_hp), int(_hp_max),
 		roundi(_stamina / _stamina_max * 100.0),
 		roundi(_penalty * 100.0),
 		load_text,
+		_posture,
 		_last_action,
 	]
+
+
+func _on_posture_changed(posture_name: String) -> void:
+	_posture = posture_name
+	_refresh()
