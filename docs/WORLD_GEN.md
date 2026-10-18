@@ -310,3 +310,99 @@ Météo, saisons, cycle jour/nuit détaillé et éclairage, hordes errantes, vé
 - Réglages initiaux posés « à l'aveugle » : à ajuster avec la mini-carte (`chance`, distances).
 - Limites : pas de loot ni de monstres dans les lieux (jalon 6) ; une seule variante de plan par bâtiment ; ids UltiCa de réacteur, console, machine,
   tombe et béton à vérifier à l'œil (repli coloré sinon).
+
+## 16. Monde « planétaire » et extension des structures (jalons 9 à 15)
+
+### Jalon 9 — Géographie planétaire (océans, continents, climats, relief)
+
+**Principe** : `WorldMap` reste une fonction pure de (seed, coordonnées), mais on ajoute des champs à GRANDE échelle au-dessus des
+champs actuels (altitude, humidité, rivière). Le monde reste infini ; il est organisé comme une Terre en miniature.
+
+**Échelles (réglables dans `biomes.json`)** : 1 case = 1 m.
+| Notion | Ordre de grandeur | Temps de marche indicatif |
+|---|---|---|
+| Continent | 15 000 à 40 000 cases de large | plusieurs heures à plusieurs jours de jeu |
+| Océan | 10 000 à 30 000 cases entre deux continents | infranchissable à pied |
+| Archipel / île | 300 à 3 000 cases | |
+| Bande climatique | 12 000 cases de haut | |
+
+**Nouveaux champs de bruit** (couches `LAYER_BIOME` à la suite, jamais renumérotées) :
+- `continent` : très basse fréquence (~0,00003), avec déformation de domaine (domain warping) pour des côtes irrégulières. Sous `sea_level` = océan.
+- `elevation` : relief à moyenne échelle (collines, chaînes de montagnes en « arêtes » : valeur absolue d'un bruit, comme les rivières).
+- `temperature` : fonction de la LATITUDE (y) + un peu de bruit + altitude. Les bandes se répètent à l'infini (pôle, tempéré, tropical,
+  tempéré, pôle...) : on garde un monde sans bord mais avec des climats lisibles.
+- `humidity` existant, désormais pilotée aussi par la distance à l'océan (côtes humides, intérieur sec).
+- `river` / `ford` existants : les rivières naissent en montagne et se dirigent vers les côtes (approximation : le bruit actuel est conservé,
+  atténué en zone désertique ; pas de vraie hydrologie).
+
+**Nouvelles natures de case** (ajoutées À LA FIN de `WorldMap.Kind`, de `kinds` dans `biomes.json` ET de `RouteMap.KIND_IDS` : un seul ordre) :
+`ocean_deep, ocean_shallow` (plateau continental), `beach, cliff` (falaise, infranchissable sauf rampes), `hills, mountain`
+(roche, infranchissable en altitude, avec cols), `snow, tundra, taiga, desert, savanna, jungle`.
+Plaine / forêt / marais existants restent pour le climat tempéré.
+
+**Règle de climat** (entiers + seuils en données) : (température, humidité, altitude) -> nature.
+| | humide | moyen | sec |
+|---|---|---|---|
+| chaud | jungle | savane | désert |
+| tempéré | forêt | plaine | steppe (plaine clairsemée) |
+| froid | taïga | toundra | toundra |
+| glacial | neige | neige | neige |
+
+**Impacts sur le code existant (à traiter dans ce jalon)** :
+- `SettlementMap` : villes interdites en désert profond / neige / montagne (`_is_buildable`) ; les grandes villes tendent vers les côtes
+  (ports) ; densité de villes proportionnelle à la fertilité (peu de villes en désert).
+- `RouteMap` : coûts par nature pour les nouveaux biomes (montagne très chère, désert moyen, neige chère, océan interdit) ; routes
+  limitées à un même continent ; **ponts et tunnels** sur les détroits étroits (< N cellules) = lien entre deux continents proches.
+- `SpawnCell` : départ toujours sur un continent, de préférence en climat tempéré.
+- Sprites : sable, neige, roche, jungle, désert, falaise (`tools/build_ultica_pack.py`) ; repli coloré tant qu'ils manquent.
+- Mini-carte de debug : zooms supplémentaires jusqu'à 4 096 cases par échantillon pour voir continents et océans ; légende des nouveaux biomes.
+- **Performance** : `kind_at` est appelé très souvent (spawn, `_site_ok`, mini-carte). Optimisations prévues : sortie rapide si
+  `continent < sea_level` (océan : on ne calcule pas le reste), cache par cellule macro, échantillonnage grossier pour les décisions
+  de ville.
+
+**Réglages en données** (`biomes.json`, nouvelle section `planet`) :
+`{"continent": {"frequency": 0.00003, "octaves": 4, "warp": 0.4}, "sea_level": -0.05, "shelf_margin": 0.04,
+  "climate": {"band_height": 12000, "temp_noise": 0.15, "lapse": 0.6}, "mountain": {"threshold": 0.62, "pass_width": 0.05},
+  "coast": {"beach": 0.012, "cliff_slope": 0.08}}`
+
+**Test** : déterminisme dans 3 ordres sur des instances neuves ; relevé grossier (comme aujourd'hui) avec : océan entre 40 et 75 % de
+la surface, au moins 3 climats présents, aucun départ hors continent, routes et villes jamais sur l'océan ni en montagne
+infranchissable, toute montagne a au moins un col.
+
+**Limites assumées** : pas de vraie érosion ni de vraie hydrologie ; les rivières ne finissent pas forcément à la mer.
+
+### Jalon 9b — Traversée de l'eau (nage, puis bateaux)
+Sans cela, un océan est un mur et les îles sont perdues. Proposition par étapes :
+1. **Nage** (jalon 9b, petit) : l'eau profonde devient praticable en nageant : stamina qui chute vite, objets lourds = risque de noyade
+   (charge > seuil = on coule), vêtements mouillés (plus tard). Distances maximales de nage courtes en pratique.
+2. **Bateaux** : arrivent avec les véhicules (hors périmètre actuel). Les ports, marinas et épaves sont posés dès maintenant.
+3. **Ponts / tunnels / ferries** pour les détroits proches (jalon 9).
+
+### Jalon 10 — Moteur : modes de placement et briques communes
+(identique à l'ancien jalon 9) + ce qui est nouveau :
+- placements par **climat** (`climates: ["desert"]`) et par **relief** (`mountain`, `coast`, `island`, `open_ocean`) ;
+- `island` : îlot isolé en mer (distance à la côte min / max) ; `open_ocean` : empreinte 100 % en eau profonde, loin de toute côte ;
+- jetée / accès : `t_pier` depuis la côte, ou aucun accès (lieux de décor, ou accessibles seulement à la nage / en bateau).
+
+### Jalons 11 à 15 : les structures (46 lieux)
+Les listes de l'ancien plan restent valables, avec ces ajustements dus à la planète :
+- **Jalon 11 — Urbain** (16) : ajouts côtiers : `port` (grues, conteneurs, entrepôts), `airport` (piste de 6 x 1 cellules, tour, hangars).
+- **Jalon 12 — Routes** (6) : + `border_checkpoint` entre deux continents reliés par un pont ; les barrages se placent sur des routes d'un même continent.
+- **Jalon 13 — Militaire / secret** (9) : `radio_tower` en montagne ou en plaine ; `bunker`, `missile_silo`, `lab` possibles en montagne ou en désert (`near_road: false` + piste).
+- **Jalon 14 — Mer et eau** (6 + 4) : le **porte-avions** passe à l'échelle réelle : `open_ocean`, jusqu'à 14 x 2 cellules (la réduction « 6 x 2 » est abandonnée) ; `oil_platform`, `lighthouse_island`, `cargo_wreck`, `marina`, `hydro_dam`, + **`island_village`, `shipwreck_field` (épaves en eau peu profonde), `pirate_base`, `research_station`** (île ou côte).
+- **Jalon 15 — Rural et divers** (9) : + **`oasis`, `ski_resort`, `volcano_site`, `ancient_ruins`, `cave_entrance`, `desert_outpost`, `arctic_base`** : lieux par climat.
+
+### Ce qui donne « plein de choses à découvrir »
+- **Points d'intérêt par biome** : désert = oasis, épaves d'avions, avant-postes ; toundra = base arctique, stations de recherche ;
+  jungle = ruines, temples ; montagne = mines, bunkers, observatoires ; côtes = phares, ports, épaves.
+- **Carte du joueur** (jalon 8 : finitions) : la mini-carte de debug devient une vraie carte qui ne montre que l'exploré, avec
+  repères posés par le joueur ; les lieux repérés (vus ou entendus parler) s'y affichent.
+- **Rumeurs et indices** (plus tard) : notes, radios et cartes trouvées dans le loot qui révèlent l'emplacement d'un lieu rare.
+- **Lieux uniques** : une poignée de lieux « légendaires » par monde (`max_per_world_window`), jamais deux fois proches.
+
+### Risques propres à ce changement
+- **Équilibrage de l'échelle** : un continent de 30 000 cases est énorme à pied (marche automatique indispensable) ; l'échelle se règle dans `biomes.json`, on la valide à l'œil avec la mini-carte avant tout le reste.
+- **Compatibilité des seeds** : le terrain actuel change entièrement (acceptable en développement, `generator_version` incrémenté).
+- **Coût de calcul** : voir ci-dessus ; on mesure comme pour les routes (`perf` dans le test).
+- **Nombre de terrains** : ~12 natures de case, mais la limite des 255 terrains reste confortable.
+- **Eau profonde et nage** : tant que 9b n'existe pas, un océan est un mur ; le départ est donc toujours sur un continent.
