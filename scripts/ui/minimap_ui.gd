@@ -5,17 +5,28 @@ extends CanvasLayer
 ## (data/worldgen/biomes.json), pas la carte du joueur. Écran modal : le jeu est en pause tant qu'elle est ouverte.
 ## La souris sert uniquement à lire (biome sous le curseur).
 ##
-## Zoom : chaque palier = nombre de cases du monde par échantillon (pixel de l'image). Sous 1, une case occupe plusieurs
-## échantillons (jusqu'à 16 x 16 : on ne voit plus que 10 x 10 cases). À 1 case par échantillon ou moins, on dessine le TERRAIN réel
-## (murs, routes, mobilier...) généré par ChunkGenerator, et non plus seulement la nature du biome.
+## Performance :
+##  - Grille ALIGNÉE sur des multiples du zoom : l'échantillon n représente la case n x zoom, quel que soit le centre de la vue.
+##    La carte est découpée en tuiles de TILE x TILE échantillons, mises en cache par (zoom, x, y) dans des variables STATIQUES :
+##    se déplacer ne calcule que les tuiles nouvelles, dézoomer puis rezoomer est instantané, et le cache survit à la fermeture
+##    de la carte (il est vidé si la seed change).
+##  - Rendu PROGRESSIF : les tuiles manquantes sont calculées par ordre de distance au centre, avec un budget de temps par frame
+##    (BUDGET_US). En attendant, on affiche la tuile d'un zoom plus large, étirée (aperçu), sinon un fond sombre.
+##  - Un seul recalcul de la liste de tuiles par frame (drapeau _dirty), même si plusieurs touches arrivent ensemble.
+##  - Les tuiles sont remplies dans un PackedByteArray (Image.create_from_data) au lieu de set_pixel.
+##  - Les types de cellule (rue, parcelle...) sont mis en cache entre tuiles ; les routes (calcul très coûteux) ne sont calculées
+##    que jusqu'à ROUTES_MAX_ZOOM, les villes jusqu'à SETTLEMENTS_MAX_ZOOM, rien au-delà.
 
 # --- Réglages ---
-const SAMPLES: int = 160                       # échantillons par côté (160 x 160 = 25 600 calculs par rafraîchissement)
-const ZOOMS: Array[float] = [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0, 1024.0, 2048.0, 4096.0]   # cases du monde par échantillon
-const START_ZOOM_INDEX: int = 10               # 64 cases par échantillon (comme avant)
-const TERRAIN_MAX_ZOOM: float = 1.0            # à ce zoom ou moins : terrain réel case par case
-const ROUTES_MAX_ZOOM: float = 16.0            # routes entre villes affichées jusqu'à ce zoom (au-delà : trop de régions à calculer)
-const SETTLEMENTS_MAX_ZOOM: float = 256.0
+const SAMPLES: int = 160                       # échantillons par côté de la zone affichée
+const TILE: int = 16                           # échantillons par côté d'une tuile (budget de calcul plus fin qu'avec 32)
+const ZOOMS: Array[int] = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]   # cases du monde par échantillon
+const START_ZOOM_INDEX: int = 2                # 64 cases par échantillon, comme avant
+const ROUTES_MAX_ZOOM: int = 16                # routes entre villes et lieux spéciaux affichés jusqu'à ce zoom (très coûteux au-delà)
+const SETTLEMENTS_MAX_ZOOM: int = 256          # villes (rues, parcelles, jardins) affichées jusqu'à ce zoom ; au-delà : biomes seuls
+const BUDGET_US: int = 8000                    # temps de calcul de tuiles par frame (microsecondes)
+const MAX_TILES: int = 4000                    # au-delà, le cache de tuiles est vidé
+const MAX_TYPE_CACHE: int = 300000             # idem pour le cache des types de cellule
 const PAN_SAMPLES: int = 20                    # déplacement de la vue, en échantillons
 const FONT_SIZE: int = 16
 
@@ -26,17 +37,16 @@ const COLOR_TEXT: Color = Color(0.92, 0.92, 0.92)
 const COLOR_MUTED: Color = Color(0.55, 0.55, 0.6)
 const COLOR_HEADER: Color = Color(0.95, 0.8, 0.4)
 const COLOR_MARKER: Color = Color(1.0, 0.25, 0.2)
+const COLOR_PENDING: Color = Color(0.14, 0.14, 0.17)
 
-# Couleurs de repli du terrain réel pour les terrains SANS champ "color" dans terrain.json (les autres : la couleur de nature du biome).
-const TERRAIN_COLORS: Dictionary = {
-	"t_tree": Color("#1f4f1f"),
-	"t_pavement": Color("#5b5f66"),
-	"t_pavement_y": Color("#c8b84a"),
-	"t_sidewalk": Color("#a8a8a8"),
-	"t_bridge": Color("#8a6a45"),
-	"t_wall_house": Color("#3a3a3a"),
-	"t_wall_arena": Color("#3a3a3a"),
-}
+# Caches STATIQUES : ils survivent à la fermeture de la carte (la seed ne change pas pendant la partie).
+static var _tiles: Dictionary = {}          # Vector3i (indice de zoom, tx, ty) -> ImageTexture
+static var _type_towns: Dictionary = {}     # Vector2i (cellule macro) -> type, sans routes ni lieux
+static var _type_full: Dictionary = {}      # idem avec routes et lieux spéciaux
+static var _cache_seed: int = 0
+static var _cache_ready: bool = false
+static var _kind_rgb: PackedByteArray = PackedByteArray()      # 3 octets par nature de case
+static var _overlay_rgb: PackedByteArray = PackedByteArray()   # 3 octets par SettlementMap.CellType
 
 var player: Player
 var seed_text: String = ""
@@ -45,10 +55,11 @@ var _view: Control
 var _is_open: bool = false
 var _zoom_index: int = START_ZOOM_INDEX
 var _center: Vector2i = Vector2i.ZERO
-var _texture: ImageTexture
 var _map_rect: Rect2 = Rect2()
 var _hover_cell: Vector2i = Vector2i.ZERO
 var _hovering: bool = false
+var _dirty: bool = false                    # la liste des tuiles à calculer doit être refaite (un seul passage par frame)
+var _pending: Array[Vector3i] = []          # tuiles à calculer, les plus proches du centre d'abord
 
 
 func _ready() -> void:
@@ -69,80 +80,133 @@ func _on_requested() -> void:
 	if player.world.use_arena:
 		EventBus.message_logged.emit("Pas de carte du monde dans l'arène de test.")
 		return
+	_prepare_caches(player.world.world_seed)
 	_is_open = true
 	_zoom_index = START_ZOOM_INDEX
 	_center = player.grid_pos
 	player.input_blocked = true
 	_view.visible = true
-	_rebuild()
+	_dirty = true
+	_view.queue_redraw()
 
 
 func _close() -> void:
 	_is_open = false
+	_pending.clear()
 	player.input_blocked = false
 	_view.visible = false
 
 
-## Case du monde sous l'échantillon (i, j) (entiers, 0..SAMPLES-1). Sous 1 case par échantillon, plusieurs échantillons voisins
-## tombent sur la même case (floori).
-func _cell_of_sample(i: int, j: int) -> Vector2i:
-	var zoom: float = ZOOMS[_zoom_index]
-	var half: int = SAMPLES / 2
-	return _center + Vector2i(floori((i - half) * zoom), floori((j - half) * zoom))
+## Vide les caches si la seed a changé ; prépare les palettes (octets) une seule fois.
+static func _prepare_caches(world_seed: int) -> void:
+	if not _cache_ready or _cache_seed != world_seed:
+		_tiles.clear()
+		_type_towns.clear()
+		_type_full.clear()
+		_cache_seed = world_seed
+		_cache_ready = true
+	if _kind_rgb.is_empty():
+		for kind in WorldMap.kind_count():
+			var c: Color = WorldMap.kind_color(kind)
+			_kind_rgb.append(c.r8)
+			_kind_rgb.append(c.g8)
+			_kind_rgb.append(c.b8)
+		for cell_type in 5:  # NONE, ROAD, LOT, YARD, SPECIAL
+			var o: Color = SettlementMap.overlay_color(cell_type)
+			_overlay_rgb.append(o.r8)
+			_overlay_rgb.append(o.g8)
+			_overlay_rgb.append(o.b8)
 
 
-## Couleur du terrain réel d'une case (chunk généré et mis en cache pour la durée du rafraîchissement).
-func _case_color(cell: Vector2i, world_seed: int, world_map: WorldMap, kind_colors: Array[Color], chunk_cache: Dictionary) -> Color:
-	var key: Vector3i = ChunkManager.key_of(cell)
-	if not chunk_cache.has(key):
-		chunk_cache[key] = {
-			"terrain": ChunkGenerator.generate(world_seed, key),
-			"furniture": ChunkGenerator.generate_furniture(world_seed, key),
-		}
-	var data: Dictionary = chunk_cache[key]
-	var index: int = ChunkManager.index_of(cell)
-	var furniture: int = (data["furniture"] as PackedByteArray)[index]
-	if furniture != 0:
-		return FurnitureDB.color_of(furniture)
-	var terrain: int = (data["terrain"] as PackedByteArray)[index]
-	if TerrainDB.has_color(terrain):
-		return TerrainDB.color_of(terrain)
-	var terrain_id: String = TerrainDB.id_of(terrain)
-	if TERRAIN_COLORS.has(terrain_id):
-		return TERRAIN_COLORS[terrain_id]
-	return kind_colors[world_map.kind_at(cell)]
+# --- Grille alignée et tuiles ---
+
+## Indice d'échantillon (dans la grille alignée) de l'angle haut-gauche de la zone affichée.
+func _view_origin() -> Vector2i:
+	var zoom: int = ZOOMS[_zoom_index]
+	return Vector2i(floori(float(_center.x) / zoom), floori(float(_center.y) / zoom)) - Vector2i(SAMPLES / 2, SAMPLES / 2)
 
 
-## Recalcule l'image : une couleur par échantillon, selon la nature de la case au centre de l'échantillon.
-func _rebuild() -> void:
+## 0 = biomes seuls, 1 = villes, 2 = villes + routes + lieux spéciaux.
+static func _overlay_mode(zoom: int) -> int:
+	if zoom <= ROUTES_MAX_ZOOM:
+		return 2
+	if zoom <= SETTLEMENTS_MAX_ZOOM:
+		return 1
+	return 0
+
+
+## Refait la liste des tuiles visibles qui ne sont pas encore en cache, les plus proches du centre d'abord.
+func _plan() -> void:
+	if _tiles.size() > MAX_TILES:
+		_tiles.clear()
+	if _type_towns.size() > MAX_TYPE_CACHE:
+		_type_towns.clear()
+	if _type_full.size() > MAX_TYPE_CACHE:
+		_type_full.clear()
+	_pending.clear()
+	var s0: Vector2i = _view_origin()
+	var middle := Vector2(s0) + Vector2(SAMPLES, SAMPLES) / 2.0
+	var wanted: Array[Vector3i] = []
+	for ty in range(floori(float(s0.y) / TILE), floori(float(s0.y + SAMPLES - 1) / TILE) + 1):
+		for tx in range(floori(float(s0.x) / TILE), floori(float(s0.x + SAMPLES - 1) / TILE) + 1):
+			var key := Vector3i(_zoom_index, tx, ty)
+			if not _tiles.has(key):
+				wanted.append(key)
+	wanted.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		var da: Vector2 = Vector2(a.y + 0.5, a.z + 0.5) * TILE - middle
+		var db: Vector2 = Vector2(b.y + 0.5, b.z + 0.5) * TILE - middle
+		return da.length_squared() < db.length_squared())
+	_pending = wanted
+
+
+## Calcule des tuiles pendant BUDGET_US au plus (au moins une par frame).
+func _work() -> void:
+	var started: int = Time.get_ticks_usec()
+	while not _pending.is_empty():
+		var key: Vector3i = _pending.pop_front()
+		if not _tiles.has(key):
+			_tiles[key] = _compute_tile(key)
+		if Time.get_ticks_usec() - started >= BUDGET_US:
+			break
+	_view.queue_redraw()
+
+
+static func _cell_type(settlement: SettlementMap, coord: Vector2i, full: bool) -> int:
+	var cache: Dictionary = _type_full if full else _type_towns
+	if cache.has(coord):
+		return cache[coord]
+	var type: int = settlement.cell_type(coord, full)
+	cache[coord] = type
+	return type
+
+
+## Image d'une tuile : une couleur par échantillon (nature de la case échantillonnée, villes par-dessus), écrite dans un buffer d'octets.
+func _compute_tile(key: Vector3i) -> ImageTexture:
+	var zoom: int = ZOOMS[key.x]
+	var mode: int = _overlay_mode(zoom)
 	var world_seed: int = player.world.world_seed
 	var world_map: WorldMap = WorldMap.for_seed(world_seed)
 	var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
-	var colors: Array[Color] = []
-	for kind in WorldMap.kind_count():
-		colors.append(WorldMap.kind_color(kind))
-	var zoom: float = ZOOMS[_zoom_index]
-	var case_level: bool = zoom <= TERRAIN_MAX_ZOOM
-	var type_cache: Dictionary = {}  # cellule macro -> type (rue, parcelle, jardin)
-	var chunk_cache: Dictionary = {} # clé de chunk -> {terrain, furniture} (zoom case par case)
-	var image := Image.create(SAMPLES, SAMPLES, false, Image.FORMAT_RGB8)
-	for j in SAMPLES:
-		for i in SAMPLES:
-			var cell: Vector2i = _cell_of_sample(i, j)
-			var color: Color
-			if case_level:
-				color = _case_color(cell, world_seed, world_map, colors, chunk_cache)
-			else:
-				color = colors[world_map.kind_at(cell)]
-				var coord := Vector2i(floori(float(cell.x) / Chunk.SIZE), floori(float(cell.y) / Chunk.SIZE))
-				if not type_cache.has(coord):
-					type_cache[coord] = settlement.cell_type(coord, zoom <= SETTLEMENTS_MAX_ZOOM)
-				var cell_type: int = type_cache[coord]
+	var data := PackedByteArray()
+	data.resize(TILE * TILE * 3)
+	var index: int = 0
+	for j in TILE:
+		var wy: int = (key.z * TILE + j) * zoom
+		var coord_y: int = floori(float(wy) / Chunk.SIZE)
+		for i in TILE:
+			var wx: int = (key.y * TILE + i) * zoom
+			var palette: PackedByteArray = _kind_rgb
+			var offset: int = world_map.kind_at(Vector2i(wx, wy)) * 3
+			if mode != 0:  # les villes se dessinent par-dessus les biomes
+				var cell_type: int = _cell_type(settlement, Vector2i(floori(float(wx) / Chunk.SIZE), coord_y), mode == 2)
 				if cell_type != SettlementMap.CellType.NONE:
-					color = SettlementMap.overlay_color(cell_type)  # les villes se dessinent par-dessus les biomes
-			image.set_pixel(i, j, color)
-	_texture = ImageTexture.create_from_image(image)
-	_view.queue_redraw()
+					palette = _overlay_rgb
+					offset = cell_type * 3
+			data[index] = palette[offset]
+			data[index + 1] = palette[offset + 1]
+			data[index + 2] = palette[offset + 2]
+			index += 3
+	return ImageTexture.create_from_image(Image.create_from_data(TILE, TILE, false, Image.FORMAT_RGB8, data))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -158,7 +222,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if key == KEY_ESCAPE or KeyUtil.is_letter(key_event, "m"):
 		_close()
 		return
-	var step: int = maxi(roundi(PAN_SAMPLES * ZOOMS[_zoom_index]), 1)
+	var step: int = PAN_SAMPLES * ZOOMS[_zoom_index]
 	if key == KEY_KP_ADD or key == KEY_EQUAL:
 		_zoom_index = maxi(_zoom_index - 1, 0)
 	elif key == KEY_KP_SUBTRACT or key == KEY_MINUS:
@@ -175,22 +239,60 @@ func _unhandled_input(event: InputEvent) -> void:
 		_center = player.grid_pos
 	else:
 		return
-	_rebuild()
+	_dirty = true  # le recalcul de la liste de tuiles se fait une seule fois, dans _process
+	_view.queue_redraw()
 
 
 func _process(_delta: float) -> void:
 	if not _is_open:
 		return
+	if _dirty:
+		_dirty = false
+		_plan()
+	if not _pending.is_empty():
+		_work()
 	var mouse: Vector2 = _view.get_local_mouse_position()
 	var inside: bool = _map_rect.has_point(mouse)
 	var cell: Vector2i = _hover_cell
 	if inside:
 		var sample: Vector2 = (mouse - _map_rect.position) / _map_rect.size * SAMPLES
-		cell = _cell_of_sample(clampi(floori(sample.x), 0, SAMPLES - 1), clampi(floori(sample.y), 0, SAMPLES - 1))
+		cell = (Vector2i(floori(sample.x), floori(sample.y)) + _view_origin()) * ZOOMS[_zoom_index]
 	if inside != _hovering or (inside and cell != _hover_cell):
 		_hovering = inside
 		_hover_cell = cell
 		_view.queue_redraw()
+
+
+## Dessine les tuiles visibles (rognées à la zone affichée). Tuile absente : aperçu d'une tuile d'un zoom plus large, sinon fond sombre.
+func _draw_tiles(pixel_scale: int, s0: Vector2i) -> void:
+	var view_rect := Rect2(Vector2(s0), Vector2(SAMPLES, SAMPLES))
+	for ty in range(floori(float(s0.y) / TILE), floori(float(s0.y + SAMPLES - 1) / TILE) + 1):
+		for tx in range(floori(float(s0.x) / TILE), floori(float(s0.x + SAMPLES - 1) / TILE) + 1):
+			var tile_rect := Rect2(Vector2(tx, ty) * TILE, Vector2(TILE, TILE))
+			var part: Rect2 = tile_rect.intersection(view_rect)
+			if part.size.x <= 0.0 or part.size.y <= 0.0:
+				continue
+			var tex := _tiles.get(Vector3i(_zoom_index, tx, ty)) as ImageTexture
+			var origin: Vector2 = tile_rect.position   # angle de la texture, en échantillons de ce zoom
+			var extent: float = float(TILE)            # largeur de la texture, en échantillons de ce zoom
+			if tex == null:
+				for k in range(1, 4):
+					if _zoom_index + k >= ZOOMS.size():
+						break
+					var factor: int = 1 << k
+					var coarse_x: int = floori(float(tx) / factor)
+					var coarse_y: int = floori(float(ty) / factor)
+					tex = _tiles.get(Vector3i(_zoom_index + k, coarse_x, coarse_y)) as ImageTexture
+					if tex != null:
+						origin = Vector2(coarse_x, coarse_y) * float(TILE * factor)
+						extent = float(TILE * factor)
+						break
+			var dst := Rect2(_map_rect.position + (part.position - Vector2(s0)) * pixel_scale, part.size * pixel_scale)
+			if tex == null:
+				_view.draw_rect(dst, COLOR_PENDING)
+			else:
+				var src := Rect2((part.position - origin) / extent * TILE, part.size / extent * TILE)
+				_view.draw_texture_rect_region(tex, dst, src)
 
 
 func _draw_view() -> void:
@@ -207,13 +309,14 @@ func _draw_view() -> void:
 	_view.draw_rect(panel, COLOR_BORDER, false, 2.0)
 
 	# En-tête : seed, échelle, joueur
-	var zoom: float = ZOOMS[_zoom_index]
-	var span: int = maxi(roundi(SAMPLES * zoom), 1)
-	var scale_text: String = "1 pixel = %d cases" % roundi(zoom) if zoom >= 1.0 else "1 case = %d x %d pixels" % [roundi(1.0 / zoom), roundi(1.0 / zoom)]
+	var zoom: int = ZOOMS[_zoom_index]
+	var span: int = SAMPLES * zoom
 	_view.draw_string(font, panel.position + Vector2(16, 28), "CARTE DU MONDE (debug)", HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE + 4, COLOR_HEADER)
-	_view.draw_string(font, panel.position + Vector2(16, 52), "Seed : « %s » (%d)   —   %s, la carte couvre %d × %d cases (%.1f chunks de côté)%s" % \
-		[seed_text, player.world.world_seed, scale_text, span, span, float(span) / Chunk.SIZE,
-		"   —   terrain réel" if zoom <= TERRAIN_MAX_ZOOM else ""],
+	if not _pending.is_empty() or _dirty:
+		_view.draw_string(font, Vector2(panel.position.x, panel.position.y + 28), "Calcul : %d tuile(s) restante(s)…" % _pending.size(),
+			HORIZONTAL_ALIGNMENT_RIGHT, panel.size.x - 16.0, FONT_SIZE - 2, COLOR_MUTED)
+	_view.draw_string(font, panel.position + Vector2(16, 52), "Seed : « %s » (%d)   —   1 pixel = %d cases, la carte couvre %d × %d cases (%d chunks de côté)" % \
+		[seed_text, player.world.world_seed, zoom, span, span, ceili(float(span) / Chunk.SIZE)],
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, FONT_SIZE - 2, COLOR_TEXT)
 	var here: Vector2i = player.grid_pos
 	var here_chunk: Vector3i = ChunkManager.key_of(here)
@@ -224,27 +327,15 @@ func _draw_view() -> void:
 		("   —   " + String(here_town["name"])) if not here_town.is_empty() else ""],
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, FONT_SIZE - 2, COLOR_TEXT)
 
-	# Carte
+	# Carte (tuiles en cache, grille alignée sur le zoom)
 	_map_rect = Rect2(panel.position + Vector2(16, 90), map_size)
-	_view.draw_texture_rect(_texture, _map_rect, false)
+	var s0: Vector2i = _view_origin()
+	_draw_tiles(pixel_scale, s0)
 	_view.draw_rect(_map_rect, COLOR_BORDER, false, 1.0)
-	# Position du joueur : centre de sa case (une case = 1 / zoom échantillons de large).
-	var marker_sample: Vector2 = Vector2(SAMPLES, SAMPLES) / 2.0 + (Vector2(here - _center) + Vector2(0.5, 0.5)) / zoom
-	var marker: Vector2 = _map_rect.position + marker_sample * pixel_scale
+	var marker: Vector2 = _map_rect.position + (Vector2(here) / float(zoom) - Vector2(s0)) * pixel_scale
 	if _map_rect.grow(2).has_point(marker):
-		if zoom < 1.0:  # case agrandie : on l'entoure au lieu de la couvrir
-			var case_px: float = pixel_scale / zoom
-			_view.draw_rect(Rect2(marker - Vector2(case_px, case_px) / 2.0, Vector2(case_px, case_px)), COLOR_MARKER, false, 3.0)
-		else:
-			_view.draw_circle(marker, 5.0, COLOR_MARKER)
-			_view.draw_circle(marker, 5.0, Color.WHITE, false, 1.5)
-	# Case sous le curseur (zoom fort) : contour blanc.
-	if _hovering and zoom < 1.0:
-		var hover_sample: Vector2 = Vector2(SAMPLES, SAMPLES) / 2.0 + Vector2(_hover_cell - _center) / zoom
-		var hover_pos: Vector2 = _map_rect.position + hover_sample * pixel_scale
-		var hover_px: float = pixel_scale / zoom
-		if _map_rect.encloses(Rect2(hover_pos, Vector2(hover_px, hover_px))):
-			_view.draw_rect(Rect2(hover_pos, Vector2(hover_px, hover_px)), Color.WHITE, false, 2.0)
+		_view.draw_circle(marker, 5.0, COLOR_MARKER)
+		_view.draw_circle(marker, 5.0, Color.WHITE, false, 1.5)
 
 	# Légende
 	var legend_x: float = _map_rect.end.x + 24.0
@@ -271,5 +362,5 @@ func _draw_view() -> void:
 		if not hover_special.is_empty():
 			_view.draw_string(font, Vector2(legend_x, y + 80), settlement.specials().place_name(String(hover_special["place"])), HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_HEADER)
 	_view.draw_string(font, Vector2(panel.position.x + 16, panel.end.y - 14),
-		"+/− : zoom (jusqu'à ~10 cases)   8/2/4/6 (ou flèches) : déplacer la vue   5 : recentrer   m / Échap : fermer",
+		"+/− : zoom   8/2/4/6 (ou flèches) : déplacer la vue   5 : recentrer   m / Échap : fermer",
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, 14, COLOR_MUTED)
