@@ -1,5 +1,5 @@
 {
- "_doc": "Carte du monde (jalon 2). Les champs (altitude, humidité, rivière...) sont des bruits continus évalués à chaque case : tout est déterministe (seed + coordonnées). frequency = 1 / longueur d'onde en cases. Lacs : altitude < lake.level (profonds sous level - deep_margin ; berge de sable jusqu'à level + shore). Rivières : lignes où |bruit river| < half_width (profondes si |bruit| < deep_half_width ET bruit ford < ford_level, sinon peu profondes = gués ; berge de terre sur bank). Sur la terre ferme : marais si humidité > swamp_humidity et altitude < swamp_altitude_max ; forêt si humidité > forest_humidity ; sinon plaine. trees = part de cases occupées par un arbre. L'ORDRE de kinds doit suivre l'énumération WorldMap.Kind.",
+ "_doc": "Carte du monde (jalons 2 et 9). Les champs (altitude, humidité, rivière, continent, température...) sont des bruits continus évalués à chaque case : tout est déterministe (seed + coordonnées). frequency = 1 / longueur d'onde en cases. Lacs : altitude < lake.level (profonds sous level - deep_margin ; berge de sable jusqu'à level + shore). Rivières : lignes où |bruit river| < half_width (profondes si |bruit| < deep_half_width ET bruit ford < ford_level, sinon peu profondes = gués ; berge de terre sur bank). Terre ferme : voir planet. trees = part de cases occupées par un arbre. L'ORDRE de kinds doit suivre l'énumération WorldMap.Kind ET RouteMap.KIND_IDS (toujours ajouter à la fin).\n\nplanet (jalon 9) : PAS de relief (ni collines, ni montagnes, ni falaises) ; la profondeur n'existe que pour l'eau. continent : bruit très basse fréquence déformé (warp_amplitude en cases) ; sous sea_level = océan (profond au-delà de shelf_margin sous le niveau de la mer = plateau continental peu profond). origin_bonus / origin_radius : relève le continent autour de (0,0) pour que le départ par défaut soit toujours sur terre (les futurs scénarios de départ choisiront leur propre lieu). beach = largeur de plage au-dessus de sea_level. climate : température = sin(2π y / (4 x band_height)) + bruit (0 = tempéré à l'origine, 1 = tropical, -1 = glacial ; les bandes se répètent à l'infini). Humidité : + coast_humidity (côtes humides) à - coast_humidity (intérieur sec) sur interior_span. Chaud (température > hot) : jungle (humidité > hot_humid), désert (< hot_dry), sinon savane. Froid (< cold) : taïga (humidité > cold_humid), sinon toundra. Entre les deux : marais / forêt / plaine comme avant. desert_river_scale : les rivières rétrécissent en désert. La neige viendra avec les saisons.",
  "noise": {
   "altitude": {"frequency": 0.0008, "octaves": 3},
   "humidity": {"frequency": 0.0011, "octaves": 2},
@@ -7,10 +7,21 @@
   "ford":     {"frequency": 0.0040, "octaves": 1},
   "detail":   {"frequency": 0.0450, "octaves": 2}
  },
+ "planet": {
+  "continent": {"frequency": 0.00003, "octaves": 4, "warp_frequency": 0.0001, "warp_amplitude": 4000,
+                "origin_bonus": 1.0, "origin_radius": 5000},
+  "sea_level": -0.05,
+  "shelf_margin": 0.04,
+  "beach": 0.012,
+  "climate": {"band_height": 12000, "temp_noise": 0.15, "temp_frequency": 0.0001,
+              "hot": 0.55, "cold": -0.4,
+              "hot_humid": 0.15, "hot_dry": -0.15, "cold_humid": 0.05,
+              "coast_humidity": 0.2, "interior_span": 0.5, "desert_river_scale": 0.35}
+ },
  "lake":  {"level": -0.26, "deep_margin": 0.07, "shore": 0.035},
  "river": {"half_width": 0.040, "deep_half_width": 0.016, "bank": 0.018, "ford_level": 0.05},
  "land":  {"swamp_humidity": 0.28, "swamp_altitude_max": 0.05, "forest_humidity": 0.05},
- "trees": {"plain": 0.03, "forest": 0.25, "swamp": 0.08},
+ "trees": {"plain": 0.03, "forest": 0.25, "swamp": 0.08, "tundra": 0.004, "taiga": 0.30, "desert": 0.0, "savanna": 0.015, "jungle": 0.35},
  "kinds": [
   {"id": "plain",         "name": "Plaine",                "color": "#8fbf5a"},
   {"id": "forest",        "name": "Forêt",                 "color": "#2f6b2f"},
@@ -20,6 +31,14 @@
   {"id": "river_deep",    "name": "Rivière profonde",      "color": "#2a52b0"},
   {"id": "river_shallow", "name": "Rivière peu profonde (gué)", "color": "#6fa0e0"},
   {"id": "shore_lake",    "name": "Berge de lac",          "color": "#d8c88a"},
-  {"id": "bank_river",    "name": "Berge de rivière",      "color": "#a07f55"}
+  {"id": "bank_river",    "name": "Berge de rivière",      "color": "#a07f55"},
+  {"id": "ocean_deep",    "name": "Océan profond",         "color": "#0f2a63"},
+  {"id": "ocean_shallow", "name": "Océan peu profond",     "color": "#2f5fb0"},
+  {"id": "beach",         "name": "Plage",                 "color": "#e8dcaa"},
+  {"id": "tundra",        "name": "Toundra",               "color": "#9aa88a"},
+  {"id": "taiga",         "name": "Taïga",                 "color": "#3f6b55"},
+  {"id": "desert",        "name": "Désert",                "color": "#e0c070"},
+  {"id": "savanna",       "name": "Savane",                "color": "#c8b450"},
+  {"id": "jungle",        "name": "Jungle",                "color": "#1f7a2f"}
  ]
 }

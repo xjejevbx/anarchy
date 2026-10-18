@@ -182,8 +182,7 @@ static func _pick_weighted(weights: Array, roll: float) -> int:
 ## Site acceptable : centre en plaine ou forêt, assez de terre constructible sous toute la ville.
 func _site_ok(center: Vector2i, radius: int) -> bool:
 	var center_kind: int = _world_map.cell_kind(center)
-	if center_kind != WorldMap.Kind.PLAIN and center_kind != WorldMap.Kind.FOREST:
-		return false
+	if not WorldMap.is_habitable_land(center_kind): return false
 	var good: int = 0
 	var total: int = 0
 	for dy in range(-radius, radius + 1):
@@ -205,7 +204,7 @@ static func _overlaps(towns: Array, center: Vector2i, radius: int) -> bool:
 static func _is_buildable(kind: int) -> bool:
 	return kind == WorldMap.Kind.PLAIN or kind == WorldMap.Kind.FOREST \
 		or kind == WorldMap.Kind.SHORE_LAKE or kind == WorldMap.Kind.BANK_RIVER
-
+		or WorldMap.is_habitable_land(kind)
 
 static func _is_lake(kind: int) -> bool:
 	return kind == WorldMap.Kind.LAKE_DEEP or kind == WorldMap.Kind.LAKE_SHALLOW
@@ -307,8 +306,7 @@ func lot_plan(cell: Vector2i) -> Dictionary:
 	if MapgenDB.plan_count() == 0 or town_cell_type(cell) != CellType.LOT:
 		return {}
 	var kind: int = _world_map.cell_kind(cell)
-	if kind != WorldMap.Kind.PLAIN and kind != WorldMap.Kind.FOREST:
-		return {}
+	if not WorldMap.is_habitable_land(kind): return {}
 	if not WorldRng.chance(world_seed, WorldRng.LAYER_MAPGEN, cell.x, cell.y, 0, _house_chance):
 		return {}
 	var town: Dictionary = town_at(cell)

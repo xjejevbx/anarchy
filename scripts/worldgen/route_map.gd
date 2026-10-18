@@ -13,7 +13,7 @@ extends RefCounted
 ## Réglages : section "routes" de data/worldgen/towns.json.
 
 # Même ORDRE que WorldMap.Kind et "kinds" de biomes.json.
-const KIND_IDS: Array[String] = ["plain", "forest", "swamp", "lake_deep", "lake_shallow", "river_deep", "river_shallow",
+const KIND_IDS: Array[String] = ["ocean_deep", "ocean_shallow", "beach", "tundra", "taiga", "desert", "savanna", "jungle", "plain", "forest", "swamp", "lake_deep", "lake_shallow", "river_deep", "river_shallow",
 	"shore_lake", "bank_river"]
 const DIRS: Array[Vector2i] = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
 const INFINITE: int = 1 << 30

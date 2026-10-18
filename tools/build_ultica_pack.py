@@ -18,26 +18,7 @@ from pathlib import Path
 
 # Ids CDDA dont on veut le rendu (fg/bg) ; leurs sprites sont copiés automatiquement.
 IDS = [
-    "t_grass", "t_tree", "mon_zombie", "player_male",
-    # objets (icônes d'inventaire / sol)
-    "backpack", "bag_plastic", "bottle_plastic", "can_beans", "2x4", "knife_butter",
-    "pipe", "rope_6", "stick", "sheet_metal_small",
-    # vêtements : calques portés (servent aussi d'icône d'objet)
-    "overlay_male_worn_undershirt", "overlay_male_worn_jeans", "overlay_male_worn_sneakers",
-    "overlay_male_worn_jacket_light", "overlay_male_worn_pants_cargo", "overlay_male_worn_hat_ball",
-    "overlay_male_worn_backpack", "overlay_male_worn_backpack_tactical_large",
-    # terrains du monde (jalon 2)
-    "t_water_sh", "t_water_dp", "t_swater_sh", "t_mud", "t_dirt", "t_sand",
-    # routes et villes (jalon 3)
-    "t_pavement", "t_pavement_y", "t_sidewalk", "t_bridge",
-    # maisons (jalon 3c) : sol, porte, fenêtre et mobilier
-    "t_floor", "t_door_c", "t_window",
-    "f_bed", "f_table", "f_chair", "f_sofa", "f_bookcase", "f_fridge",
-    "f_counter", "f_oven", "f_dresser", "f_sink", "f_toilet", "f_bathtub",
-    # lieux spéciaux (jalon 4) : champ, clôture, pompe, rayonnage
-    "t_dirtmound", "t_chainfence", "t_gas_pump", "f_rack",
-    # grands lieux (jalon 5) : cloture grillagee, beton, tombe, reacteur, console, machine
-    "t_chainfence", "t_rock_floor", "t_grave", "t_reactor", "f_console", "f_machinery_light",
+    "t_grass_dead", "t_grass_long", "t_moss",
 ]
 
 # Dossiers dont on copie TOUS les sprites, pour les utiliser directement par nom

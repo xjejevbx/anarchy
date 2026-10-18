@@ -1,156 +1,177 @@
 {
- "_doc": "Terrains du monde. tile : id de tuile UltiCa ; base : terrain dessiné dessous (ex. herbe sous un arbre) ; entity_sprite : dessiné comme un sprite trié par Y (arbres) ; autotile : choix du sprite selon les voisins (wall). L'ORDRE des entrées donne l'index stocké dans les chunks (max 255).",
- "terrains": {
-  "t_grass": {
-   "name": "Herbe",
-   "tile": "t_grass",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_tree": {
-   "name": "Arbre",
-   "tile": "t_tree",
-   "base": "t_grass",
-   "entity_sprite": true,
-   "walkable": false,
-   "opaque": true
-  },
-  "t_wall_arena": {
-   "name": "Mur",
-   "autotile": "wall",
-   "walkable": false,
-   "opaque": true
-  },
-  "t_water_sh": {
-   "name": "Eau peu profonde",
-   "tile": "t_water_sh",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_water_dp": {
-   "name": "Eau profonde",
-   "tile": "t_water_dp",
-   "walkable": false,
-   "opaque": false
-  },
-  "t_swater_sh": {
-   "name": "Eau de marais",
-   "tile": "t_swater_sh",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_mud": {
-   "name": "Boue",
-   "tile": "t_mud",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_dirt": {
-   "name": "Terre",
-   "tile": "t_dirt",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_sand": {
-   "name": "Sable",
-   "tile": "t_sand",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_pavement": {
-   "name": "Asphalte",
-   "tile": "t_pavement",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_pavement_y": {
-   "name": "Asphalte (ligne jaune)",
-   "tile": "t_pavement_y",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_sidewalk": {
-   "name": "Trottoir",
-   "tile": "t_sidewalk",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_bridge": {
-   "name": "Pont",
-   "tile": "t_bridge",
-   "walkable": true,
-   "opaque": false
-  },
-  "t_floor": {
-   "name": "Plancher",
-   "tile": "t_floor",
-   "walkable": true,
-   "opaque": false,
-   "color": "#a89878"
-  },
-  "t_wall_house": {
-   "name": "Mur de maison",
-   "autotile": "wall",
-   "walkable": false,
-   "opaque": true
-  },
-  "t_door": {
-   "name": "Porte",
-   "tile": "t_door_c",
-   "walkable": true,
-   "opaque": true,
-   "wall_link": true,
-   "color": "#7a5230"
-  },
-  "t_window": {
-   "name": "Fenêtre",
-   "tile": "t_window",
-   "walkable": false,
-   "opaque": false,
-   "wall_link": true,
-   "color": "#7fb4d8"
-  },
-  "t_field": {
-   "name": "Champ",
-   "tile": "t_dirtmound",
-   "walkable": true,
-   "opaque": false,
-   "color": "#8a6a3a"
-  },
-  "t_fence": {
-   "name": "Clôture",
-   "tile": "t_chainfence",
-   "walkable": false,
-   "opaque": false,
-   "color": "#8c8c8c"
-  },
-  "t_gas_pump": {
-   "name": "Pompe à essence",
-   "tile": "t_gas_pump",
-   "walkable": false,
-   "opaque": false,
-   "color": "#c0392b"
-  },
-  "t_concrete": {
-   "name": "Béton",
-   "tile": "t_rock_floor",
-   "walkable": true,
-   "opaque": false,
-   "color": "#9a9a9a"
-  },
-  "t_grave": {
-   "name": "Tombe",
-   "tile": "t_grave",
-   "walkable": false,
-   "opaque": false,
-   "color": "#6b6b6b"
-  },
-  "t_reactor": {
-   "name": "Cœur de réacteur",
-   "tile": "t_reactor",
-   "walkable": false,
-   "opaque": false,
-   "color": "#e67e22"
-  }
- }
+    "_doc": "Terrains du monde. tile : id de tuile UltiCa ; base : terrain dessiné dessous (ex. herbe sous un arbre) ; entity_sprite : dessiné comme un sprite trié par Y (arbres) ; autotile : choix du sprite selon les voisins (wall). L'ORDRE des entrées donne l'index stocké dans les chunks (max 255).",
+    "terrains": {
+        "t_grass": {
+            "name": "Herbe",
+            "tile": "t_grass",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_grass_dead": {
+            "name": "Herbe sèche",
+            "tile": "t_grass_dead",
+            "walkable": true,
+            "opaque": false,
+            "color": "#b0a060"
+        },
+        "t_grass_long": {
+            "name": "Herbe haute",
+            "tile": "t_grass_long",
+            "walkable": true,
+            "opaque": false,
+            "color": "#4f8f3a"
+        },
+        "t_moss": {
+            "name": "Mousse",
+            "tile": "t_moss",
+            "walkable": true,
+            "opaque": false,
+            "color": "#7f8f6a"
+        },
+        "t_tree": {
+            "name": "Arbre",
+            "tile": "t_tree",
+            "base": "t_grass",
+            "entity_sprite": true,
+            "walkable": false,
+            "opaque": true
+        },
+        "t_wall_arena": {
+            "name": "Mur",
+            "autotile": "wall",
+            "walkable": false,
+            "opaque": true
+        },
+        "t_water_sh": {
+            "name": "Eau peu profonde",
+            "tile": "t_water_sh",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_water_dp": {
+            "name": "Eau profonde",
+            "tile": "t_water_dp",
+            "walkable": false,
+            "opaque": false
+        },
+        "t_swater_sh": {
+            "name": "Eau de marais",
+            "tile": "t_swater_sh",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_mud": {
+            "name": "Boue",
+            "tile": "t_mud",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_dirt": {
+            "name": "Terre",
+            "tile": "t_dirt",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_sand": {
+            "name": "Sable",
+            "tile": "t_sand",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_pavement": {
+            "name": "Asphalte",
+            "tile": "t_pavement",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_pavement_y": {
+            "name": "Asphalte (ligne jaune)",
+            "tile": "t_pavement_y",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_sidewalk": {
+            "name": "Trottoir",
+            "tile": "t_sidewalk",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_bridge": {
+            "name": "Pont",
+            "tile": "t_bridge",
+            "walkable": true,
+            "opaque": false
+        },
+        "t_floor": {
+            "name": "Plancher",
+            "tile": "t_floor",
+            "walkable": true,
+            "opaque": false,
+            "color": "#a89878"
+        },
+        "t_wall_house": {
+            "name": "Mur de maison",
+            "autotile": "wall",
+            "walkable": false,
+            "opaque": true
+        },
+        "t_door": {
+            "name": "Porte",
+            "tile": "t_door_c",
+            "walkable": true,
+            "opaque": true,
+            "wall_link": true,
+            "color": "#7a5230"
+        },
+        "t_window": {
+            "name": "Fenêtre",
+            "tile": "t_window",
+            "walkable": false,
+            "opaque": false,
+            "wall_link": true,
+            "color": "#7fb4d8"
+        },
+        "t_field": {
+            "name": "Champ",
+            "tile": "t_dirtmound",
+            "walkable": true,
+            "opaque": false,
+            "color": "#8a6a3a"
+        },
+        "t_fence": {
+            "name": "Clôture",
+            "tile": "t_chainfence",
+            "walkable": false,
+            "opaque": false,
+            "color": "#8c8c8c"
+        },
+        "t_gas_pump": {
+            "name": "Pompe à essence",
+            "tile": "t_gas_pump",
+            "walkable": false,
+            "opaque": false,
+            "color": "#c0392b"
+        },
+        "t_concrete": {
+            "name": "Béton",
+            "tile": "t_rock_floor",
+            "walkable": true,
+            "opaque": false,
+            "color": "#9a9a9a"
+        },
+        "t_grave": {
+            "name": "Tombe",
+            "tile": "t_grave",
+            "walkable": false,
+            "opaque": false,
+            "color": "#6b6b6b"
+        },
+        "t_reactor": {
+            "name": "Cœur de réacteur",
+            "tile": "t_reactor",
+            "walkable": false,
+            "opaque": false,
+            "color": "#e67e22"
+        }
+    }
 }
