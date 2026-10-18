@@ -91,6 +91,7 @@ func _initialize() -> void:
 		var isolated: int = 0
 		var asymmetric: int = 0
 		var on_lake: int = 0
+		var on_ocean: int = 0
 		var centers_ok: bool = true
 		for t in towns:
 			var center: Vector2i = t["center"]
@@ -106,6 +107,8 @@ func _initialize() -> void:
 					var kind: int = WorldMap.for_seed(world_seed).cell_kind(cell)
 					if kind == WorldMap.Kind.LAKE_DEEP or kind == WorldMap.Kind.LAKE_SHALLOW:
 						on_lake += 1
+					if WorldMap.is_ocean(kind):
+						on_ocean += 1
 					var mask: int = settlement.road_mask(cell)
 					if mask == 0:
 						isolated += 1
@@ -115,6 +118,7 @@ func _initialize() -> void:
 							asymmetric += 1
 		_check(centers_ok, "seed %d : le centre de chaque ville est une rue" % world_seed)
 		_check(on_lake == 0, "seed %d : aucune rue sur un lac" % world_seed)
+		_check(on_ocean == 0, "seed %d : aucune rue sur l'océan" % world_seed)
 		_check(asymmetric == 0, "seed %d : connexions des rues symétriques" % world_seed)
 		_check(isolated * 20 <= roads, "seed %d : peu de rues isolées (%d sur %d)" % [world_seed, isolated, roads])
 

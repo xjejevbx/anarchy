@@ -8,6 +8,7 @@ extends RefCounted
 ## principales plus, pour les grandes, une grille de rues secondaires ; les cellules voisines d'une rue sont des parcelles
 ## (LOT : futures maisons), les autres des jardins (YARD). Réglages dans data/worldgen/towns.json.
 ## Jalon 3b : les routes entre villes (RouteMap) sont aussi des cellules ROAD, hors de l'emprise des villes.
+## Jalon 9 (correctif) : une rue ne traverse ni un lac ni l'océan (voir _is_water_body) ; une ville côtière a donc des rues coupées par la mer.
 
 const PATH: String = "res://data/worldgen/towns.json"
 
@@ -206,8 +207,11 @@ static func _is_buildable(kind: int) -> bool:
 		or kind == WorldMap.Kind.SHORE_LAKE or kind == WorldMap.Kind.BANK_RIVER \
 		or WorldMap.is_habitable_land(kind)
 
-static func _is_lake(kind: int) -> bool:
-	return kind == WorldMap.Kind.LAKE_DEEP or kind == WorldMap.Kind.LAKE_SHALLOW
+
+## Lac ou océan (profond ou non) : une rue ne le traverse pas (pas de pont dans une ville, contrairement aux routes
+## entre villes et aux rivières). Remplace l'ancien `_is_lake`, qui oubliait l'océan (jalon 9).
+static func _is_water_body(kind: int) -> bool:
+	return kind == WorldMap.Kind.LAKE_DEEP or kind == WorldMap.Kind.LAKE_SHALLOW or WorldMap.is_ocean(kind)
 
 
 ## Ville qui contient cette cellule (dictionnaire vide si aucune).
@@ -285,7 +289,7 @@ func town_cell_type(cell: Vector2i) -> int:
 		return CellType.NONE
 	var kind: int = _world_map.cell_kind(cell)
 	if _is_street(town, cell):
-		return CellType.NONE if _is_lake(kind) else CellType.ROAD  # pas de rue sur un lac
+		return CellType.NONE if _is_water_body(kind) else CellType.ROAD  # pas de rue sur un lac ni sur l'océan
 	var d: Vector2i = cell - (town["center"] as Vector2i)
 	if maxi(absi(d.x), absi(d.y)) == int(town["radius"]) \
 			and not WorldRng.chance(world_seed, WorldRng.LAYER_TOWN, cell.x, cell.y, 1, _outer_ring_keep):
@@ -294,7 +298,7 @@ func town_cell_type(cell: Vector2i) -> int:
 		return CellType.NONE
 	for dir in DIRS:
 		var neighbor: Vector2i = cell + dir
-		if _is_street(town, neighbor) and not _is_lake(_world_map.cell_kind(neighbor)):
+		if _is_street(town, neighbor) and not _is_water_body(_world_map.cell_kind(neighbor)):
 			return CellType.LOT
 	return CellType.YARD
 
@@ -313,7 +317,7 @@ func lot_plan(cell: Vector2i) -> Dictionary:
 	var fronts: Array[int] = []
 	for rot in HOUSE_FRONTS.size():
 		var neighbor: Vector2i = cell + HOUSE_FRONTS[rot]
-		if _is_street(town, neighbor) and not _is_lake(_world_map.cell_kind(neighbor)):
+		if _is_street(town, neighbor) and not _is_water_body(_world_map.cell_kind(neighbor)):
 			fronts.append(rot)
 	if fronts.is_empty():
 		return {}
