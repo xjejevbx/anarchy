@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://brb58mf4dkv3u"
-path="res://.godot/imported/gilet_tactique.png-eda015eda223dae7aed438ed9c882ba1.ctex"
+path="res://.godot/imported/gilet_tactique.png-1db4faf7d9b6325b039840be0b561a82.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/gilet_tactique.png"
-dest_files=["res://.godot/imported/gilet_tactique.png-eda015eda223dae7aed438ed9c882ba1.ctex"]
+source_file="res://assets/sprites/4x/gilet_tactique.png"
+dest_files=["res://.godot/imported/gilet_tactique.png-1db4faf7d9b6325b039840be0b561a82.ctex"]
 
 [params]
 

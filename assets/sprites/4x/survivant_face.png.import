@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bd3im5loqs0js"
-path="res://.godot/imported/survivant_face.png-e50730ba96c40fe0ca37355667d80b36.ctex"
+path="res://.godot/imported/survivant_face.png-0186e1af3d1342a504ef5318707f745a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/survivant_face.png"
-dest_files=["res://.godot/imported/survivant_face.png-e50730ba96c40fe0ca37355667d80b36.ctex"]
+source_file="res://assets/sprites/4x/survivant_face.png"
+dest_files=["res://.godot/imported/survivant_face.png-0186e1af3d1342a504ef5318707f745a.ctex"]
 
 [params]
 

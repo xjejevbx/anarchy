@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dymxdyrs3w1ud"
-path="res://.godot/imported/t_dirtmound.png-bfdf9c756b97eb536fae6477bd4831c0.ctex"
+path="res://.godot/imported/t_dirtmound.png-88a7b475e8a9fb2b60717295c658ec94.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/t_dirtmound.png"
-dest_files=["res://.godot/imported/t_dirtmound.png-bfdf9c756b97eb536fae6477bd4831c0.ctex"]
+source_file="res://assets/sprites/4x/t_dirtmound.png"
+dest_files=["res://.godot/imported/t_dirtmound.png-88a7b475e8a9fb2b60717295c658ec94.ctex"]
 
 [params]
 

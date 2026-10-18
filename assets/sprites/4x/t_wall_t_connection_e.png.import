@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://buctsqdl7twdv"
-path="res://.godot/imported/t_wall_t_connection_e.png-e7c8493ac65c4da1bba89b909d44c747.ctex"
+path="res://.godot/imported/t_wall_t_connection_e.png-01f1a7984d7c6fd821de41eb8540e099.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/t_wall_t_connection_e.png"
-dest_files=["res://.godot/imported/t_wall_t_connection_e.png-e7c8493ac65c4da1bba89b909d44c747.ctex"]
+source_file="res://assets/sprites/4x/t_wall_t_connection_e.png"
+dest_files=["res://.godot/imported/t_wall_t_connection_e.png-01f1a7984d7c6fd821de41eb8540e099.ctex"]
 
 [params]
 

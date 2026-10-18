@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cwgvkd42f3jmp"
-path="res://.godot/imported/t_rock_floor_unconnected.png-2d1de0913cffefb7d4d22832973b7c67.ctex"
+path="res://.godot/imported/t_rock_floor_unconnected.png-3a1e4e5576c93f96d4e75d87ef94e8fe.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/t_rock_floor_unconnected.png"
-dest_files=["res://.godot/imported/t_rock_floor_unconnected.png-2d1de0913cffefb7d4d22832973b7c67.ctex"]
+source_file="res://assets/sprites/4x/t_rock_floor_unconnected.png"
+dest_files=["res://.godot/imported/t_rock_floor_unconnected.png-3a1e4e5576c93f96d4e75d87ef94e8fe.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://5n7vpyl5ys6"
-path="res://.godot/imported/hat_ball_m.png-0b5e82320070aa628b2e8d2b4a6338ba.ctex"
+path="res://.godot/imported/hat_ball_m.png-abf50e1723d325034a8fe65c21eeaf13.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/hat_ball_m.png"
-dest_files=["res://.godot/imported/hat_ball_m.png-0b5e82320070aa628b2e8d2b4a6338ba.ctex"]
+source_file="res://assets/sprites/4x/hat_ball_m.png"
+dest_files=["res://.godot/imported/hat_ball_m.png-abf50e1723d325034a8fe65c21eeaf13.ctex"]
 
 [params]
 

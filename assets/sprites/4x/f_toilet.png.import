@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ccijperg24cca"
-path="res://.godot/imported/f_toilet.png-990fbd0532a00816d936ad45a351e3c6.ctex"
+path="res://.godot/imported/f_toilet.png-e7d8a778b7ec5441a99afe5fc75619d5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/f_toilet.png"
-dest_files=["res://.godot/imported/f_toilet.png-990fbd0532a00816d936ad45a351e3c6.ctex"]
+source_file="res://assets/sprites/4x/f_toilet.png"
+dest_files=["res://.godot/imported/f_toilet.png-e7d8a778b7ec5441a99afe5fc75619d5.ctex"]
 
 [params]
 

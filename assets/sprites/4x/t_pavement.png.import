@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c44xnp2y1y8rk"
-path="res://.godot/imported/t_pavement.png-d7498176929b78c546a4c1f7d2a67379.ctex"
+path="res://.godot/imported/t_pavement.png-f45b7ebcb16fe2d31e86d45fb9728854.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/t_pavement.png"
-dest_files=["res://.godot/imported/t_pavement.png-d7498176929b78c546a4c1f7d2a67379.ctex"]
+source_file="res://assets/sprites/4x/t_pavement.png"
+dest_files=["res://.godot/imported/t_pavement.png-f45b7ebcb16fe2d31e86d45fb9728854.ctex"]
 
 [params]
 

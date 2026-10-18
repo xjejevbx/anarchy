@@ -35,7 +35,7 @@ var _hovered: Monster = null
 
 
 func _ready() -> void:
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # pixel art net, hérité par les enfants
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS  # sprites x4 réduits : lissage (NEAREST scintille)
 	_terrain_layer = Node2D.new()
 	add_child(_terrain_layer)
 	_items_layer = Node2D.new()
@@ -74,9 +74,9 @@ func _draw_pick_overlay() -> void:
 	for pos: Vector2i in pick_labels:
 		var cell := Rect2(Vector2(pos * TILE_SIZE), Vector2(TILE_SIZE, TILE_SIZE))
 		_pick_overlay.draw_rect(cell, Color(0.3, 0.6, 1.0, 0.35))
-		_pick_overlay.draw_rect(cell, Color(0.55, 0.8, 1.0, 0.95), false, 2.0)
-		_pick_overlay.draw_string(font, cell.position + Vector2(0, 23), String(pick_labels[pos]),
-			HORIZONTAL_ALIGNMENT_CENTER, TILE_SIZE, 20, Color.WHITE)
+		_pick_overlay.draw_rect(cell, Color(0.55, 0.8, 1.0, 0.95), false, 8.0)
+		_pick_overlay.draw_string(font, cell.position + Vector2(0, 92), String(pick_labels[pos]),
+			HORIZONTAL_ALIGNMENT_CENTER, TILE_SIZE, 80, Color.WHITE)
 
 
 func get_ground_items(pos: Vector2i) -> Array:
@@ -268,6 +268,6 @@ func _draw_ground_items() -> void:
 		var sprite: String = UlticaTiles.pick_sprite(top.tile_id(), "fg", 0)
 		var box := Rect2(origin, Vector2(TILE_SIZE, TILE_SIZE))
 		if not UlticaTiles.draw_icon(_items_layer, sprite, box):
-			_items_layer.draw_rect(Rect2(origin + Vector2(10, 10), Vector2(12, 12)), Color(0.85, 0.7, 0.3))  # repli
+			_items_layer.draw_rect(Rect2(origin + Vector2(40, 40), Vector2(48, 48)), Color(0.85, 0.7, 0.3))  # repli
 		if list.size() > 1:
-			_items_layer.draw_rect(Rect2(origin + Vector2(TILE_SIZE - 7, TILE_SIZE - 7), Vector2(5, 5)), Color.WHITE)
+			_items_layer.draw_rect(Rect2(origin + Vector2(TILE_SIZE - 28, TILE_SIZE - 28), Vector2(20, 20)), Color.WHITE)

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dyoepmkpbgx0p"
-path="res://.godot/imported/f_dresser_faceN.png-9abcccb2959fb8d831d903f82dde2bd9.ctex"
+path="res://.godot/imported/f_dresser_faceN.png-34cddd56f515a20299a2268de3ece432.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/f_dresser_faceN.png"
-dest_files=["res://.godot/imported/f_dresser_faceN.png-9abcccb2959fb8d831d903f82dde2bd9.ctex"]
+source_file="res://assets/sprites/4x/f_dresser_faceN.png"
+dest_files=["res://.godot/imported/f_dresser_faceN.png-34cddd56f515a20299a2268de3ece432.ctex"]
 
 [params]
 

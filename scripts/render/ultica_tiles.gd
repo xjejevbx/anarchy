@@ -80,6 +80,18 @@ static func draw_sprite(canvas: CanvasItem, sprite_name: String, cell_origin: Ve
 	canvas.draw_texture(tex, cell_origin + get_offset(sprite_name), tint)
 
 
+## Dessine un calque de personnage (vêtement) calé sur le BAS et le CENTRE de la case, quelle que soit la taille réelle de
+## l'image (indépendant de l'offset de tiles.json). `cell_size` = taille d'une case en pixels.
+static func draw_sprite_anchored(canvas: CanvasItem, sprite_name: String, cell_origin: Vector2, cell_size: float, tint: Color = Color.WHITE) -> void:
+	if sprite_name.is_empty():
+		return
+	var tex: Texture2D = get_texture(sprite_name)
+	if tex == null:
+		return
+	var size: Vector2 = tex.get_size()
+	canvas.draw_texture(tex, cell_origin + Vector2((cell_size - size.x) / 2.0, cell_size - size.y), tint)
+
+
 ## Dessine un sprite dans `box` (icônes d'interface) : sans décalage, centré, réduit si trop grand,
 ## jamais agrandi. Renvoie false si le sprite est introuvable (l'appelant dessine un repli).
 static func draw_icon(canvas: CanvasItem, sprite_name: String, box: Rect2, tint: Color = Color.WHITE) -> bool:

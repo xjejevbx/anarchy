@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b6xvkim0olai3"
-path="res://.godot/imported/f_machinery_light-2.png-6cdd033e2d604ca8ebfdd7aa92a300de.ctex"
+path="res://.godot/imported/f_machinery_light-2.png-ae9e1e0373670aba30615724c295cda9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/f_machinery_light-2.png"
-dest_files=["res://.godot/imported/f_machinery_light-2.png-6cdd033e2d604ca8ebfdd7aa92a300de.ctex"]
+source_file="res://assets/sprites/4x/f_machinery_light-2.png"
+dest_files=["res://.godot/imported/f_machinery_light-2.png-ae9e1e0373670aba30615724c295cda9.ctex"]
 
 [params]
 

@@ -91,4 +91,4 @@ func _draw() -> void:
 			var furniture_sprite: String = UlticaTiles.pick_sprite(furniture_tile, "fg", cell_seed(cell))
 			UlticaTiles.draw_sprite(self, furniture_sprite, local)
 			if furniture_sprite == "" or UlticaTiles.get_texture(furniture_sprite) == null:  # repli : petit carré coloré
-				draw_rect(Rect2(local + Vector2(6, 6), Vector2(20, 20)), FurnitureDB.color_of(furniture[i]))
+				draw_rect(Rect2(local + Vector2(24, 24), Vector2(80, 80)), FurnitureDB.color_of(furniture[i]))

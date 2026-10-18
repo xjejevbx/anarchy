@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://crajtgk4m6rqm"
-path="res://.godot/imported/t_wall_corner_sw.png-7e67befbb06451e8200d1351795848c2.ctex"
+path="res://.godot/imported/t_wall_corner_sw.png-5d683c9b4483e18d55df50908167119c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/t_wall_corner_sw.png"
-dest_files=["res://.godot/imported/t_wall_corner_sw.png-7e67befbb06451e8200d1351795848c2.ctex"]
+source_file="res://assets/sprites/4x/t_wall_corner_sw.png"
+dest_files=["res://.godot/imported/t_wall_corner_sw.png-5d683c9b4483e18d55df50908167119c.ctex"]
 
 [params]
 

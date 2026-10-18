@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ddeh66a7lmpeh"
-path="res://.godot/imported/f_counter_unconnected.png-4a232f86cf98516a80b196c26ec64a68.ctex"
+path="res://.godot/imported/f_counter_unconnected.png-a8aaef8e7a8b4fca851e07f4c8a5d1fc.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/f_counter_unconnected.png"
-dest_files=["res://.godot/imported/f_counter_unconnected.png-4a232f86cf98516a80b196c26ec64a68.ctex"]
+source_file="res://assets/sprites/4x/f_counter_unconnected.png"
+dest_files=["res://.godot/imported/f_counter_unconnected.png-a8aaef8e7a8b4fca851e07f4c8a5d1fc.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b6a1vqu3u5grh"
-path="res://.godot/imported/t_tree_season_spring.png-6c97913bb16dbc58199840ee80b0496b.ctex"
+path="res://.godot/imported/t_tree_season_spring.png-ae3e1a5a4eabdf86e3d2399e164ff630.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/t_tree_season_spring.png"
-dest_files=["res://.godot/imported/t_tree_season_spring.png-6c97913bb16dbc58199840ee80b0496b.ctex"]
+source_file="res://assets/sprites/4x/t_tree_season_spring.png"
+dest_files=["res://.godot/imported/t_tree_season_spring.png-ae3e1a5a4eabdf86e3d2399e164ff630.ctex"]
 
 [params]
 

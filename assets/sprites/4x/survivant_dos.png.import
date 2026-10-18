@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bb554xmdmvj6d"
-path="res://.godot/imported/survivant_dos.png-1ace0c1ac2125e0712e42bf8b3351748.ctex"
+path="res://.godot/imported/survivant_dos.png-3a92f932bb645c9731fba876ce555465.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/survivant_dos.png"
-dest_files=["res://.godot/imported/survivant_dos.png-1ace0c1ac2125e0712e42bf8b3351748.ctex"]
+source_file="res://assets/sprites/4x/survivant_dos.png"
+dest_files=["res://.godot/imported/survivant_dos.png-3a92f932bb645c9731fba876ce555465.ctex"]
 
 [params]
 

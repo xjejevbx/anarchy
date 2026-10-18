@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cbedu3crbpcli"
-path="res://.godot/imported/t_wall_edge_ns.png-f22566ad569aabf3bbcc4578e9745f30.ctex"
+path="res://.godot/imported/t_wall_edge_ns.png-f81a7574d87415bc74534724bbe9f047.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/t_wall_edge_ns.png"
-dest_files=["res://.godot/imported/t_wall_edge_ns.png-f22566ad569aabf3bbcc4578e9745f30.ctex"]
+source_file="res://assets/sprites/4x/t_wall_edge_ns.png"
+dest_files=["res://.godot/imported/t_wall_edge_ns.png-f81a7574d87415bc74534724bbe9f047.ctex"]
 
 [params]
 

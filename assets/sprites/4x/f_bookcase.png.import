@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d03iabswsf1xy"
-path="res://.godot/imported/f_bookcase.png-22b43466d2a77cffc7fd58db330993aa.ctex"
+path="res://.godot/imported/f_bookcase.png-61055ef65d9fe00edb712c1075409c8d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/f_bookcase.png"
-dest_files=["res://.godot/imported/f_bookcase.png-22b43466d2a77cffc7fd58db330993aa.ctex"]
+source_file="res://assets/sprites/4x/f_bookcase.png"
+dest_files=["res://.godot/imported/f_bookcase.png-61055ef65d9fe00edb712c1075409c8d.ctex"]
 
 [params]
 

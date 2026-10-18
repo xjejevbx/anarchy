@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://4lhff5bvkfjn"
-path="res://.godot/imported/f_fridge_faceS.png-7e37dbe69a48756620a09d36fa4cbb47.ctex"
+path="res://.godot/imported/f_fridge_faceS.png-dcbb9af3688c082cb91abe8469095266.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/f_fridge_faceS.png"
-dest_files=["res://.godot/imported/f_fridge_faceS.png-7e37dbe69a48756620a09d36fa4cbb47.ctex"]
+source_file="res://assets/sprites/4x/f_fridge_faceS.png"
+dest_files=["res://.godot/imported/f_fridge_faceS.png-dcbb9af3688c082cb91abe8469095266.ctex"]
 
 [params]
 

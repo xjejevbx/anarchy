@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bwuvu0gsqnnu5"
-path="res://.godot/imported/pantalon_jean.png-8d3de7d0578625fb7565fdf03dba5571.ctex"
+path="res://.godot/imported/pantalon_jean.png-616f5d0dd762f75b970b090e5ce9064f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/pantalon_jean.png"
-dest_files=["res://.godot/imported/pantalon_jean.png-8d3de7d0578625fb7565fdf03dba5571.ctex"]
+source_file="res://assets/sprites/4x/pantalon_jean.png"
+dest_files=["res://.godot/imported/pantalon_jean.png-616f5d0dd762f75b970b090e5ce9064f.ctex"]
 
 [params]
 

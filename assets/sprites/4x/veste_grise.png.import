@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dahirmm6fxxv5"
-path="res://.godot/imported/veste_grise.png-cc10682397672866bee8e0607c31f840.ctex"
+path="res://.godot/imported/veste_grise.png-55d15e4068f0b9e9afa236ccde2be067.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/veste_grise.png"
-dest_files=["res://.godot/imported/veste_grise.png-cc10682397672866bee8e0607c31f840.ctex"]
+source_file="res://assets/sprites/4x/veste_grise.png"
+dest_files=["res://.godot/imported/veste_grise.png-55d15e4068f0b9e9afa236ccde2be067.ctex"]
 
 [params]
 

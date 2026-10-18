@@ -84,7 +84,7 @@ func _ready() -> void:
 	_view = Control.new()
 	_view.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_view.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_view.visible = false
 	_view.draw.connect(_draw_view)
 	add_child(_view)

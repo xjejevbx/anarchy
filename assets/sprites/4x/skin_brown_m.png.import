@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cu0nbfgfqxhxg"
-path="res://.godot/imported/skin_brown_m.png-b956654c99d27758c46903b7e37254b0.ctex"
+path="res://.godot/imported/skin_brown_m.png-2911036e39a3d877e1b39eb10c5be368.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/skin_brown_m.png"
-dest_files=["res://.godot/imported/skin_brown_m.png-b956654c99d27758c46903b7e37254b0.ctex"]
+source_file="res://assets/sprites/4x/skin_brown_m.png"
+dest_files=["res://.godot/imported/skin_brown_m.png-2911036e39a3d877e1b39eb10c5be368.ctex"]
 
 [params]
 

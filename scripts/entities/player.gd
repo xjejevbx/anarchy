@@ -31,7 +31,8 @@ const POSTURE_MOVE_STAMINA: Array[float] = [0.0, -1.0, 0.3]   # ajouté à la va
 const POSTURE_DETECT_FACTOR: Array[float] = [1.0, 1.5, 0.5]   # multiplie la portée de détection des monstres
 
 # --- Zoom de la caméra (touches + et -) ---
-const ZOOM_LEVELS: Array[float] = [0.5, 1.0, 1.5, 2.0, 3.0]
+# 1 case = 128 px (sprites x4) : 0.25 = l'ancien zoom 1.0 (cases de 32 px).
+const ZOOM_LEVELS: Array[float] = [0.125, 0.25, 0.375, 0.5, 0.75]
 const ZOOM_START_INDEX: int = 1
 
 # --- Déplacements automatiques ---
@@ -600,4 +601,4 @@ func _draw() -> void:
 	for slot: String in ItemDB.WORN_DRAW_ORDER:  # vêtements portés, par-dessus le mannequin
 		var worn := inventory.equipment.get(slot) as Item
 		if worn != null:
-			UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(worn.worn_tile(), "fg", 0), Vector2.ZERO, tint)
+			UlticaTiles.draw_sprite_anchored(self, UlticaTiles.pick_sprite(worn.worn_tile(), "fg", 0), Vector2.ZERO, World.TILE_SIZE, tint)

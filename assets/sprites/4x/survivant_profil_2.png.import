@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bwr3kauyle2x7"
-path="res://.godot/imported/survivant_profil_2.png-94ead77dfe844894dd6679a1bf859c3a.ctex"
+path="res://.godot/imported/survivant_profil_2.png-7f8013e003faf270017cc79111d86906.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/survivant_profil_2.png"
-dest_files=["res://.godot/imported/survivant_profil_2.png-94ead77dfe844894dd6679a1bf859c3a.ctex"]
+source_file="res://assets/sprites/4x/survivant_profil_2.png"
+dest_files=["res://.godot/imported/survivant_profil_2.png-7f8013e003faf270017cc79111d86906.ctex"]
 
 [params]
 

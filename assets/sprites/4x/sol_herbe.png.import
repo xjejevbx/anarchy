@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://di04ay05isufb"
-path="res://.godot/imported/sol_herbe.png-29abc0e4e3bb0f04993cc2d12d47682e.ctex"
+path="res://.godot/imported/sol_herbe.png-acfa02a280dc2d87d7dd93e00fe26751.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/sol_herbe.png"
-dest_files=["res://.godot/imported/sol_herbe.png-29abc0e4e3bb0f04993cc2d12d47682e.ctex"]
+source_file="res://assets/sprites/4x/sol_herbe.png"
+dest_files=["res://.godot/imported/sol_herbe.png-acfa02a280dc2d87d7dd93e00fe26751.ctex"]
 
 [params]
 

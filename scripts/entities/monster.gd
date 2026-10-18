@@ -98,6 +98,6 @@ func get_tooltip_text() -> String:
 func _draw() -> void:
 	UlticaTiles.draw_sprite(self, _bg_sprite, Vector2.ZERO)
 	UlticaTiles.draw_sprite(self, _fg_sprite, Vector2.ZERO)
-	# Barre de vie au-dessus de la tête (le sprite dépasse de 16 px au-dessus de la case).
+	# Barre de vie au-dessus de la tête (le sprite dépasse de 64 px au-dessus de la case).
 	var ratio: float = hp / data.max_hp
-	draw_rect(Rect2(2, -18, (World.TILE_SIZE - 4.0) * ratio, 3), Color.RED)
+	draw_rect(Rect2(8, -72, (World.TILE_SIZE - 16.0) * ratio, 12), Color.RED)

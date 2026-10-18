@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cai33ybyllpjq"
-path="res://.godot/imported/sneakers_m.png-9ed845ca7701d5172ed50ff9ab8ef62b.ctex"
+path="res://.godot/imported/sneakers_m.png-4934b9be7cf36995d3ab23aeb40bc092.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/sneakers_m.png"
-dest_files=["res://.godot/imported/sneakers_m.png-9ed845ca7701d5172ed50ff9ab8ef62b.ctex"]
+source_file="res://assets/sprites/4x/sneakers_m.png"
+dest_files=["res://.godot/imported/sneakers_m.png-4934b9be7cf36995d3ab23aeb40bc092.ctex"]
 
 [params]
 

@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://k155mkx5pshj"
-path="res://.godot/imported/oven_faceE.png-38bede0b74aaf853238da335840c4861.ctex"
+path="res://.godot/imported/oven_faceE.png-baa0a40a930919400cec5a18facf572d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/2x/oven_faceE.png"
-dest_files=["res://.godot/imported/oven_faceE.png-38bede0b74aaf853238da335840c4861.ctex"]
+source_file="res://assets/sprites/4x/oven_faceE.png"
+dest_files=["res://.godot/imported/oven_faceE.png-baa0a40a930919400cec5a18facf572d.ctex"]
 
 [params]
 

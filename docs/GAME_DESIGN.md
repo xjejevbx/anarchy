@@ -58,7 +58,7 @@ Tileset provisoire : UltiCa (CC BY-SA 3.0, voir assets/ultica/CREDITS.txt). Les 
 	(continuer) et « Tout annuler [U] » (rien ne change, aucune seconde perdue).
 - **Posture** (touche `|`) : Marche (référence), Sprint (pas ×0,7 de durée, stamina −1 par pas, les monstres te détectent de ×1,5 plus loin), Accroupi (pas ×1,5, stamina +0,3 par pas, détection ×0,5). Changer de posture est gratuit. Valeurs : constantes `POSTURE_*` de `player.gd`.
 - **Stats du joueur** : `data/stats.json` (Force, Dextérité, Intelligence, Perception, base 8) affichées dans l'écran personnage (`c`) ; elles n'ont pas encore d'effet. Pour en ajouter : une entrée dans le JSON.
-- **Zoom** : `+` / `-` (5 paliers de 0,5 à 3). Le champ de vision ne change pas : le brouillard couvre simplement plus de cases.
+- **Zoom** : `+` / `-` (5 paliers de 0,125 à 0,75, cases de 128 px). Le champ de vision ne change pas : le brouillard couvre simplement plus de cases.
 - **Double-clic** sur une case VISIBLE et praticable : déplacement automatique (un vrai pas par action, les monstres jouent). Il s'arrête si un ennemi apparaît, si le joueur est blessé, si le chemin est bloqué ou à la moindre touche.
 - **Alerte « Vous apercevez X »** : une fois par monstre ; elle revient seulement s'il est resté dans le brouillard au moins `World.ALERT_REARM_POINTS` (5 s). La marche automatique s'arrête, elle, à chaque apparition.
 - **Jauge de suspense** (PLUS TARD) : indicateur 0-100 % comme si quelqu'un nous observait et pariait sur nos chances de survie
