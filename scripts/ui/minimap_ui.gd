@@ -4,13 +4,18 @@ extends CanvasLayer
 ## sous le curseur. Elle montre aussi ce qui n'est pas exploré : c'est un outil pour régler la génération
 ## (data/worldgen/biomes.json), pas la carte du joueur. Écran modal : le jeu est en pause tant qu'elle est ouverte.
 ## La souris sert uniquement à lire (biome sous le curseur).
+##
+## Zoom : chaque palier = nombre de cases du monde par échantillon (pixel de l'image). Sous 1, une case occupe plusieurs
+## échantillons (jusqu'à 16 x 16 : on ne voit plus que 10 x 10 cases). À 1 case par échantillon ou moins, on dessine le TERRAIN réel
+## (murs, routes, mobilier...) généré par ChunkGenerator, et non plus seulement la nature du biome.
 
 # --- Réglages ---
 const SAMPLES: int = 160                       # échantillons par côté (160 x 160 = 25 600 calculs par rafraîchissement)
-const ZOOMS: Array[int] = [32, 64, 128, 256, 512, 1024, 2048, 4096]   # cases du monde par échantillon
-const START_ZOOM_INDEX: int = 1
-const ROUTES_MAX_ZOOM: int = 16                # routes entre villes affichées jusqu'à ce zoom (au-delà : trop de régions à calculer)
-const SETTLEMENTS_MAX_ZOOM = 256
+const ZOOMS: Array[float] = [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0, 1024.0, 2048.0, 4096.0]   # cases du monde par échantillon
+const START_ZOOM_INDEX: int = 10               # 64 cases par échantillon (comme avant)
+const TERRAIN_MAX_ZOOM: float = 1.0            # à ce zoom ou moins : terrain réel case par case
+const ROUTES_MAX_ZOOM: float = 16.0            # routes entre villes affichées jusqu'à ce zoom (au-delà : trop de régions à calculer)
+const SETTLEMENTS_MAX_ZOOM: float = 256.0
 const PAN_SAMPLES: int = 20                    # déplacement de la vue, en échantillons
 const FONT_SIZE: int = 16
 
@@ -21,6 +26,17 @@ const COLOR_TEXT: Color = Color(0.92, 0.92, 0.92)
 const COLOR_MUTED: Color = Color(0.55, 0.55, 0.6)
 const COLOR_HEADER: Color = Color(0.95, 0.8, 0.4)
 const COLOR_MARKER: Color = Color(1.0, 0.25, 0.2)
+
+# Couleurs de repli du terrain réel pour les terrains SANS champ "color" dans terrain.json (les autres : la couleur de nature du biome).
+const TERRAIN_COLORS: Dictionary = {
+	"t_tree": Color("#1f4f1f"),
+	"t_pavement": Color("#5b5f66"),
+	"t_pavement_y": Color("#c8b84a"),
+	"t_sidewalk": Color("#a8a8a8"),
+	"t_bridge": Color("#8a6a45"),
+	"t_wall_house": Color("#3a3a3a"),
+	"t_wall_arena": Color("#3a3a3a"),
+}
 
 var player: Player
 var seed_text: String = ""
@@ -67,27 +83,63 @@ func _close() -> void:
 	_view.visible = false
 
 
+## Case du monde sous l'échantillon (i, j) (entiers, 0..SAMPLES-1). Sous 1 case par échantillon, plusieurs échantillons voisins
+## tombent sur la même case (floori).
+func _cell_of_sample(i: int, j: int) -> Vector2i:
+	var zoom: float = ZOOMS[_zoom_index]
+	var half: int = SAMPLES / 2
+	return _center + Vector2i(floori((i - half) * zoom), floori((j - half) * zoom))
+
+
+## Couleur du terrain réel d'une case (chunk généré et mis en cache pour la durée du rafraîchissement).
+func _case_color(cell: Vector2i, world_seed: int, world_map: WorldMap, kind_colors: Array[Color], chunk_cache: Dictionary) -> Color:
+	var key: Vector3i = ChunkManager.key_of(cell)
+	if not chunk_cache.has(key):
+		chunk_cache[key] = {
+			"terrain": ChunkGenerator.generate(world_seed, key),
+			"furniture": ChunkGenerator.generate_furniture(world_seed, key),
+		}
+	var data: Dictionary = chunk_cache[key]
+	var index: int = ChunkManager.index_of(cell)
+	var furniture: int = (data["furniture"] as PackedByteArray)[index]
+	if furniture != 0:
+		return FurnitureDB.color_of(furniture)
+	var terrain: int = (data["terrain"] as PackedByteArray)[index]
+	if TerrainDB.has_color(terrain):
+		return TerrainDB.color_of(terrain)
+	var terrain_id: String = TerrainDB.id_of(terrain)
+	if TERRAIN_COLORS.has(terrain_id):
+		return TERRAIN_COLORS[terrain_id]
+	return kind_colors[world_map.kind_at(cell)]
+
+
 ## Recalcule l'image : une couleur par échantillon, selon la nature de la case au centre de l'échantillon.
 func _rebuild() -> void:
-	var world_map: WorldMap = WorldMap.for_seed(player.world.world_seed)
-	var settlement: SettlementMap = SettlementMap.for_seed(player.world.world_seed)
+	var world_seed: int = player.world.world_seed
+	var world_map: WorldMap = WorldMap.for_seed(world_seed)
+	var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
 	var colors: Array[Color] = []
 	for kind in WorldMap.kind_count():
 		colors.append(WorldMap.kind_color(kind))
-	var zoom: int = ZOOMS[_zoom_index]
-	var half: int = SAMPLES / 2
+	var zoom: float = ZOOMS[_zoom_index]
+	var case_level: bool = zoom <= TERRAIN_MAX_ZOOM
 	var type_cache: Dictionary = {}  # cellule macro -> type (rue, parcelle, jardin)
+	var chunk_cache: Dictionary = {} # clé de chunk -> {terrain, furniture} (zoom case par case)
 	var image := Image.create(SAMPLES, SAMPLES, false, Image.FORMAT_RGB8)
 	for j in SAMPLES:
 		for i in SAMPLES:
-			var cell := _center + Vector2i((i - half) * zoom, (j - half) * zoom)
-			var color: Color = colors[world_map.kind_at(cell)]
-			var coord := Vector2i(floori(float(cell.x) / Chunk.SIZE), floori(float(cell.y) / Chunk.SIZE))
-			if not type_cache.has(coord):
-				type_cache[coord] = settlement.cell_type(coord, zoom <= SETTLEMENTS_MAX_ZOOM)
-			var cell_type: int = type_cache[coord]
-			if cell_type != SettlementMap.CellType.NONE:
-				color = SettlementMap.overlay_color(cell_type)  # les villes se dessinent par-dessus les biomes
+			var cell: Vector2i = _cell_of_sample(i, j)
+			var color: Color
+			if case_level:
+				color = _case_color(cell, world_seed, world_map, colors, chunk_cache)
+			else:
+				color = colors[world_map.kind_at(cell)]
+				var coord := Vector2i(floori(float(cell.x) / Chunk.SIZE), floori(float(cell.y) / Chunk.SIZE))
+				if not type_cache.has(coord):
+					type_cache[coord] = settlement.cell_type(coord, zoom <= SETTLEMENTS_MAX_ZOOM)
+				var cell_type: int = type_cache[coord]
+				if cell_type != SettlementMap.CellType.NONE:
+					color = SettlementMap.overlay_color(cell_type)  # les villes se dessinent par-dessus les biomes
 			image.set_pixel(i, j, color)
 	_texture = ImageTexture.create_from_image(image)
 	_view.queue_redraw()
@@ -106,7 +158,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if key == KEY_ESCAPE or KeyUtil.is_letter(key_event, "m"):
 		_close()
 		return
-	var step: int = PAN_SAMPLES * ZOOMS[_zoom_index]
+	var step: int = maxi(roundi(PAN_SAMPLES * ZOOMS[_zoom_index]), 1)
 	if key == KEY_KP_ADD or key == KEY_EQUAL:
 		_zoom_index = maxi(_zoom_index - 1, 0)
 	elif key == KEY_KP_SUBTRACT or key == KEY_MINUS:
@@ -134,7 +186,7 @@ func _process(_delta: float) -> void:
 	var cell: Vector2i = _hover_cell
 	if inside:
 		var sample: Vector2 = (mouse - _map_rect.position) / _map_rect.size * SAMPLES
-		cell = _center + Vector2i(floori(sample.x - SAMPLES / 2.0), floori(sample.y - SAMPLES / 2.0)) * ZOOMS[_zoom_index]
+		cell = _cell_of_sample(clampi(floori(sample.x), 0, SAMPLES - 1), clampi(floori(sample.y), 0, SAMPLES - 1))
 	if inside != _hovering or (inside and cell != _hover_cell):
 		_hovering = inside
 		_hover_cell = cell
@@ -155,11 +207,13 @@ func _draw_view() -> void:
 	_view.draw_rect(panel, COLOR_BORDER, false, 2.0)
 
 	# En-tête : seed, échelle, joueur
-	var zoom: int = ZOOMS[_zoom_index]
-	var span: int = SAMPLES * zoom
+	var zoom: float = ZOOMS[_zoom_index]
+	var span: int = maxi(roundi(SAMPLES * zoom), 1)
+	var scale_text: String = "1 pixel = %d cases" % roundi(zoom) if zoom >= 1.0 else "1 case = %d x %d pixels" % [roundi(1.0 / zoom), roundi(1.0 / zoom)]
 	_view.draw_string(font, panel.position + Vector2(16, 28), "CARTE DU MONDE (debug)", HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE + 4, COLOR_HEADER)
-	_view.draw_string(font, panel.position + Vector2(16, 52), "Seed : « %s » (%d)   —   1 pixel = %d cases, la carte couvre %d × %d cases (%d chunks de côté)" % \
-		[seed_text, player.world.world_seed, zoom, span, span, ceili(float(span) / Chunk.SIZE)],
+	_view.draw_string(font, panel.position + Vector2(16, 52), "Seed : « %s » (%d)   —   %s, la carte couvre %d × %d cases (%.1f chunks de côté)%s" % \
+		[seed_text, player.world.world_seed, scale_text, span, span, float(span) / Chunk.SIZE,
+		"   —   terrain réel" if zoom <= TERRAIN_MAX_ZOOM else ""],
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, FONT_SIZE - 2, COLOR_TEXT)
 	var here: Vector2i = player.grid_pos
 	var here_chunk: Vector3i = ChunkManager.key_of(here)
@@ -174,11 +228,23 @@ func _draw_view() -> void:
 	_map_rect = Rect2(panel.position + Vector2(16, 90), map_size)
 	_view.draw_texture_rect(_texture, _map_rect, false)
 	_view.draw_rect(_map_rect, COLOR_BORDER, false, 1.0)
-	var marker_offset: Vector2 = Vector2(here - _center) / float(zoom)
-	var marker: Vector2 = _map_rect.position + (Vector2(SAMPLES, SAMPLES) / 2.0 + marker_offset + Vector2(0.5, 0.5)) * pixel_scale
+	# Position du joueur : centre de sa case (une case = 1 / zoom échantillons de large).
+	var marker_sample: Vector2 = Vector2(SAMPLES, SAMPLES) / 2.0 + (Vector2(here - _center) + Vector2(0.5, 0.5)) / zoom
+	var marker: Vector2 = _map_rect.position + marker_sample * pixel_scale
 	if _map_rect.grow(2).has_point(marker):
-		_view.draw_circle(marker, 5.0, COLOR_MARKER)
-		_view.draw_circle(marker, 5.0, Color.WHITE, false, 1.5)
+		if zoom < 1.0:  # case agrandie : on l'entoure au lieu de la couvrir
+			var case_px: float = pixel_scale / zoom
+			_view.draw_rect(Rect2(marker - Vector2(case_px, case_px) / 2.0, Vector2(case_px, case_px)), COLOR_MARKER, false, 3.0)
+		else:
+			_view.draw_circle(marker, 5.0, COLOR_MARKER)
+			_view.draw_circle(marker, 5.0, Color.WHITE, false, 1.5)
+	# Case sous le curseur (zoom fort) : contour blanc.
+	if _hovering and zoom < 1.0:
+		var hover_sample: Vector2 = Vector2(SAMPLES, SAMPLES) / 2.0 + Vector2(_hover_cell - _center) / zoom
+		var hover_pos: Vector2 = _map_rect.position + hover_sample * pixel_scale
+		var hover_px: float = pixel_scale / zoom
+		if _map_rect.encloses(Rect2(hover_pos, Vector2(hover_px, hover_px))):
+			_view.draw_rect(Rect2(hover_pos, Vector2(hover_px, hover_px)), Color.WHITE, false, 2.0)
 
 	# Légende
 	var legend_x: float = _map_rect.end.x + 24.0
@@ -205,5 +271,5 @@ func _draw_view() -> void:
 		if not hover_special.is_empty():
 			_view.draw_string(font, Vector2(legend_x, y + 80), settlement.specials().place_name(String(hover_special["place"])), HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_HEADER)
 	_view.draw_string(font, Vector2(panel.position.x + 16, panel.end.y - 14),
-		"+/− : zoom   8/2/4/6 (ou flèches) : déplacer la vue   5 : recentrer   m / Échap : fermer",
+		"+/− : zoom (jusqu'à ~10 cases)   8/2/4/6 (ou flèches) : déplacer la vue   5 : recentrer   m / Échap : fermer",
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, 14, COLOR_MUTED)

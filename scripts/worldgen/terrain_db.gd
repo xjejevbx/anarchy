@@ -97,6 +97,12 @@ static func has_id(id: String) -> bool:
 	return _index.has(id)
 
 
+## Le terrain a-t-il un champ "color" dans terrain.json ? (sinon color_of renvoie le magenta de repli)
+static func has_color(index: int) -> bool:
+	_ensure_loaded()
+	return index >= 0 and index < _defs.size() and _defs[index].has("color")
+
+
 ## Couleur de repli (champ "color" de terrain.json), dessinée quand la tuile n'a pas de sprite dans le pack.
 static func color_of(index: int) -> Color:
 	_ensure_loaded()
