@@ -203,7 +203,7 @@ static func _overlaps(towns: Array, center: Vector2i, radius: int) -> bool:
 
 static func _is_buildable(kind: int) -> bool:
 	return kind == WorldMap.Kind.PLAIN or kind == WorldMap.Kind.FOREST \
-		or kind == WorldMap.Kind.SHORE_LAKE or kind == WorldMap.Kind.BANK_RIVER
+		or kind == WorldMap.Kind.SHORE_LAKE or kind == WorldMap.Kind.BANK_RIVER \
 		or WorldMap.is_habitable_land(kind)
 
 static func _is_lake(kind: int) -> bool:

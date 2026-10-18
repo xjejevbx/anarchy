@@ -2,6 +2,6 @@
 .godot/
 /android/
 /CDDA-tilesets/
-/assets/sprites/*
+/assets/*.png
 *.tmp
 *.uid
