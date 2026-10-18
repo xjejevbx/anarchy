@@ -77,7 +77,7 @@ Tileset provisoire : UltiCa (CC BY-SA 3.0, voir assets/ultica/CREDITS.txt). Les 
 la même touche avec Maj s'écrit en MAJUSCULE (`U`). Le joueur fait la différence. Les touches spéciales gardent leur nom (Entrée, Échap).
 Déplacement : pavé numérique (8/2/4/6, diagonales 7/9/1/3) **ou flèches** (= 8/2/4/6, orthogonal) ; espace / `.` / `5` pavé = attendre.
 Les flèches valent aussi 8/2/4/6 dans les menus (naviguer, sélectionner, valider, choisir la case).
-`m` = carte du monde de DEBUG (montre aussi l'inexploré) : `+`/`-` zoom, 8/2/4/6 ou flèches pour déplacer la vue, `5` recentrer, `m`/Échap fermer
+`m` = carte du monde de DEBUG (montre aussi l'inexploré) : `+`/`-` zoom, 8/2/4/6 ou flèches pour déplacer la vue et 7/9/1/3 en diagonale., `5` recentrer, `m`/Échap fermer
 (`m` et `w` sont détectés par le CARACTÈRE tapé, pas par la position : `KeyUtil.is_letter`, indépendant de la disposition AZERTY / QWERTY). `i` = inventaire. `g` = ramasser : s'il y a des objets sur une seule case à portée, sa liste s'ouvre ; sinon un overlay
 affiche les chiffres 1-9 (disposition du pavé) sur les cases contenant des objets. `G` = les 9 cases dans une seule liste.
 Menus : 8/2 (ou flèches) naviguer, Échap fermer. **Ramassage (g) et inventaire (i) sont deux écrans séparés** : on ne passe
