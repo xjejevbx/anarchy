@@ -7,7 +7,7 @@ extends CanvasLayer
 
 # --- Réglages ---
 const SAMPLES: int = 160                       # échantillons par côté (160 x 160 = 25 600 calculs par rafraîchissement)
-const ZOOMS: Array[int] = [4, 8, 16, 32, 64]   # cases du monde par échantillon
+const ZOOMS: Array[int] = [32, 64, 128, 256, 512]   # cases du monde par échantillon
 const START_ZOOM_INDEX: int = 1
 const ROUTES_MAX_ZOOM: int = 16                # routes entre villes affichées jusqu'à ce zoom (au-delà : trop de régions à calculer)
 const PAN_SAMPLES: int = 20                    # déplacement de la vue, en échantillons

@@ -13,7 +13,7 @@ extends Node2D
 ## Les nœuds sont positionnés sur le coin haut-gauche de leur case ; UlticaTiles applique
 ## les décalages de chaque sprite (personnages 32x48, arbres 96x96...).
 
-const TILE_SIZE: int = 32
+const TILE_SIZE: int = 128
 const ALERT_REARM_POINTS: float = 5.0    # secondes hors de vue (dans le brouillard) avant qu'un monstre puisse être signalé à nouveau ; 0 = dès qu'il sort de vue
 const VIEW_RADIUS: int = 20              # portée de vue en cases (plein jour pour l'instant)
 
