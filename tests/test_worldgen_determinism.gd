@@ -1,11 +1,13 @@
 extends SceneTree
-## Test de la génération du monde (docs/WORLD_GEN.md §3 et §5.1, jalons 1-2). À lancer à la demande :
+## Test de la génération du monde (docs/WORLD_GEN.md §3 et §5.1, jalons 1-5 et 9). À lancer à la demande :
 ##   godot --headless --path <projet> --script res://tests/test_worldgen_determinism.gd
 ## Code de sortie 0 = tout est bon. Affiche aussi la répartition des biomes (pour régler data/worldgen/biomes.json).
 
 const RANGE: int = 4          # chunks de -4 à +4 dans les deux axes (81 chunks)
 const SURVEY_HALF: int = 3000 # relevé des biomes : de -3000 à +3000 cases
 const SURVEY_STEP: int = 40   # un échantillon toutes les 40 cases (150 x 150)
+const PLANET_HALF: int = 60000 # relevé planétaire (jalon 9) : de -60000 à +60000 cases
+const PLANET_STEP: int = 500   # un échantillon toutes les 500 cases (240 x 240)
 
 var _failures: int = 0
 
@@ -18,6 +20,9 @@ func _initialize() -> void:
 	for y in range(-RANGE, RANGE + 1):
 		for x in range(-RANGE, RANGE + 1):
 			keys.append(Vector3i(x, y, 0))
+
+	# --- Ordre des natures de case : WorldMap.Kind = RouteMap.KIND_IDS = "kinds" de biomes.json ---
+	_check_kind_order()
 
 	# --- Déterminisme des chunks (3 ordres de génération, 2 passes) ---
 	for world_seed in seeds:
@@ -48,6 +53,8 @@ func _initialize() -> void:
 		var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
 		var spawn: Vector2i = settlement.spawn_cell()
 		_check(spawn == SettlementMap.new(world_seed).spawn_cell(), "seed %d : départ identique sur une instance neuve" % world_seed)
+		var spawn_kind: int = WorldMap.for_seed(world_seed).kind_at(spawn)
+		_check(not WorldMap.is_deep_water(spawn_kind), "seed %d : départ hors de l'eau profonde et de l'océan (%s)" % [world_seed, WorldMap.kind_name(spawn_kind)])
 		var spawn_chunk: Vector3i = ChunkManager.key_of(spawn)
 		var data: PackedByteArray = ChunkGenerator.generate(world_seed, spawn_chunk)
 		var terrain: int = data[ChunkManager.index_of(spawn)]
@@ -124,6 +131,7 @@ func _initialize() -> void:
 		var unlinked: int = 0
 		var bad_paths: int = 0
 		var path_on_lake: int = 0
+		var path_on_ocean: int = 0
 		for ry in range(-half_regions, half_regions + 1):
 			for rx in range(-half_regions, half_regions + 1):
 				for t: Dictionary in settlement.towns_in_region(Vector2i(rx, ry)):
@@ -144,8 +152,11 @@ func _initialize() -> void:
 							var nature: int = world_map.cell_kind(path[i])
 							if nature == WorldMap.Kind.LAKE_DEEP or nature == WorldMap.Kind.LAKE_SHALLOW:
 								path_on_lake += 1
+							if WorldMap.is_ocean(nature):
+								path_on_ocean += 1
 		_check(unlinked == 0, "seed %d : toute ville reliée à au moins une autre (%d villes, %d isolées)" % [world_seed, total_towns, unlinked])
 		_check(bad_paths == 0, "seed %d : chaque route va d'un centre de ville à l'autre, case par case (%d anomalies)" % [world_seed, bad_paths])
+		_check(path_on_ocean == 0, "seed %d : aucune route sur l'océan" % world_seed)
 		var route_cells: int = 0
 		var bad_cells: int = 0
 		var isolated_cells: int = 0
@@ -285,7 +296,7 @@ func _initialize() -> void:
 		_check(special_reference == _special_prints(SettlementMap.new(world_seed), special_by_distance), "seed %d : lieux identiques, ordre par distance" % world_seed)
 		_check(special_reference == _special_prints(place_settlement, special_regions), "seed %d : lieux identiques sur l'instance partagée" % world_seed)
 
-	# --- Répartition des biomes (relevé grossier) : rivières, gués, lacs, forêts, plaines, marais ---
+	# --- Répartition des biomes autour de l'origine (relevé grossier) : rivières, gués, lacs, forêts, plaines, marais ---
 	var totals: Array[int] = []
 	totals.resize(WorldMap.kind_count())
 	for world_seed in seeds:
@@ -299,7 +310,7 @@ func _initialize() -> void:
 				samples += 1
 		var water: int = counts[WorldMap.Kind.LAKE_DEEP] + counts[WorldMap.Kind.LAKE_SHALLOW] + counts[WorldMap.Kind.RIVER_DEEP] + counts[WorldMap.Kind.RIVER_SHALLOW]
 		var water_ratio: float = float(water) / float(samples)
-		_check(water_ratio > 0.01 and water_ratio < 0.60, "seed %d : eau = %.1f %% de la surface (attendu 1 à 60 %%)" % [world_seed, water_ratio * 100.0])
+		_check(water_ratio > 0.01 and water_ratio < 0.60, "seed %d : lacs et rivières = %.1f %% de la surface autour de l'origine (attendu 1 à 60 %%)" % [world_seed, water_ratio * 100.0])
 		var line: String = "       répartition :"
 		for kind in WorldMap.kind_count():
 			totals[kind] += counts[kind]
@@ -307,6 +318,9 @@ func _initialize() -> void:
 		print(line)
 	for kind in [WorldMap.Kind.PLAIN, WorldMap.Kind.FOREST, WorldMap.Kind.SWAMP, WorldMap.Kind.LAKE_DEEP, WorldMap.Kind.RIVER_DEEP, WorldMap.Kind.RIVER_SHALLOW]:
 		_check(totals[kind] > 0, "biome présent dans le relevé : %s" % WorldMap.kind_name(kind))
+
+	# --- Planète (jalon 9) : océans et climats sur un relevé de 120 000 x 120 000 cases ---
+	_check_planet(seeds)
 
 	# --- Terrains : l'eau profonde bloque, l'eau peu profonde se traverse ---
 	_check(not TerrainDB.is_walkable(TerrainDB.index_of("t_water_dp")), "eau profonde non praticable")
@@ -340,6 +354,70 @@ func _route_prints(settlement: SettlementMap, regions: Array[Vector2i]) -> Dicti
 	for region in regions:
 		result[region] = settlement.routes().region_fingerprint(region)
 	return result
+
+
+## Les trois listes de natures de case doivent avoir EXACTEMENT le même ordre : l'énumération WorldMap.Kind, RouteMap.KIND_IDS
+## (coûts de route, biomes de specials.json) et "kinds" de biomes.json (couleurs, noms). Un décalage fausse tout sans erreur visible.
+func _check_kind_order() -> void:
+	var enum_ids: Array[String] = []
+	for kind_name: String in WorldMap.Kind.keys():
+		enum_ids.append(kind_name.to_lower())
+	_check(enum_ids == RouteMap.KIND_IDS, "RouteMap.KIND_IDS suit l'ordre de WorldMap.Kind")
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/worldgen/biomes.json"))
+	var json_ids: Array[String] = []
+	if typeof(parsed) == TYPE_DICTIONARY:
+		for entry: Dictionary in parsed.get("kinds", []):
+			json_ids.append(String(entry.get("id", "")))
+	_check(json_ids == enum_ids, "\"kinds\" de biomes.json suit l'ordre de WorldMap.Kind")
+	_check(WorldMap.kind_count() == enum_ids.size(), "WorldMap.kind_count() = nombre de natures de case (%d)" % enum_ids.size())
+	var unknown: Array[String] = []
+	for id: String in SettlementMap.route_config().get("costs", {}):
+		if not enum_ids.has(id):
+			unknown.append(id)
+	_check(unknown.is_empty(), "towns.json : tous les coûts de route portent sur une nature connue %s" % str(unknown))
+	_check(RouteMap.KIND_IDS.find("plain") == WorldMap.Kind.PLAIN and RouteMap.KIND_IDS.find("forest") == WorldMap.Kind.FOREST,
+		"plaine et forêt (biomes des lieux spéciaux) ont le bon indice")
+
+
+## Relevé à grande échelle (jalon 9) : l'océan existe, la terre aussi, et les trois familles de climat (tempéré, chaud, froid) apparaissent
+## sur l'ensemble des seeds. Les parts d'océan sont AFFICHÉES pour régler biomes.json (la cible de WORLD_GEN.md §16 : 40 à 75 %) ;
+## le contrôle reste large (5 à 95 %) tant que ces réglages n'ont pas été validés à l'œil avec la mini-carte.
+func _check_planet(seeds: Array[int]) -> void:
+	var temperate_total: int = 0
+	var hot_total: int = 0
+	var cold_total: int = 0
+	for world_seed in seeds:
+		var world_map: WorldMap = WorldMap.for_seed(world_seed)
+		var ocean: int = 0
+		var land: int = 0
+		var temperate: int = 0
+		var hot: int = 0
+		var cold: int = 0
+		for y in range(-PLANET_HALF, PLANET_HALF, PLANET_STEP):
+			for x in range(-PLANET_HALF, PLANET_HALF, PLANET_STEP):
+				var kind: int = world_map.kind_at(Vector2i(x, y))
+				if WorldMap.is_ocean(kind):
+					ocean += 1
+					continue
+				land += 1
+				match kind:
+					WorldMap.Kind.JUNGLE, WorldMap.Kind.DESERT, WorldMap.Kind.SAVANNA:
+						hot += 1
+					WorldMap.Kind.TUNDRA, WorldMap.Kind.TAIGA:
+						cold += 1
+					WorldMap.Kind.PLAIN, WorldMap.Kind.FOREST, WorldMap.Kind.SWAMP:
+						temperate += 1
+		var total: int = ocean + land
+		var ocean_ratio: float = float(ocean) / float(total)
+		print("       planète seed %d : océan %.1f %% ; terre : tempéré %d, chaud %d, froid %d (échantillons)" % [world_seed, ocean_ratio * 100.0, temperate, hot, cold])
+		_check(ocean_ratio > 0.05 and ocean_ratio < 0.95, "seed %d : océan = %.1f %% de la planète (contrôle large 5 à 95 %% ; cible 40 à 75 %%)" % [world_seed, ocean_ratio * 100.0])
+		_check(land > 0, "seed %d : il y a de la terre" % world_seed)
+		temperate_total += temperate
+		hot_total += hot
+		cold_total += cold
+	_check(temperate_total > 0, "climat tempéré présent (plaine, forêt ou marais)")
+	_check(hot_total > 0, "climat chaud présent (jungle, désert ou savane)")
+	_check(cold_total > 0, "climat froid présent (toundra ou taïga)")
 
 
 ## Contrôle d'une maison générée (chunk réel) : porte de façade côté rue, case devant la porte praticable, mobilier présent.

@@ -39,7 +39,7 @@ laboratoires, tour radio, etc., avec leur loot et leurs monstres.
 
 | Notion | Taille | Détail |
 |---|---|---|
-| Case | 1 m | unité de jeu actuelle (`TILE_SIZE = 32` px) |
+| Case | 1 m | unité de jeu actuelle (`TILE_SIZE = 128` px) |
 | Cellule macro = **chunk** | 24 × 24 cases | une cellule macro a un type (forêt, route, maison…) ; son chunk est généré à partir de ce type |
 | Région | 32 × 32 cellules (768 × 768 cases) | unité de calcul des villes, routes et lieux spéciaux |
 
@@ -226,8 +226,8 @@ Météo, saisons, cycle jour/nuit détaillé et éclairage, hordes errantes, vé
   (herbe + arbres à 12 % par hachage de case, zone de départ dégagée), `Chunk`, `ChunkManager`, `PathFinder`.
 - Le terrain est une fonction pure de `(seed, clé de chunk, mode)`. Les arbres restent des sprites triés par Y ; le sol est dessiné
   par chunk. Les cases vues survivent au déchargement d'un chunk (elles seront sauvegardées au jalon 7).
-- Réglages : `ChunkManager` (`GEN_RADIUS` 3, `NEAR_RADIUS` 2, `KEEP_RADIUS` 4, `CHUNKS_PER_FRAME` 2), `PathFinder` (`MAX_EXPANSIONS` 1500,
-  `MAX_RADIUS` 40), `FogLayer.DRAW_RADIUS` 40, `ChunkGenerator.TREE_DENSITY` 0,12, `main.gd` (`WORLD_SEED_TEXT`, `USE_TEST_ARENA`).
+- Réglages : `ChunkManager` (`GEN_RADIUS` 3, `NEAR_RADIUS` 2, `KEEP_RADIUS` 4, `CHUNKS_PER_FRAME` 1), `PathFinder` (`MAX_EXPANSIONS` 1500,
+  `MAX_RADIUS` 40),`ChunkGenerator.TREE_DENSITY 0,12` (remplacé par `ARENA_TREE_DENSITY` pour l'arène et `biomes.json` pour le monde). `main.gd` (`WORLD_SEED_TEXT`, `USE_TEST_ARENA`).
 - Test : `tests/test_worldgen_determinism.gd` (ordres de génération différents, seeds différentes, densité, départ dégagé, arène).
 - Limites connues : objets au sol et monstres restent globaux (pas encore rattachés aux chunks : jalons 6-7) ; un monstre hors des
   chunks chargés reste immobile ; le point de départ (5, 5) est provisoire.
@@ -314,7 +314,11 @@ Météo, saisons, cycle jour/nuit détaillé et éclairage, hordes errantes, vé
 ## 16. Monde « planétaire » et extension des structures (jalons 9 à 15)
 
 ### Jalon 9 — Géographie planétaire (océans, continents, climats, relief)
-
+**État : fait, SANS relief.** Construit : `continent` (avec déformation de domaine et relèvement autour de l'origine), `temperature`
+ (bandes de latitude), humidité liée à la côte, natures `ocean_deep/shallow, beach, tundra, taiga, desert, savanna, jungle`, `kind_at` avec
+   sortie rapide en mer, zooms de mini-carte jusqu'à 4096. **Non construit (reporté)** : `elevation`, `cliff`, `hills`, `mountain`, `snow`, cols,
+   ponts entre continents, villes côtières / ports, routes limitées à un continent. Les villes évitent déjà l'océan, le désert et la plage
+   (`WorldMap.is_habitable_land`). L'ordre de `Kind` / `kinds` / `RouteMap.KIND_IDS` est identique et vérifié par le test. »
 **Principe** : `WorldMap` reste une fonction pure de (seed, coordonnées), mais on ajoute des champs à GRANDE échelle au-dessus des
 champs actuels (altitude, humidité, rivière). Le monde reste infini ; il est organisé comme une Terre en miniature.
 
@@ -335,10 +339,7 @@ champs actuels (altitude, humidité, rivière). Le monde reste infini ; il est o
 - `river` / `ford` existants : les rivières naissent en montagne et se dirigent vers les côtes (approximation : le bruit actuel est conservé,
   atténué en zone désertique ; pas de vraie hydrologie).
 
-**Nouvelles natures de case** (ajoutées À LA FIN de `WorldMap.Kind`, de `kinds` dans `biomes.json` ET de `RouteMap.KIND_IDS` : un seul ordre) :
-`ocean_deep, ocean_shallow` (plateau continental), `beach, cliff` (falaise, infranchissable sauf rampes), `hills, mountain`
-(roche, infranchissable en altitude, avec cols), `snow, tundra, taiga, desert, savanna, jungle`.
-Plaine / forêt / marais existants restent pour le climat tempéré.
+**Nouvelles natures de case**: `plain, forest, swamp, lake_deep, lake_shallow, river_deep, river_shallow, shore_lake, bank_river, ocean_deep, ocean_shallow, beach, tundra, taiga, desert, savanna, jungle`.
 
 **Règle de climat** (entiers + seuils en données) : (température, humidité, altitude) -> nature.
 | | humide | moyen | sec |

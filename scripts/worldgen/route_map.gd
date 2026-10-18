@@ -12,9 +12,10 @@ extends RefCounted
 ## Calcul à la demande, mis en cache par arête (clé = les deux centres) et par région (cellules de route situées dans la région).
 ## Réglages : section "routes" de data/worldgen/towns.json.
 
-# Même ORDRE que WorldMap.Kind et "kinds" de biomes.json.
-const KIND_IDS: Array[String] = ["ocean_deep", "ocean_shallow", "beach", "tundra", "taiga", "desert", "savanna", "jungle", "plain", "forest", "swamp", "lake_deep", "lake_shallow", "river_deep", "river_shallow",
-	"shore_lake", "bank_river"]
+# MÊME ORDRE que l'énumération WorldMap.Kind ET que "kinds" de biomes.json (ajouter à la FIN, partout). Les coûts sont indexés par
+# WorldMap.Kind et SpecialMap retrouve les biomes par leur position ici : un ordre différent décale tout (le test le vérifie).
+const KIND_IDS: Array[String] = ["plain", "forest", "swamp", "lake_deep", "lake_shallow", "river_deep", "river_shallow",
+	"shore_lake", "bank_river", "ocean_deep", "ocean_shallow", "beach", "tundra", "taiga", "desert", "savanna", "jungle"]
 const DIRS: Array[Vector2i] = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
 const INFINITE: int = 1 << 30
 const SEQ_BITS: int = 24   # clé de la file : (f << 40) | (h << 24) | ordre d'insertion (départage déterministe, tracé plutôt droit)
