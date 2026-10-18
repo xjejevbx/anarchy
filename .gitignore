@@ -3,3 +3,5 @@
 /android/
 /CDDA-tilesets/
 /assets/sprites/*
+*.tmp
+*.uid
