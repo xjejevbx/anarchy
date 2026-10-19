@@ -4,7 +4,7 @@ extends Node2D
 # --- Réglages de la partie (la saisie de la seed viendra avec le menu de création) ---
 const WORLD_SEED_TEXT: String = "cataclysme"  # nombre ou texte : même seed = même monde
 const USE_TEST_ARENA: bool = false           # true : ancienne carte fermée 60x40 (debug)
-const SPAWN_BESTIARY: bool = true            # true : tous les types de monstres près du départ (debug) ; false : 3 zombies seulement 
+const SPAWN_BESTIARY: bool = false            # true : tous les types de monstres près du départ (debug) ; false : 3 zombies seulement 
 # Scénario de départ (le menu de création de partie viendra plus tard) :
 #   "default" : en lisière de la ville la plus proche de l'origine (sinon pleine nature)
 #   "island"  : perdu sur une petite île (SettlementMap.island_spawn_cell ; repli sur "default" s'il n'y en a pas près de l'origine)

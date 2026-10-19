@@ -69,7 +69,7 @@ func take_turn() -> float:
 				has_target = false  # arrivé là où on a vu le joueur pour la dernière fois : plus personne
 				return IDLE_COST
 			return _move_toward(target_cell)
-		return IDLE_COST
+	return IDLE_COST
 
 
 ## Le monstre sait où chercher (il a vu le joueur, ou s'est fait frapper). Les membres d'une meute proche le savent aussi.

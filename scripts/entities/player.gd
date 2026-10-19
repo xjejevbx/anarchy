@@ -133,7 +133,6 @@ func _ready() -> void:
 	_emit_stamina()
 	_emit_load()
 	_emit_health()
-	EventBus.health_changed.emit(hp, HP_MAX)
 	EventBus.posture_changed.emit(posture_name())
 	world.update_fov()  # vue initiale (sans ça, tout reste noir jusqu'au premier pas)
 
