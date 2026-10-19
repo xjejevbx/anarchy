@@ -1,13 +1,14 @@
 class_name MapgenDB
 extends RefCounted
-## Plans de maisons (jalon 3c) et de lieux spéciaux (jalon 4), chargés depuis res://data/worldgen/mapgen/houses.json puis places.json.
+## Plans de maisons (jalon 3c) et de lieux spéciaux (jalons 4, 5 et 10), chargés depuis res://data/worldgen/mapgen/houses.json puis places.json,
+## big_places.json et access_places.json.
 ## Les plans de MAISON viennent en premier (indices 0 à plan_count() - 1, tirés par pick()) ; les plans de lieux suivent (retrouvés par plan_by_id()).
 ## Chaque plan (24 x 24 caractères, façade au SUD) est compilé une fois : un octet de terrain (index TerrainDB, ou NATURE =
 ## « garder le terrain naturel ») et un octet de mobilier (index FurnitureDB) par case. Les erreurs de plan sont listées par
 ## errors() et affichées au chargement : un plan invalide est ignoré, le jeu continue.
 
 const PATHS: Array[String] = ["res://data/worldgen/mapgen/houses.json", "res://data/worldgen/mapgen/places.json",
-	"res://data/worldgen/mapgen/big_places.json"]
+	"res://data/worldgen/mapgen/big_places.json", "res://data/worldgen/mapgen/access_places.json"]
 const NATURE: int = 255
 const SIZE: int = 24
 
@@ -117,10 +118,15 @@ static func plan_by_id(id: String) -> int:
 ## Le plan contient-il une porte ?
 static func has_door(plan: int) -> bool:
 	_ensure_loaded()
-	var door: int = TerrainDB.index_of("t_door")
+	return has_terrain(plan, TerrainDB.index_of("t_door"))
+
+
+## Le plan contient-il au moins une case de ce terrain (index TerrainDB) ? Sert à vérifier les héliports et les jetées des lieux.
+static func has_terrain(plan: int, terrain_index: int) -> bool:
+	_ensure_loaded()
 	var terrain: PackedByteArray = _plans[plan]["terrain"]
 	for i in terrain.size():
-		if terrain[i] == door:
+		if terrain[i] == terrain_index:
 			return true
 	return false
 

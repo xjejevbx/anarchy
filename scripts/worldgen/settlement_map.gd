@@ -9,6 +9,9 @@ extends RefCounted
 ## (LOT : futures maisons), les autres des jardins (YARD). Réglages dans data/worldgen/towns.json.
 ## Jalon 3b : les routes entre villes (RouteMap) sont aussi des cellules ROAD, hors de l'emprise des villes.
 ## Jalon 9 (correctif) : une rue ne traverse ni un lac ni l'océan (voir _is_water_body) ; une ville côtière a donc des rues coupées par la mer.
+## Jalon 10 : pistes (SpecialMap) qui relient un lieu à une route : ce ne sont PAS des CellType (cell_type() les ignore) mais des
+## cellules à part (track_mask / track_terrain) ; une route qui reçoit une piste y gagne un embranchement (road_mask). Les villes
+## ne se fondent jamais sur une petite île. Départ « perdu sur une île » : island_spawn_cell().
 
 const PATH: String = "res://data/worldgen/towns.json"
 
@@ -33,7 +36,17 @@ const LINE_B: int = 12
 const LINE_DASH_PERIOD: int = 6
 const LINE_DASH_LENGTH: int = 4
 
+# --- Géométrie d'une cellule de piste : bande de terre de 4 cases au centre (colonnes / lignes 10 à 13), qui couvre la sortie
+# du chemin des plans de lieux (colonne 11 ou 12 selon la rotation) ---
+const TRACK_LO: int = 10
+const TRACK_HI: int = 13
+
 const SPAWN_MAX_DISTANCE: int = 600  # on démarre en lisière d'une ville à moins de N cases de l'origine, sinon en pleine nature
+
+# --- Départ « perdu sur une île » (jalon 10) : recherche en spirale de cellules macro, d'île en île ---
+const ISLAND_SEARCH_STEP: int = 6        # écart entre deux cellules testées (cellules macro)
+const ISLAND_SEARCH_RINGS: int = 120     # jusqu'à ~720 cellules macro de l'origine (~17 000 cases)
+const ISLAND_SPOT_RADIUS: int = 10       # recherche d'une case de départ autour du centre de chaque cellule de l'île
 
 static var _config: Dictionary = {}
 static var _cache: Dictionary = {}  # seed -> SettlementMap
@@ -54,11 +67,15 @@ var _size_weights: Array = []
 var _regions: Dictionary = {}   # Vector2i (région) -> Array de villes
 var _spawn: Vector2i = Vector2i.ZERO
 var _spawn_ready: bool = false
+var _island_spawn: Vector2i = Vector2i.ZERO
+var _island_spawn_found: bool = false
+var _island_spawn_ready: bool = false
 var _routes: RouteMap
 var _specials: SpecialMap
 
 var _t_grass: int
 var _t_tree: int
+var _t_dirt: int
 var _t_water_sh: int
 var _t_water_dp: int
 var _t_swater_sh: int
@@ -101,6 +118,7 @@ func _init(seed_value: int = 0) -> void:
 		_size_weights.append(float(size["weight"]))
 	_t_grass = TerrainDB.index_of("t_grass")
 	_t_tree = TerrainDB.index_of("t_tree")
+	_t_dirt = TerrainDB.index_of("t_dirt")
 	_t_water_sh = TerrainDB.index_of("t_water_sh")
 	_t_water_dp = TerrainDB.index_of("t_water_dp")
 	_t_swater_sh = TerrainDB.index_of("t_swater_sh")
@@ -180,10 +198,12 @@ static func _pick_weighted(weights: Array, roll: float) -> int:
 	return weights.size() - 1
 
 
-## Site acceptable : centre en plaine ou forêt, assez de terre constructible sous toute la ville.
+## Site acceptable : centre en plaine ou forêt (et pas sur une petite île : les îles n'ont pas de route),
+## assez de terre constructible sous toute la ville.
 func _site_ok(center: Vector2i, radius: int) -> bool:
 	var center_kind: int = _world_map.cell_kind(center)
 	if not WorldMap.is_habitable_land(center_kind): return false
+	if _world_map.is_small_island(center): return false
 	var good: int = 0
 	var total: int = 0
 	for dy in range(-radius, radius + 1):
@@ -266,6 +286,7 @@ func cell_plan(cell: Vector2i) -> Dictionary:
 
 ## Nature d'une cellule : NONE / ROAD / LOT / YARD / SPECIAL (lieu spécial, jalon 4). Les routes entre villes (hors emprise des villes) sont des ROAD ;
 ## `with_routes` = false les ignore (mini-carte à grand zoom : le calcul des routes d'une région est coûteux).
+## Les cellules de PISTE (jalon 10) restent NONE ici : voir track_mask().
 func cell_type(cell: Vector2i, with_routes: bool = true, with_specials: bool = true) -> int:
 	var type: int = town_cell_type(cell)
 	if type != CellType.NONE or not with_routes:
@@ -328,13 +349,39 @@ func lot_plan(cell: Vector2i) -> Dictionary:
 	return {"plan": plan, "rot": fronts[rot_roll % fronts.size()]}
 
 
-## Masque des rues voisines (DIR_N | DIR_E | DIR_S | DIR_W) d'une cellule de route.
+## Masque des connexions d'une cellule de route (DIR_N | DIR_E | DIR_S | DIR_W) : rues ou routes voisines, et pistes qui s'y raccordent
+## (jalon 10 : la chaussée gagne alors un embranchement jusqu'au bord de la cellule). Sur une cellule de piste, donne ses voisines
+## de route (le masque de la piste elle-même est track_mask()).
 func road_mask(cell: Vector2i) -> int:
 	var mask: int = 0
 	for i in DIRS.size():
-		if cell_type(cell + DIRS[i], true, false) == CellType.ROAD:
+		var neighbor: Vector2i = cell + DIRS[i]
+		if cell_type(neighbor, true, false) == CellType.ROAD or _specials.track_links(neighbor, 1 << ((i + 2) % 4)):
 			mask |= 1 << i
 	return mask
+
+
+# --- Pistes (jalon 10) ---
+
+## Masque de connexions de la piste qui traverse cette cellule (bits DIR_*), -1 si ce n'est pas une cellule de piste.
+func track_mask(cell: Vector2i) -> int:
+	return _specials.track_mask(cell)
+
+
+## Terrain d'une case (lx, ly locaux) d'une cellule de piste : une bande de terre de 4 cases vers chaque connexion ; autour, la nature.
+func track_terrain(mask: int, lx: int, ly: int, base: int) -> int:
+	var in_cols: bool = lx >= TRACK_LO and lx <= TRACK_HI
+	var in_rows: bool = ly >= TRACK_LO and ly <= TRACK_HI
+	var dirt: bool = in_cols and in_rows
+	if mask & DIR_N != 0 and in_cols and ly <= TRACK_HI:
+		dirt = true
+	if mask & DIR_S != 0 and in_cols and ly >= TRACK_LO:
+		dirt = true
+	if mask & DIR_E != 0 and in_rows and lx >= TRACK_LO:
+		dirt = true
+	if mask & DIR_W != 0 and in_rows and lx <= TRACK_HI:
+		dirt = true
+	return _t_dirt if dirt else base
 
 
 # --- Terrain des cases d'une cellule de route ou de parcelle ---
@@ -440,3 +487,56 @@ func _find_spawn() -> Vector2i:
 		if cell_type(cell) == CellType.ROAD and _is_buildable(_world_map.cell_kind(cell)):
 			return cell * Chunk.SIZE + half
 	return _world_map.spawn_cell()
+
+
+# --- Scénario « perdu sur une île » (jalon 10) ---
+
+## Une île de départ a-t-elle été trouvée près de l'origine ? (sinon island_spawn_cell() renvoie le départ par défaut)
+func has_island_spawn() -> bool:
+	_ensure_island_spawn()
+	return _island_spawn_found
+
+
+## Départ sur une petite île : la première rencontrée en spirale depuis l'origine, assez grande (island_spawn_min_cells), dont une
+## cellule macro est libre (ni rue, ni lieu, ni piste) et porte une case dégagée de terre habitable. Déterministe.
+func island_spawn_cell() -> Vector2i:
+	_ensure_island_spawn()
+	return _island_spawn
+
+
+func _ensure_island_spawn() -> void:
+	if _island_spawn_ready:
+		return
+	_island_spawn_ready = true
+	_island_spawn = spawn_cell()
+	for ring in range(1, ISLAND_SEARCH_RINGS + 1):
+		for dx in range(-ring, ring + 1):
+			for dy in range(-ring, ring + 1):
+				if maxi(absi(dx), absi(dy)) != ring:
+					continue
+				var macro := Vector2i(dx, dy) * ISLAND_SEARCH_STEP
+				var size: int = _world_map.island_size(macro)
+				if size < _world_map.island_spawn_min_cells() or size >= _world_map.island_max_cells():
+					continue
+				var spot: Vector2i = _island_spot(macro)
+				if spot != Vector2i(1 << 30, 1 << 30):
+					_island_spawn = spot
+					_island_spawn_found = true
+					return
+
+
+## Case de départ d'une île (à partir d'une de ses cellules), ou (2^30, 2^30) s'il n'y en a pas.
+func _island_spot(any_cell: Vector2i) -> Vector2i:
+	for macro: Vector2i in _world_map.island_cells(any_cell):
+		if cell_type(macro) != CellType.NONE or track_mask(macro) >= 0:
+			continue
+		var center: Vector2i = macro * Chunk.SIZE + WorldMap.CELL_CENTER
+		for r in range(0, ISLAND_SPOT_RADIUS + 1):
+			for dy in range(-r, r + 1):
+				for dx in range(-r, r + 1):
+					if maxi(absi(dx), absi(dy)) != r:
+						continue
+					var case: Vector2i = center + Vector2i(dx, dy)
+					if _world_map.is_good_spawn_case(case):
+						return case
+	return Vector2i(1 << 30, 1 << 30)
