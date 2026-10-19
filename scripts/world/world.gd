@@ -8,6 +8,7 @@ extends Node2D
 ##   1. `_terrain_layer` : les chunks (sol : herbe, murs)
 ##   2. `_items_layer`   : objets au sol
 ##   3. `entities`       : arbres, joueur, monstres, triés par Y (plus bas = plus devant)
+##   3b. `fx`            : particules et ondes (poussière, éclaboussures), voir Fx
 ##   4. `fog`            : brouillard de guerre par-dessus
 ##   5. `_pick_overlay`  : touches de choix de la case où ramasser
 ## Les nœuds sont positionnés sur le coin haut-gauche de leur case ; UlticaTiles applique
@@ -23,6 +24,7 @@ var chunks: ChunkManager
 var player: Player
 var monsters: Array[Monster] = []
 var entities: Node2D
+var fx: Node2D                      # calque des effets visuels (particules), au-dessus des entités, sous le brouillard
 var fog: FogLayer
 var ground_items: Dictionary = {}   # Vector2i -> Array (d'Item posés au sol)
 var pick_labels: Dictionary = {}    # Vector2i -> touche affichée (choix de la case où ramasser)
@@ -44,6 +46,9 @@ func _ready() -> void:
 	entities = Node2D.new()
 	entities.y_sort_enabled = true
 	add_child(entities)
+	fx = Node2D.new()
+	fx.z_index = 5  # au-dessus des entités, sous le brouillard (z_index 10)
+	add_child(fx)
 	fog = FogLayer.new()
 	fog.world = self
 	fog.z_index = 10

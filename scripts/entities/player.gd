@@ -1,10 +1,10 @@
 class_name Player
 extends Node2D
-## Joueur : déplacement, combat de base, santé par parties du corps, stamina, charge portée (inventaire), coût des actions en temps,
+## Joueur : déplacement, combat de base, stamina, charge portée (inventaire), coût des actions en temps,
 ## posture (marche / sprint / accroupi), nage et noyade, zoom de la caméra, déplacements automatiques (touche maintenue, double-clic).
 
-# --- Santé : une jauge de PV par partie du corps (data/body_parts.json, BodyPartDB) ---
-# Mort : tête ou torse à 0 PV. Les membres à 0 PV n'ont pas encore d'effet.
+# --- Santé ---
+const HP_MAX: float = 100.0
 
 # --- Stamina et pénalité de temps ---
 const STAMINA_MAX: float = 100.0
@@ -27,7 +27,7 @@ const CAPACITY_BASE: float = 20.0       # kg portables sans équipement (+ bonus
 # En nageant : la posture est ignorée ; chaque pas COÛTE de la stamina (plus en eau profonde) + la perte de surcharge habituelle.
 # Attendre en eau peu profonde = faire la planche : même récupération qu'attendre à terre (une surcharge fait perdre de la stamina).
 # Attendre en eau profonde = faire du surplace : coût fixe + surcharge, jamais de récupération.
-# Stamina à 0 dans l'eau : noyade, dégâts (au torse) proportionnels à la durée de chaque action.
+# Stamina à 0 dans l'eau : noyade, dégâts proportionnels à la durée de chaque action.
 const SWIM_STAMINA_SHALLOW: float = 1.0       # perte par pas en eau peu profonde
 const SWIM_STAMINA_DEEP: float = 2.5          # perte par pas en eau profonde
 const SWIM_TREAD_STAMINA_DEEP: float = 1.0    # perte par attente (ou geste d'inventaire) en eau profonde
@@ -75,7 +75,7 @@ const REPEAT_INTERVAL: float = 0.07     # délai entre deux répétitions
 
 var world: World
 var grid_pos: Vector2i = Vector2i(5, 5)
-var body: Dictionary = {}               # id de partie du corps (data/body_parts.json) -> PV
+var hp: float = HP_MAX
 var dead: bool = false
 var stamina: float = STAMINA_MAX
 var inventory := Inventory.new()
@@ -92,8 +92,10 @@ var _held_key: Key = KEY_NONE
 var _repeat_timer: float = 0.0
 var _travel_path: Array[Vector2i] = []  # déplacement automatique en cours (double-clic) : cases restant à parcourir
 var _travel_timer: float = 0.0
-var _shift_released_msec: int = -1000    # moment du dernier relâchement de Maj (voir SHIFT_GRACE_MSEC)
 var _announced_swim: int = TerrainDB.SWIM_NONE  # dernière profondeur annoncée dans le journal (évite de répéter le message)
+var _anim_time: float = 0.0             # animation purement visuelle (voir Fx)
+var _hop: float = 0.0                   # rebond pendant un pas (pixels)
+var _breath: float = 0.0                # respiration à l'arrêt (étirement vertical)
 
 const MOVE_KEYS: Dictionary = {
 	KEY_KP_8: Vector2i.UP, KEY_KP_2: Vector2i.DOWN, KEY_KP_4: Vector2i.LEFT, KEY_KP_6: Vector2i.RIGHT,
@@ -102,20 +104,11 @@ const MOVE_KEYS: Dictionary = {
 	KEY_KP_1: Vector2i(-1, 1), KEY_KP_3: Vector2i(1, 1),
 }
 const WAIT_KEYS: Array = [KEY_SPACE, KEY_PERIOD, KEY_KP_5]
-# Maj + pavé numérique (VerrNum actif) : Windows peut envoyer la touche de navigation correspondante (Début, Fin...) au lieu du pavé.
-const LOOK_NAV_KEYS: Dictionary = {
-	KEY_HOME: Vector2i(-1, -1), KEY_PAGEUP: Vector2i(1, -1), KEY_END: Vector2i(-1, 1), KEY_PAGEDOWN: Vector2i(1, 1),
-	KEY_CLEAR: Vector2i.ZERO,
-}
-# Windows simule un « Maj relâché » juste avant une touche du pavé tapée avec Maj : on considère Maj enfoncé s'il vient d'être relâché.
-const SHIFT_GRACE_MSEC: int = 80
 
 
 func _ready() -> void:
 	for stat_id: String in StatDB.ids():
 		stats[stat_id] = StatDB.base_of(stat_id)
-	for part_id: String in BodyPartDB.ids():
-		body[part_id] = BodyPartDB.max_hp_of(part_id)
 	for item_id: String in START_EQUIPMENT:
 		inventory.equip(Item.create(item_id))
 	for item_id: String in START_LOOSE:
@@ -130,7 +123,7 @@ func _ready() -> void:
 	EventBus.hostile_spotted.connect(func(_m: Node) -> void: _stop_repeat())
 	_emit_stamina()
 	_emit_load()
-	_emit_health()
+	EventBus.health_changed.emit(hp, HP_MAX)
 	EventBus.posture_changed.emit(posture_name())
 	world.update_fov()  # vue initiale (sans ça, tout reste noir jusqu'au premier pas)
 
@@ -144,8 +137,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key_event := event as InputEventKey
 	if key_event == null:
 		return
-	if key_event.physical_keycode == KEY_SHIFT and not key_event.pressed:
-		_shift_released_msec = Time.get_ticks_msec()
 	if input_blocked:
 		_held_key = KEY_NONE
 		return
@@ -157,15 +148,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if key_event.echo:
 		return  # la répétition est gérée par _process (cadence fixe, indépendante de l'OS)
 	_travel_path.clear()  # toute touche interrompt un déplacement automatique
-	# Mode regard (LookUI) : x, ou Maj + pavé numérique / flèches. Déplace la caméra, pas le joueur ; ne coûte aucun temps.
-	if KeyUtil.is_letter(key_event, "x"):
-		EventBus.look_requested.emit(Vector2i.ZERO)
-		return
-	var nav_key: Key = key if LOOK_NAV_KEYS.has(key) else key_event.keycode
-	if _shift_held(key_event) and (MOVE_KEYS.has(key) or key == KEY_KP_5 or LOOK_NAV_KEYS.has(nav_key)):
-		var look_direction: Vector2i = MOVE_KEYS.get(key, LOOK_NAV_KEYS.get(nav_key, Vector2i.ZERO))
-		EventBus.look_requested.emit(look_direction)
-		return
 	var zoom_step: int = _zoom_direction(key_event)
 	if zoom_step != 0:
 		_change_zoom(zoom_step)
@@ -188,12 +170,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			EventBus.ground_requested.emit()
 
 
-## Maj enfoncé ? Tient compte du faux « Maj relâché » que Windows envoie juste avant une touche du pavé numérique tapée avec Maj.
-func _shift_held(event: InputEventKey) -> bool:
-	return event.shift_pressed or Input.is_physical_key_pressed(KEY_SHIFT) \
-		or Time.get_ticks_msec() - _shift_released_msec < SHIFT_GRACE_MSEC
-
-
 ## +1 (zoomer), -1 (dézoomer), 0 sinon. Détecté par le caractère tapé (en AZERTY, « - » est sur la touche 6) ou le pavé numérique.
 func _zoom_direction(event: InputEventKey) -> int:
 	if event.physical_keycode == KEY_KP_ADD or event.unicode == 43 or event.unicode == 61:
@@ -201,15 +177,6 @@ func _zoom_direction(event: InputEventKey) -> int:
 	if event.physical_keycode == KEY_KP_SUBTRACT or event.unicode == 45:
 		return -1
 	return 0
-
-
-## Applique le zoom demandé par la touche (utilisé aussi par le mode regard). Renvoie true si la touche était une touche de zoom.
-func try_zoom(event: InputEventKey) -> bool:
-	var step: int = _zoom_direction(event)
-	if step == 0:
-		return false
-	_change_zoom(step)
-	return true
 
 
 ## Le champ de vision ne change pas : en dézoomant, le brouillard (FogLayer) couvre simplement plus de cases.
@@ -227,11 +194,6 @@ func _on_mouse_button(button: InputEventMouseButton) -> void:
 	if input_blocked or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT or not button.double_click:
 		return
 	_start_travel(Vector2i((world.get_global_mouse_position() / World.TILE_SIZE).floor()))
-
-
-## Déplacement automatique vers une case (même système que le double-clic) : utilisé par le mode regard (touche *).
-func travel_to(cell: Vector2i) -> void:
-	_start_travel(cell)
 
 
 func _start_travel(cell: Vector2i) -> void:
@@ -265,6 +227,7 @@ func _travel_step() -> void:
 
 ## Touche maintenue : chaque répétition est une action complète (temps, stamina, monstres...).
 func _process(delta: float) -> void:
+	_update_visual(delta)
 	if input_blocked:
 		_held_key = KEY_NONE
 		_travel_path.clear()
@@ -285,6 +248,17 @@ func _process(delta: float) -> void:
 	if _repeat_timer <= 0.0:
 		_repeat_timer = REPEAT_INTERVAL
 		_repeat_action(_held_key)
+
+
+## Purement visuel : le sprite (et la caméra, qui en est l'enfant) glisse vers la case logique, déjà atteinte, avec un petit
+## rebond ; à l'arrêt, une légère respiration. Ne retarde jamais une action (voir Fx).
+func _update_visual(delta: float) -> void:
+	var left: float = Fx.glide(self, Vector2(grid_pos * World.TILE_SIZE), delta)
+	_anim_time += delta
+	_hop = 0.0 if is_swimming() else Fx.hop_of(left)
+	_breath = 0.0 if (left > 0.0 or dead) else sin(_anim_time * 2.2) * Fx.BREATH
+	if Fx.SMOOTH_MOVE:
+		queue_redraw()
 
 
 ## Arrête la répétition et tout déplacement automatique (il faut relâcher puis réappuyer pour reprendre).
@@ -389,21 +363,6 @@ func get_load_ratio() -> float:
 	return get_carry_weight() / maxf(get_carry_capacity(), 0.001)
 
 
-# --- Santé par parties du corps ---
-
-## PV actuels d'une partie du corps (id de data/body_parts.json).
-func part_hp(part_id: String) -> float:
-	return float(body.get(part_id, 0.0))
-
-
-## PV totaux (somme des parties) : affichage du HUD.
-func total_hp() -> float:
-	var total: float = 0.0
-	for part_id: String in body:
-		total += float(body[part_id])
-	return total
-
-
 # --- Nage ---
 
 ## Profondeur de nage de la case du joueur (TerrainDB.SWIM_NONE / SWIM_SHALLOW / SWIM_DEEP).
@@ -482,33 +441,25 @@ func _announce_swim() -> void:
 	queue_redraw()  # teinte du sprite
 
 
-## Stamina à 0 dans l'eau : le joueur se noie à chaque action qui fait avancer le temps (dégâts au torse).
+## Stamina à 0 dans l'eau : le joueur se noie à chaque action qui fait avancer le temps.
 func _check_drowning(action_cost: float) -> void:
 	if dead or stamina > 0.0 or not is_swimming():
 		return
 	var damage: float = drown_damage(action_cost)
 	EventBus.message_logged.emit("Vous vous noyez : -%d PV." % roundi(damage))
-	take_damage(damage, "torso")
+	take_damage(damage)
 
 
-## Dégâts à UNE partie du corps (id de data/body_parts.json ; id inconnu : le torse). Les PV d'une partie ne descendent pas sous 0
-## et l'excédent est perdu. La mort survient quand une partie vitale (tête, torse) tombe à 0. L'appelant écrit le message du journal.
-func take_damage(amount: float, part_id: String = "torso") -> void:
+func take_damage(amount: float) -> void:
 	if dead:
 		return
 	_stop_repeat()
-	if not body.has(part_id):
-		part_id = "torso"
-	var before: float = float(body[part_id])
-	body[part_id] = maxf(before - amount, 0.0)
-	_emit_health()
-	if before > 0.0 and float(body[part_id]) <= 0.0:
-		if BodyPartDB.is_vital(part_id):
-			dead = true
-			EventBus.message_logged.emit("%s : 0 PV. Vous êtes mort." % BodyPartDB.name_of(part_id))
-			queue_redraw()
-		else:
-			EventBus.message_logged.emit("%s : 0 PV (hors d'usage)." % BodyPartDB.name_of(part_id))
+	hp = maxf(hp - amount, 0.0)
+	EventBus.health_changed.emit(hp, HP_MAX)
+	if hp <= 0.0:
+		dead = true
+		EventBus.message_logged.emit("Vous êtes mort.")
+		queue_redraw()
 
 
 ## Une diagonale n'est PAS un déplacement spécial : c'est « vertical + horizontal »
@@ -536,11 +487,13 @@ func _try_move(dir: Vector2i) -> void:
 		return
 	if not world.can_player_enter(target):
 		return
-	grid_pos = target
-	position = Vector2(grid_pos * World.TILE_SIZE)
+	var from_cell: Vector2i = grid_pos
+	var was_swimming: bool = is_swimming()
+	grid_pos = target  # la position affichée suit en glissant (voir _update_visual)
 	world.update_fov()  # avant que le temps passe : les monstres réagissent à ce que tu viens de révéler
 	_announce_swim()
 	var swimming: bool = is_swimming()
+	Fx.footstep(world, from_cell, grid_pos, posture == Posture.SPRINT, posture == Posture.CROUCH, was_swimming, swimming)
 	var time_factor: float = 1.0 if swimming else POSTURE_TIME_FACTOR[posture]  # on nage à la même vitesse quelle que soit la posture
 	_perform_action("Nage" if swimming else "Déplacement", MOVE_BASE_COST * time_factor, get_move_stamina_delta())
 
@@ -760,19 +713,21 @@ func _emit_load() -> void:
 	EventBus.load_changed.emit(get_carry_weight(), get_carry_capacity())
 
 
-func _emit_health() -> void:
-	EventBus.health_changed.emit(total_hp(), BodyPartDB.total_max_hp())
-
-
 func _draw() -> void:
 	var tint: Color = Color.WHITE
+	var swimming: bool = is_swimming()
 	if dead:
 		tint = Color(0.45, 0.45, 0.45)
-	elif is_swimming():
+	elif swimming:
 		tint = Color(0.7, 0.85, 1.0)  # le joueur nage : teinte bleutée
-	UlticaTiles.draw_sprite(self, _bg_sprite, Vector2.ZERO, tint)
-	UlticaTiles.draw_sprite(self, _fg_sprite, Vector2.ZERO, tint)
+	var pivot := Vector2(World.TILE_SIZE / 2.0, World.TILE_SIZE - 10.0)  # bas et centre de la case : rebond et respiration s'y ancrent
+	if Fx.SHADOWS and not swimming:
+		var squeeze: float = 1.0 - _hop / 60.0  # l'ombre rétrécit quand le personnage rebondit
+		draw_colored_polygon(Fx.ellipse_points(pivot + Vector2(0, 2), Vector2(34.0, 11.0) * squeeze), Fx.SHADOW_COLOR)
+	draw_set_transform(pivot + Vector2(0, -_hop), 0.0, Vector2(1.0 - _breath * 0.5, 1.0 + _breath))
+	UlticaTiles.draw_sprite(self, _bg_sprite, -pivot, tint)
+	UlticaTiles.draw_sprite(self, _fg_sprite, -pivot, tint)
 	for slot: String in ItemDB.WORN_DRAW_ORDER:  # vêtements portés, par-dessus le mannequin
 		var worn := inventory.equipment.get(slot) as Item
 		if worn != null:
-			UlticaTiles.draw_sprite_anchored(self, UlticaTiles.pick_sprite(worn.worn_tile(), "fg", 0), Vector2.ZERO, World.TILE_SIZE, tint)
+			UlticaTiles.draw_sprite_anchored(self, UlticaTiles.pick_sprite(worn.worn_tile(), "fg", 0), -pivot, World.TILE_SIZE, tint)

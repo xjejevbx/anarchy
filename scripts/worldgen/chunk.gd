@@ -3,9 +3,12 @@ extends Node2D
 ## Un chunk de 24 x 24 cases : terrain (un octet par case), cases vues (mémoire de la carte) et sprites d'arbres.
 ## Le sol est dessiné une fois par le chunk lui-même (mis en cache par Godot, redessiné seulement si on le demande).
 ## Les arbres sont des sprites dans le calque `entities` (triés par Y avec joueur et monstres), cachés tant que la case n'a pas été vue.
+## Les arbres balancent au vent (shader partagé, voir Fx.wind_material) et projettent une ombre dans le sol du chunk.
 
 const SIZE: int = 24
 const CELLS: int = SIZE * SIZE
+const TREE_SHADOW_CENTER: Vector2 = Vector2(64.0, 108.0)   # pied du tronc dans la case (pixels)
+const TREE_SHADOW_RADII: Vector2 = Vector2(40.0, 13.0)
 
 var key: Vector3i = Vector3i.ZERO
 var terrain: PackedByteArray = PackedByteArray()
@@ -51,6 +54,7 @@ func _add_tree(index: int, entities: Node2D) -> void:
 	sprite.offset = UlticaTiles.get_offset(sprite_name)
 	sprite.position = Vector2(cell * World.TILE_SIZE)
 	sprite.visible = seen[index] != 0
+	sprite.material = Fx.wind_material()  # null si le vent est désactivé
 	entities.add_child(sprite)
 	_tree_sprites[index] = sprite
 
@@ -92,3 +96,7 @@ func _draw() -> void:
 			UlticaTiles.draw_sprite(self, furniture_sprite, local)
 			if furniture_sprite == "" or UlticaTiles.get_texture(furniture_sprite) == null:  # repli : petit carré coloré
 				draw_rect(Rect2(local + Vector2(24, 24), Vector2(80, 80)), FurnitureDB.color_of(furniture[i]))
+	if Fx.SHADOWS:  # ombres des arbres : seconde passe, pour qu'une case voisine ne les recouvre pas
+		for i: int in _tree_sprites:
+			var origin := Vector2(i % SIZE, floori(float(i) / SIZE)) * World.TILE_SIZE
+			draw_colored_polygon(Fx.ellipse_points(origin + TREE_SHADOW_CENTER, TREE_SHADOW_RADII), Fx.SHADOW_COLOR)
