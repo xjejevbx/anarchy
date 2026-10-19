@@ -113,8 +113,31 @@ func refresh_items() -> void:
 # --- Terrain (délégué aux chunks) ---
 
 ## Une case hors des chunks chargés est inconnue : ni praticable, opaque.
+## « Praticable » = À PIED (monstres, marche automatique) : l'eau profonde ne l'est pas, le joueur y nage (can_player_enter).
 func is_walkable(pos: Vector2i) -> bool:
 	return chunks.is_walkable(pos)
+
+
+## Profondeur de nage de la case (TerrainDB.SWIM_NONE / SWIM_SHALLOW / SWIM_DEEP) ; SWIM_NONE si le chunk n'est pas chargé.
+func swim_depth(pos: Vector2i) -> int:
+	var chunk: Chunk = chunks.chunk_at(pos)
+	if chunk == null:
+		return TerrainDB.SWIM_NONE
+	return TerrainDB.swim_depth(chunk.terrain[ChunkManager.index_of(pos)])
+
+
+func is_deep_water(pos: Vector2i) -> bool:
+	return swim_depth(pos) == TerrainDB.SWIM_DEEP
+
+
+## Case où le JOUEUR peut entrer : praticable à pied, ou eau profonde (il nage).
+func can_player_enter(pos: Vector2i) -> bool:
+	return is_walkable(pos) or is_deep_water(pos)
+
+
+## Eau profonde visible ou déjà vue : la marche automatique ne s'y engage que si le joueur nage déjà.
+func is_known_deep_water(pos: Vector2i) -> bool:
+	return is_deep_water(pos) and (visible_cells.has(pos) or is_seen(pos))
 
 
 ## Murs et arbres bloquent la vue.

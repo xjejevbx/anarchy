@@ -1,7 +1,7 @@
 class_name Player
 extends Node2D
 ## Joueur : déplacement, combat de base, stamina, charge portée (inventaire), coût des actions en temps,
-## posture (marche / sprint / accroupi), zoom de la caméra, déplacements automatiques (touche maintenue, double-clic).
+## posture (marche / sprint / accroupi), nage et noyade, zoom de la caméra, déplacements automatiques (touche maintenue, double-clic).
 
 # --- Santé ---
 const HP_MAX: float = 100.0
@@ -22,6 +22,17 @@ const WAIT_REGEN_MAX: float = 0.85      # gain max en attendant (à vide) : un p
 const OVERLOAD_DRAIN_LINEAR: float = 2.0
 const OVERLOAD_DRAIN_QUAD: float = 4.0
 const CAPACITY_BASE: float = 20.0       # kg portables sans équipement (+ bonus d'équipement éventuels)
+
+# --- Nage (jalon 9b) : toute eau (peu profonde ou profonde) se traverse à la nage ---
+# En nageant : la posture est ignorée ; chaque pas COÛTE de la stamina (plus en eau profonde) + la perte de surcharge habituelle.
+# Attendre en eau peu profonde = faire la planche : même récupération qu'attendre à terre (une surcharge fait perdre de la stamina).
+# Attendre en eau profonde = faire du surplace : coût fixe + surcharge, jamais de récupération.
+# Stamina à 0 dans l'eau : noyade, dégâts proportionnels à la durée de chaque action.
+const SWIM_STAMINA_SHALLOW: float = 1.0       # perte par pas en eau peu profonde
+const SWIM_STAMINA_DEEP: float = 2.5          # perte par pas en eau profonde
+const SWIM_TREAD_STAMINA_DEEP: float = 1.0    # perte par attente (ou geste d'inventaire) en eau profonde
+const DROWN_DAMAGE_PER_SECOND: float = 2.0    # PV perdus par seconde d'action quand on se noie
+const SWIM_REPEAT_MIN_STAMINA: float = 20.0   # touche maintenue : la nage automatique s'arrête sous ce niveau de stamina
 
 # --- Posture (touche |) : indices de Posture ---
 enum Posture { WALK, SPRINT, CROUCH }
@@ -81,6 +92,7 @@ var _held_key: Key = KEY_NONE
 var _repeat_timer: float = 0.0
 var _travel_path: Array[Vector2i] = []  # déplacement automatique en cours (double-clic) : cases restant à parcourir
 var _travel_timer: float = 0.0
+var _announced_swim: int = TerrainDB.SWIM_NONE  # dernière profondeur annoncée dans le journal (évite de répéter le message)
 
 const MOVE_KEYS: Dictionary = {
 	KEY_KP_8: Vector2i.UP, KEY_KP_2: Vector2i.DOWN, KEY_KP_4: Vector2i.LEFT, KEY_KP_6: Vector2i.RIGHT,
@@ -188,7 +200,7 @@ func _start_travel(cell: Vector2i) -> void:
 		EventBus.message_logged.emit("Vous ne voyez pas cette case.")
 		return
 	if not world.is_walkable(cell) or world.get_monster_at(cell) != null:
-		EventBus.message_logged.emit("Impossible de s'y rendre.")
+		EventBus.message_logged.emit("Impossible de s'y rendre.")  # y compris l'eau profonde : on s'y jette case par case
 		return
 	var path: Array[Vector2i] = AutoPath.find(world, grid_pos, cell, TRAVEL_MAX_RADIUS)
 	if path.size() < 2:
@@ -253,9 +265,13 @@ func _do_repeatable_action(key: Key) -> void:
 
 
 ## Répétition d'une touche maintenue : tout droit tant que c'est libre, sinon un chemin qui contourne les obstacles connus.
+## Dans l'eau, la répétition continue de nager (tout droit) tant que la stamina reste au-dessus de SWIM_REPEAT_MIN_STAMINA.
 func _repeat_action(key: Key) -> void:
 	if not MOVE_KEYS.has(key):
 		_wait()
+		return
+	if is_swimming() and stamina < SWIM_REPEAT_MIN_STAMINA:
+		_stop_repeat()  # à bout de souffle : c'est au joueur de décider (flotter, rejoindre la rive...)
 		return
 	var dir: Vector2i = MOVE_KEYS[key]
 	if _ray_clear(dir):
@@ -270,9 +286,12 @@ func _repeat_action(key: Key) -> void:
 	_stop_repeat()  # rien de praticable devant
 
 
+## Cases devant libres : praticables à pied et connues ; en nageant, l'eau profonde connue compte aussi (jamais depuis la rive).
 func _ray_clear(dir: Vector2i) -> bool:
+	var in_water: bool = is_swimming()
 	for k in range(1, AUTO_CLEAR_RANGE + 1):
-		if not world.is_known_walkable(grid_pos + dir * k):
+		var cell: Vector2i = grid_pos + dir * k
+		if not (world.is_known_walkable(cell) or (in_water and world.is_known_deep_water(cell))):
 			return false
 	return true
 
@@ -329,24 +348,91 @@ func get_load_ratio() -> float:
 	return get_carry_weight() / maxf(get_carry_capacity(), 0.001)
 
 
-## Variation de stamina pour UN déplacement, selon la charge et la posture.
+# --- Nage ---
+
+## Profondeur de nage de la case du joueur (TerrainDB.SWIM_NONE / SWIM_SHALLOW / SWIM_DEEP).
+func swim_depth() -> int:
+	return world.swim_depth(grid_pos) if world != null else TerrainDB.SWIM_NONE
+
+
+func is_swimming() -> bool:
+	return swim_depth() != TerrainDB.SWIM_NONE
+
+
+## Perte de stamina due à la surcharge (0 si ratio <= 1) : courbe quadratique, commune à la marche et à la nage.
+static func overload_drain(ratio: float) -> float:
+	var over: float = ratio - 1.0
+	if over <= 0.0:
+		return 0.0
+	return OVERLOAD_DRAIN_LINEAR * over + OVERLOAD_DRAIN_QUAD * over * over
+
+
+## Variation de stamina à terre selon la charge : gain jusqu'à regen_max à vide, nul à ratio 1, perte au-delà.
+static func load_stamina_delta(ratio: float, regen_max: float) -> float:
+	if ratio <= 1.0:
+		return regen_max * (1.0 - ratio)
+	return -overload_drain(ratio)
+
+
+## Variation de stamina pour UN pas à la nage (toujours négative).
+static func swim_move_stamina_delta(depth: int, ratio: float) -> float:
+	var base: float = SWIM_STAMINA_DEEP if depth >= TerrainDB.SWIM_DEEP else SWIM_STAMINA_SHALLOW
+	return -base - overload_drain(ratio)
+
+
+## Variation de stamina pour UNE attente (ou un geste) dans l'eau : planche en eau peu profonde, surplace en eau profonde.
+static func swim_wait_stamina_delta(depth: int, ratio: float) -> float:
+	if depth >= TerrainDB.SWIM_DEEP:
+		return -SWIM_TREAD_STAMINA_DEEP - overload_drain(ratio)
+	return load_stamina_delta(ratio, WAIT_REGEN_MAX)
+
+
+## PV perdus pour une action de `action_cost` secondes quand on se noie.
+static func drown_damage(action_cost: float) -> float:
+	return DROWN_DAMAGE_PER_SECOND * action_cost
+
+
+## Variation de stamina pour UN déplacement, selon la charge et la posture (ou la nage : la posture est alors ignorée).
 ## Positive = gain, négative = perte.
 func get_move_stamina_delta() -> float:
-	return _load_stamina_delta(MOVE_REGEN_MAX) + POSTURE_MOVE_STAMINA[posture]
+	var depth: int = swim_depth()
+	if depth != TerrainDB.SWIM_NONE:
+		return swim_move_stamina_delta(depth, get_load_ratio())
+	return load_stamina_delta(get_load_ratio(), MOVE_REGEN_MAX) + POSTURE_MOVE_STAMINA[posture]
 
 
 ## Idem pour UNE attente : mêmes contraintes de charge, récupération un peu meilleure.
-## Rester debout avec un sac trop lourd épuise autant que marcher avec.
+## Rester debout avec un sac trop lourd épuise autant que marcher avec. Dans l'eau : voir swim_wait_stamina_delta.
 func get_wait_stamina_delta() -> float:
-	return _load_stamina_delta(WAIT_REGEN_MAX)
+	var depth: int = swim_depth()
+	if depth != TerrainDB.SWIM_NONE:
+		return swim_wait_stamina_delta(depth, get_load_ratio())
+	return load_stamina_delta(get_load_ratio(), WAIT_REGEN_MAX)
 
 
-func _load_stamina_delta(regen_max: float) -> float:
-	var ratio: float = get_load_ratio()
-	if ratio <= 1.0:
-		return regen_max * (1.0 - ratio)
-	var over: float = ratio - 1.0
-	return -(OVERLOAD_DRAIN_LINEAR * over + OVERLOAD_DRAIN_QUAD * over * over)
+## Message du journal quand on entre dans l'eau, qu'on change de profondeur ou qu'on reprend pied.
+func _announce_swim() -> void:
+	var depth: int = swim_depth()
+	if depth == _announced_swim:
+		return
+	_announced_swim = depth
+	match depth:
+		TerrainDB.SWIM_NONE:
+			EventBus.message_logged.emit("Vous reprenez pied.")
+		TerrainDB.SWIM_SHALLOW:
+			EventBus.message_logged.emit("Vous nagez (eau peu profonde) : attendre permet de flotter et de récupérer.")
+		_:
+			EventBus.message_logged.emit("Eau profonde : la nage vous épuise plus vite et il n'y a aucun repos possible.")
+	queue_redraw()  # teinte du sprite
+
+
+## Stamina à 0 dans l'eau : le joueur se noie à chaque action qui fait avancer le temps.
+func _check_drowning(action_cost: float) -> void:
+	if dead or stamina > 0.0 or not is_swimming():
+		return
+	var damage: float = drown_damage(action_cost)
+	EventBus.message_logged.emit("Vous vous noyez : -%d PV." % roundi(damage))
+	take_damage(damage)
 
 
 func take_damage(amount: float) -> void:
@@ -367,11 +453,11 @@ func take_damage(amount: float) -> void:
 ## visée est occupée par un monstre, le second pas devient une attaque.
 func _try_diagonal(dir: Vector2i) -> void:
 	var target: Vector2i = grid_pos + dir
-	if world.get_monster_at(target) == null and not world.is_walkable(target):
+	if world.get_monster_at(target) == null and not world.can_player_enter(target):
 		return
 	for first: Vector2i in [Vector2i(0, dir.y), Vector2i(dir.x, 0)]:  # vertical d'abord, puis horizontal
 		var middle: Vector2i = grid_pos + first
-		if world.is_walkable(middle) and world.get_monster_at(middle) == null:
+		if world.can_player_enter(middle) and world.get_monster_at(middle) == null:
 			_try_move(first)
 			if not dead:
 				_try_move(dir - first)
@@ -384,12 +470,15 @@ func _try_move(dir: Vector2i) -> void:
 	if monster != null:
 		_attack(monster)
 		return
-	if not world.is_walkable(target):
+	if not world.can_player_enter(target):
 		return
 	grid_pos = target
 	position = Vector2(grid_pos * World.TILE_SIZE)
 	world.update_fov()  # avant que le temps passe : les monstres réagissent à ce que tu viens de révéler
-	_perform_action("Déplacement", MOVE_BASE_COST * POSTURE_TIME_FACTOR[posture], get_move_stamina_delta())
+	_announce_swim()
+	var swimming: bool = is_swimming()
+	var time_factor: float = 1.0 if swimming else POSTURE_TIME_FACTOR[posture]  # on nage à la même vitesse quelle que soit la posture
+	_perform_action("Nage" if swimming else "Déplacement", MOVE_BASE_COST * time_factor, get_move_stamina_delta())
 
 
 func _attack(monster: Monster) -> void:
@@ -405,7 +494,13 @@ func _attack(monster: Monster) -> void:
 
 
 func _wait() -> void:
-	_perform_action("Attendre", WAIT_BASE_COST, get_wait_stamina_delta())
+	var action_name: String = "Attendre"
+	match swim_depth():
+		TerrainDB.SWIM_SHALLOW:
+			action_name = "Flotter"
+		TerrainDB.SWIM_DEEP:
+			action_name = "Surplace"
+	_perform_action(action_name, WAIT_BASE_COST, get_wait_stamina_delta())
 
 
 # --- Inventaire ---
@@ -557,9 +652,14 @@ func unequip_slot(slot: String) -> void:
 
 
 ## Chaque étape de la validation fait passer son propre temps (les monstres agissent entre deux étapes).
+## En eau profonde, chaque étape coûte de la stamina (surplace) ; ailleurs, INVENTORY_STAMINA_DELTA.
 func spend_inventory_time(base_cost: float) -> void:
 	if base_cost > 0.0:
-		_perform_action("Inventaire", base_cost, INVENTORY_STAMINA_DELTA)
+		var delta: float = INVENTORY_STAMINA_DELTA
+		var depth: int = swim_depth()
+		if depth == TerrainDB.SWIM_DEEP:
+			delta = swim_wait_stamina_delta(depth, get_load_ratio())
+		_perform_action("Inventaire", base_cost, delta)
 
 
 func log_inventory_summary(action_count: int, base_total: float) -> void:
@@ -578,12 +678,14 @@ func _after_inventory_change() -> void:
 
 ## Coût réel en temps = coût de base * (1 + pénalité de stamina).
 ## stamina_delta : positif = gain, négatif = perte.
+## Toute action passe par ici : c'est aussi là qu'on se noie (stamina à 0 dans l'eau, une fois le temps écoulé).
 func _perform_action(action_name: String, base_cost: float, stamina_delta: float) -> void:
 	var cost: float = base_cost * (1.0 + get_time_penalty())
 	stamina = clampf(stamina + stamina_delta, 0.0, STAMINA_MAX)
 	EventBus.action_performed.emit(action_name, cost, stamina_delta)
 	GameClock.advance(cost)  # les monstres agissent pendant ce temps (voir World)
 	_emit_stamina()
+	_check_drowning(cost)
 
 
 func _emit_stamina() -> void:
@@ -595,7 +697,11 @@ func _emit_load() -> void:
 
 
 func _draw() -> void:
-	var tint: Color = Color(0.45, 0.45, 0.45) if dead else Color.WHITE
+	var tint: Color = Color.WHITE
+	if dead:
+		tint = Color(0.45, 0.45, 0.45)
+	elif is_swimming():
+		tint = Color(0.7, 0.85, 1.0)  # le joueur nage : teinte bleutée
 	UlticaTiles.draw_sprite(self, _bg_sprite, Vector2.ZERO, tint)
 	UlticaTiles.draw_sprite(self, _fg_sprite, Vector2.ZERO, tint)
 	for slot: String in ItemDB.WORN_DRAW_ORDER:  # vêtements portés, par-dessus le mannequin

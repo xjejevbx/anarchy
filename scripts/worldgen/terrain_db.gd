@@ -5,6 +5,11 @@ extends RefCounted
 
 const PATH: String = "res://data/worldgen/terrain.json"
 
+# Profondeur de nage (champ "swim" de terrain.json) : le joueur nage dans l'eau, qu'elle soit « praticable à pied » ou non.
+const SWIM_NONE: int = 0
+const SWIM_SHALLOW: int = 1
+const SWIM_DEEP: int = 2
+
 static var _loaded: bool = false
 static var _ids: Array[String] = []
 static var _index: Dictionary = {}
@@ -12,6 +17,7 @@ static var _defs: Array[Dictionary] = []
 static var _walkable: PackedByteArray = PackedByteArray()
 static var _opaque: PackedByteArray = PackedByteArray()
 static var _entity: PackedByteArray = PackedByteArray()
+static var _swim: PackedByteArray = PackedByteArray()
 
 
 static func _ensure_loaded() -> void:
@@ -34,8 +40,21 @@ static func _ensure_loaded() -> void:
 		_walkable.append(1 if bool(def.get("walkable", true)) else 0)
 		_opaque.append(1 if bool(def.get("opaque", false)) else 0)
 		_entity.append(1 if bool(def.get("entity_sprite", false)) else 0)
+		_swim.append(_swim_value(id, def))
 	if _ids.size() > 255:
 		push_error("TerrainDB : plus de 255 terrains (un chunk stocke un octet par case).")
+
+
+static func _swim_value(id: String, def: Dictionary) -> int:
+	match String(def.get("swim", "")):
+		"":
+			return SWIM_NONE
+		"shallow":
+			return SWIM_SHALLOW
+		"deep":
+			return SWIM_DEEP
+	push_error("TerrainDB : %s : valeur « swim » inconnue (attendu shallow ou deep)." % id)
+	return SWIM_NONE
 
 
 static func index_of(id: String) -> int:
@@ -51,9 +70,16 @@ static func id_of(index: int) -> String:
 	return _ids[index] if index >= 0 and index < _ids.size() else ""
 
 
+## Praticable À PIED (monstres, marche automatique). L'eau profonde ne l'est pas : le joueur y nage (voir swim_depth).
 static func is_walkable(index: int) -> bool:
 	_ensure_loaded()
 	return index >= 0 and index < _walkable.size() and _walkable[index] != 0
+
+
+## SWIM_NONE (sol), SWIM_SHALLOW (eau peu profonde, de marais...) ou SWIM_DEEP (eau profonde). Le joueur y nage.
+static func swim_depth(index: int) -> int:
+	_ensure_loaded()
+	return _swim[index] if index >= 0 and index < _swim.size() else SWIM_NONE
 
 
 static func is_opaque(index: int) -> bool:

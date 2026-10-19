@@ -1,5 +1,5 @@
 {
-    "_doc": "Terrains du monde. tile : id de tuile UltiCa ; base : terrain dessiné dessous (ex. herbe sous un arbre) ; entity_sprite : dessiné comme un sprite trié par Y (arbres) ; autotile : choix du sprite selon les voisins (wall). L'ORDRE des entrées donne l'index stocké dans les chunks (max 255).",
+    "_doc": "Terrains du monde. tile : id de tuile UltiCa ; base : terrain dessiné dessous (ex. herbe sous un arbre) ; entity_sprite : dessiné comme un sprite trié par Y (arbres) ; autotile : choix du sprite selon les voisins (wall) ; walkable : praticable À PIED (monstres, marche automatique) ; swim : \"shallow\" ou \"deep\" = le joueur y NAGE (jalon 9b : stamina consommée, noyade à 0 ; l'eau profonde n'est pas praticable à pied mais se traverse à la nage). L'ORDRE des entrées donne l'index stocké dans les chunks (max 255).",
     "terrains": {
         "t_grass": {
             "name": "Herbe",
@@ -46,19 +46,22 @@
             "name": "Eau peu profonde",
             "tile": "t_water_sh",
             "walkable": true,
-            "opaque": false
+            "opaque": false,
+            "swim": "shallow"
         },
         "t_water_dp": {
             "name": "Eau profonde",
             "tile": "t_water_dp",
             "walkable": false,
-            "opaque": false
+            "opaque": false,
+            "swim": "deep"
         },
         "t_swater_sh": {
             "name": "Eau de marais",
             "tile": "t_swater_sh",
             "walkable": true,
-            "opaque": false
+            "opaque": false,
+            "swim": "shallow"
         },
         "t_mud": {
             "name": "Boue",
