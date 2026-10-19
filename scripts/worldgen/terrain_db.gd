@@ -70,6 +70,14 @@ static func id_of(index: int) -> String:
 	return _ids[index] if index >= 0 and index < _ids.size() else ""
 
 
+## Nom affiché (champ "name" de terrain.json), l'id à défaut ; "" si l'index est invalide. Utilisé par le mode regard.
+static func name_of(index: int) -> String:
+	_ensure_loaded()
+	if index < 0 or index >= _defs.size():
+		return ""
+	return String(_defs[index].get("name", _ids[index]))
+
+
 ## Praticable À PIED (monstres, marche automatique). L'eau profonde ne l'est pas : le joueur y nage (voir swim_depth).
 static func is_walkable(index: int) -> bool:
 	_ensure_loaded()

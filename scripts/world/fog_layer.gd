@@ -7,21 +7,24 @@ extends Node2D
 ## Le monde est infini : on ne dessine que les cases affichables à l'écran, autour du joueur. Cette zone dépend de la taille de
 ## la fenêtre ET du zoom de la caméra : en dézoomant, le brouillard reste identique (rien de plus n'est visible), il couvre juste
 ## plus de cases. Les cases d'une même rangée et de même teinte sont fusionnées en un seul rectangle.
+## Mode regard (LookUI) : la caméra peut être décalée de `look_offset` cases ; la zone dessinée s'étend d'autant, pour que le brouillard
+## recouvre toujours l'écran (le mode regard ne révèle rien).
 
 const MARGIN_CELLS: int = 3        # cases dessinées en plus du bord de l'écran
-const MAX_HALF_CELLS: int = 200    # garde-fou (très grand écran, zoom minimal)
+const MAX_HALF_CELLS: int = 260    # garde-fou (très grand écran, zoom minimal, caméra décalée)
 
 const NONE: Color = Color(0, 0, 0, 0)
 const REMEMBERED: Color = Color(0, 0, 0, 0.6)
 
 var world: World
+var look_offset: Vector2i = Vector2i.ZERO   # décalage de la caméra (mode regard), en cases
 
 
 func _ready() -> void:
 	get_viewport().size_changed.connect(queue_redraw)
 
 
-## Demi-taille de la zone affichée, en cases (x, y), selon la fenêtre et le zoom de la caméra.
+## Demi-taille de la zone affichée, en cases (x, y), selon la fenêtre, le zoom de la caméra et le décalage du mode regard.
 func _half_extent() -> Vector2i:
 	var zoom: float = 1.0
 	if world.player != null and world.player.camera != null:
@@ -29,8 +32,8 @@ func _half_extent() -> Vector2i:
 	var size: Vector2 = get_viewport().get_visible_rect().size
 	var cells: float = World.TILE_SIZE * zoom
 	return Vector2i(
-		mini(ceili(size.x / (2.0 * cells)) + MARGIN_CELLS, MAX_HALF_CELLS),
-		mini(ceili(size.y / (2.0 * cells)) + MARGIN_CELLS, MAX_HALF_CELLS))
+		mini(ceili(size.x / (2.0 * cells)) + MARGIN_CELLS + absi(look_offset.x), MAX_HALF_CELLS),
+		mini(ceili(size.y / (2.0 * cells)) + MARGIN_CELLS + absi(look_offset.y), MAX_HALF_CELLS))
 
 
 func _color_at(pos: Vector2i) -> Color:

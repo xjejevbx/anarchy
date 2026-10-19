@@ -13,11 +13,14 @@ extends Resource
 @export var attack_name: String = "Attaque"
 @export var attack_cost: float = 1.5
 @export var attack_damage: float = 4.0
+# Parties du corps visées : {id de data/body_parts.json: poids}. Les poids sont lus comme des pourcentages (leur somme est normalisée).
+@export var attack_zones: Dictionary = {}
 
 @export var special_name: String = ""
 @export var special_cost: float = 0.0
 @export var special_damage: float = 0.0
 @export var special_chance: float = 0.0  # probabilité d'utiliser la spéciale à la place
+@export var special_zones: Dictionary = {}
 
 
 static func zombie() -> MonsterData:
@@ -29,8 +32,10 @@ static func zombie() -> MonsterData:
 	d.attack_name = "Griffure"
 	d.attack_cost = 1.5
 	d.attack_damage = 4.0
+	d.attack_zones = {"head": 10, "torso": 36, "arm_l": 20, "arm_r": 20, "leg_l": 7, "leg_r": 7}
 	d.special_name = "Morsure"
 	d.special_cost = 3.5
 	d.special_damage = 9.0
 	d.special_chance = 0.3
+	d.special_zones = {"head": 20, "torso": 26, "arm_l": 22, "arm_r": 22, "leg_l": 5, "leg_r": 5}
 	return d

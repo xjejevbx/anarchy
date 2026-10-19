@@ -78,6 +78,20 @@ Tileset provisoire : UltiCa (CC BY-SA 3.0, voir assets/ultica/CREDITS.txt). Les 
 - **Alerte « Vous apercevez X »** : une fois par monstre ; elle revient seulement s'il est resté dans le brouillard au moins `World.ALERT_REARM_POINTS` (5 s). La marche automatique s'arrête, elle, à chaque apparition.
 - **Jauge de suspense** (PLUS TARD) : indicateur 0-100 % comme si quelqu'un nous observait et pariait sur nos chances de survie
   (100 % = on ne sait pas quand tu vas mourir, 0 % = déjà mort). Valeur calculée (PV, stamina, menaces, charge, etc.).
+- **Santé par parties du corps (style CDDA)** : plus de PV globaux. `data/body_parts.json` (`BodyPartDB`) : Tête 40, Torse 60, Bras g./d. 40,
+  Jambes g./d. 50 (total 280, valeurs « à l'aveugle » à régler en jeu). **Mort quand la tête ou le torse tombe à 0 PV** (champ `vital`).
+  Un membre à 0 PV est « hors d'usage » mais n'a PAS encore d'effet (à venir : bras = dégâts de mêlée, jambes = vitesse). Les PV d'une
+  partie ne descendent pas sous 0 ; l'excédent est perdu. `Player.body` (id -> PV), `part_hp()`, `total_hp()`, `take_damage(montant, partie)`.
+  Le HUD affiche les PV TOTAUX (signal `health_changed`). La noyade blesse le torse.
+- **Attaques de monstres localisées** : `MonsterData.attack_zones` / `special_zones` = poids par partie du corps (lus comme des %).
+  Zombie, Griffure : Tête 10, Torse 36, Bras 20/20, Jambes 7/7 ; Morsure : Tête 20, Torse 26, Bras 22/22, Jambes 5/5. Le message du journal
+  donne la partie touchée. Les probabilités sont visibles en observant le monstre (survol ou mode regard) : `Monster.get_tooltip_lines()`.
+- **Mode regard** (`LookUI`, touche `x`, ou `Maj` + pavé numérique / flèches depuis le monde) : la CAMÉRA se déplace, pas le joueur ; aucun temps
+  ne passe (jeu en pause) ; rien n'est révélé (FOV et brouillard inchangés : `FogLayer.look_offset` étend seulement la zone dessinée). Un curseur
+  surligne la case (calque de choix de case de `World`, `show_pick_overlay`), distance max 40 cases. Panneau à droite : case VISIBLE = biome,
+  ville / lieu, terrain, mobilier, praticabilité, objets au sol, monstre (PV, coûts, probabilités de toucher) ; case VUE (mémoire) = terrain et
+  mobilier seulement ; case JAMAIS VUE = rien. Dans le mode : pavé / flèches (avec ou sans Maj) déplacent le curseur, `5` recentre, `+` / `-` zoom,
+  `x` / Échap quittent (la caméra revient sur le joueur).
 
 ## Monde procédural (plan : `docs/WORLD_GEN.md`)
 - Monde infini, généré par chunks de 24 x 24 cases, **déterministe** : une seed = un monde, même après sauvegarde / rechargement.
@@ -108,6 +122,8 @@ sélection : `e` équiper/retirer (ex. un jean et un sac à dos d'un coup), `t` 
 équipés (sac équipé, etc.) sont sélectionnables comme les autres (même quantités). Depuis le sol, `Entrée`/`w`/`W` s'appliquent à la sélection.
 Souris : lecture seule dans les menus (survol du diviseur dans « Poids : 0.40 kg ÷ 2 × 4 = 0.80 kg » = infobulle du conteneur) ; dans le monde, double-clic gauche sur une case visible = s'y rendre.
 Zoom `+` / `-` (par le caractère tapé, donc aussi en AZERTY ; pavé numérique accepté). `c` = écran du personnage (4 / 6 ou flèches : onglets, `c` / Échap : fermer). `|` = menu de posture (Marche / Sprint / Accroupi) : la posture suivante est présélectionnée, `|` ou 8 / 2 changent la sélection, Entrée valide, Échap ferme.
+`x` ou `Maj` + pavé numérique / flèches = mode regard (voir ci-dessus). `c` = écran du personnage, onglets « Stats » et « Corps » (4 / 6 ou flèches
+pour changer d'onglet) ; l'onglet Corps affiche une barre de vie par partie du corps.
 
 ## Architecture (scripts/)
 - `main.gd` : assemble monde, joueur, HUD, zombies de test.
@@ -147,6 +163,10 @@ Zoom `+` / `-` (par le caractère tapé, donc aussi en AZERTY ; pavé numérique
 - `ui/hud.gd` : texte de stats (posture comprise), journal de messages, infobulle des monstres.
 - `tools/build_ultica_pack.py` : régénère assets/ultica (copie les PNG d'une liste d'ids CDDA depuis le dépôt
   I-am-Erk/CDDA-tilesets, dossier gfx/UltimateCataclysm, + écrit tiles.json). Ajouter un id dans IDS puis relancer.
+- `data/body_parts.json` + `data/body_part_db.gd` (`BodyPartDB`) : parties du corps, PV max, vital, tirage pondéré (`pick`), texte des probabilités (`zone_lines`).
+- `ui/look_ui.gd` (`LookUI`) : mode regard. `worldgen/terrain_db.gd` : ajout de `name_of(index)`.
+- `entities/player.gd` : `body`, `take_damage(montant, partie)`, `try_zoom()`, signal `look_requested` (EventBus).
+- `tests/test_body.gd` : test des parties du corps et des zones des monstres.
 
 ## Conventions
 - Tout est construit par code (pas de .tscn hormis la scène racine avec main.gd). Constantes d'équilibrage en haut des scripts.
@@ -164,3 +184,7 @@ Zoom `+` / `-` (par le caractère tapé, donc aussi en AZERTY ; pavé numérique
 - Les canopées d'arbres (96×96) peuvent cacher ce qui est derrière. Survol des monstres par case, pas par sprite.
 - Feuille de route : inventaire (terminé) -> **génération procédurale du monde (plan dans `docs/WORLD_GEN.md`, jalons 1 à 5, 9 et 9b faits)** -> jalon 10 (modes de placement) -> combat plus riche -> import complet d'UltiCa
   (TileMapLayer) -> jauge de suspense.
+- Membres à 0 PV sans effet ; pas de soin ni de régénération par partie ; PV max fixes (pas liés à la Force).
+- Mode regard : sous Windows, `Maj` + pavé numérique avec VerrNum actif peut ne pas arriver comme « Maj enfoncé » (Windows simule un relâchement
+  de Maj) ; dans ce cas utiliser `x`, puis le pavé sans Maj.
+- Les objets et monstres hors de vue ne sont pas mémorisés : le mode regard n'en dit rien.

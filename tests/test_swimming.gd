@@ -55,10 +55,10 @@ func _initialize() -> void:
 	_check(Player.swim_wait_stamina_delta(TerrainDB.SWIM_DEEP, 0.0) < 0.0, "eau profonde : attendre coûte de la stamina, même à vide")
 	_check(Player.swim_wait_stamina_delta(TerrainDB.SWIM_DEEP, 1.5) < Player.swim_wait_stamina_delta(TerrainDB.SWIM_DEEP, 0.0), "eau profonde : la surcharge aggrave le surplace")
 
-	# --- Noyade ---
+	# --- Noyade (dégâts au torse) ---
 	_check(Player.drown_damage(1.0) > 0.0, "noyade : dégâts positifs")
 	_check(is_equal_approx(Player.drown_damage(2.0), 2.0 * Player.drown_damage(1.0)), "noyade : proportionnelle à la durée de l'action")
-	_check(Player.drown_damage(1.0) * 20.0 < Player.HP_MAX * 2.0, "noyade : plusieurs dizaines d'actions avant la mort (laisse le temps de réagir)")
+	_check(Player.drown_damage(1.0) * 20.0 < BodyPartDB.max_hp_of("torso") * 2.0, "noyade : plusieurs dizaines d'actions avant la mort (laisse le temps de réagir)")
 
 	print("RÉSULTAT : %s (%d échec(s))" % ["OK" if _failures == 0 else "ÉCHEC", _failures])
 	quit(_failures)

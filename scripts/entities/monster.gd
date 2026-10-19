@@ -59,8 +59,10 @@ func _attack_player() -> float:
 	var attack_label: String = data.special_name if use_special else data.attack_name
 	var damage: float = data.special_damage if use_special else data.attack_damage
 	var cost: float = data.special_cost if use_special else data.attack_cost
-	EventBus.message_logged.emit("%s utilise %s : -%d PV." % [data.display_name, attack_label, int(damage)])
-	world.player.take_damage(damage)
+	var zones: Dictionary = data.special_zones if use_special else data.attack_zones
+	var part: String = BodyPartDB.pick(zones, _rng.randf())  # partie du corps touchée (probabilités visibles dans l'infobulle)
+	EventBus.message_logged.emit("%s utilise %s (%s) : -%d PV." % [data.display_name, attack_label, BodyPartDB.name_of(part), int(damage)])
+	world.player.take_damage(damage, part)
 	return cost
 
 
@@ -84,15 +86,24 @@ func take_damage(amount: float) -> bool:
 	return hp <= 0.0
 
 
-func get_tooltip_text() -> String:
+## Lignes d'information (survol, mode regard) : PV, coûts, dégâts et PROBABILITÉS de toucher chaque partie du corps.
+func get_tooltip_lines() -> Array[String]:
 	var lines: Array[String] = []
 	lines.append("%s   PV %d/%d" % [data.display_name, ceili(hp), int(data.max_hp)])
 	lines.append("Déplacement : %.1f pts" % data.move_cost)
 	lines.append("%s : %.1f pts, %d dégâts" % [data.attack_name, data.attack_cost, int(data.attack_damage)])
+	for zone_line in BodyPartDB.zone_lines(data.attack_zones):
+		lines.append("   → " + zone_line)
 	if data.special_cost > 0.0:
 		lines.append("%s (spéciale, %d%%) : %.1f pts, %d dégâts" % [
 			data.special_name, roundi(data.special_chance * 100.0), data.special_cost, int(data.special_damage)])
-	return "\n".join(lines)
+		for zone_line in BodyPartDB.zone_lines(data.special_zones):
+			lines.append("   → " + zone_line)
+	return lines
+
+
+func get_tooltip_text() -> String:
+	return "\n".join(get_tooltip_lines())
 
 
 func _draw() -> void:

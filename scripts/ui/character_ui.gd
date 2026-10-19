@@ -1,13 +1,16 @@
 class_name CharacterUI
 extends CanvasLayer
 ## Écran du personnage (touche c) : une barre d'onglets, 4 / 6 (ou flèches gauche / droite) pour en changer, c ou Échap pour fermer.
-## Pour l'instant un seul onglet, « Stats » : caractéristiques (data/stats.json) et état du joueur. Le jeu est en pause tant que
-## l'écran est ouvert. Pour ajouter un onglet : l'ajouter à TAB_NAMES et à _draw_tab().
+## Onglets : « Stats » (caractéristiques de data/stats.json et état du joueur) et « Corps » (une barre de vie par partie du corps,
+## data/body_parts.json). Le jeu est en pause tant que l'écran est ouvert. Pour ajouter un onglet : l'ajouter à TAB_NAMES et à _draw_tab().
 
 # --- Réglages ---
 const PANEL_MARGIN: float = 64.0
 const FONT_SIZE: int = 16
-const TAB_NAMES: Array[String] = ["Stats"]
+const TAB_NAMES: Array[String] = ["Stats", "Corps"]
+const BODY_ROW_HEIGHT: float = 58.0
+const BODY_NAME_WIDTH: float = 220.0
+const BODY_BAR_HEIGHT: float = 22.0
 
 const COLOR_DIM: Color = Color(0, 0, 0, 0.6)
 const COLOR_PANEL: Color = Color(0.09, 0.09, 0.11, 0.97)
@@ -18,6 +21,9 @@ const COLOR_HEADER: Color = Color(0.95, 0.8, 0.4)
 const COLOR_ACCENT: Color = Color(0.55, 0.8, 1.0)
 const COLOR_WARN: Color = Color(1.0, 0.4, 0.35)
 const COLOR_TAB: Color = Color(0.25, 0.35, 0.55, 0.9)
+const COLOR_BAR_BACK: Color = Color(0.18, 0.18, 0.2)
+const COLOR_BAR_GOOD: Color = Color(0.3, 0.7, 0.4)
+const COLOR_BAR_MID: Color = Color(0.95, 0.75, 0.3)
 
 var player: Player
 
@@ -103,6 +109,8 @@ func _draw_tab(font: Font, tab: int, area: Rect2) -> void:
 	match TAB_NAMES[tab]:
 		"Stats":
 			_draw_stats(font, area)
+		"Corps":
+			_draw_body(font, area)
 
 
 ## Colonne de gauche : les caractéristiques ; colonne de droite : l'état du joueur.
@@ -121,7 +129,7 @@ func _draw_stats(font: Font, area: Rect2) -> void:
 	var ratio: float = player.get_load_ratio()
 	var lines: Array[Array] = [
 		["Heure", GameClock.get_time_string(), COLOR_TEXT],
-		["PV", "%d / %d" % [ceili(player.hp), int(Player.HP_MAX)], COLOR_TEXT],
+		["PV (total, voir l'onglet Corps)", "%d / %d" % [ceili(player.total_hp()), int(BodyPartDB.total_max_hp())], COLOR_TEXT],
 		["Stamina", "%d %%" % roundi(player.stamina / Player.STAMINA_MAX * 100.0), COLOR_TEXT],
 		["Pénalité de temps", "+%d %%" % roundi(player.get_time_penalty() * 100.0), COLOR_TEXT],
 		["Charge", "%.1f / %.1f kg (%d %%)" % [player.get_carry_weight(), player.get_carry_capacity(), roundi(ratio * 100.0)],
@@ -136,3 +144,34 @@ func _draw_stats(font: Font, area: Rect2) -> void:
 		y += 28.0
 		_view.draw_string(font, Vector2(rx, y), String(line[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, COLOR_MUTED if String(line[0]).begins_with("  ") else COLOR_TEXT)
 		_view.draw_string(font, Vector2(rx, y), String(line[1]), HORIZONTAL_ALIGNMENT_RIGHT, area.end.x - rx - 8.0, FONT_SIZE, line[2])
+
+
+## Une barre de vie par partie du corps (comme CDDA). Tête et torse : la mort survient à 0 PV.
+func _draw_body(font: Font, area: Rect2) -> void:
+	var y: float = area.position.y + 14.0
+	_view.draw_string(font, Vector2(area.position.x, y), "ÉTAT DU CORPS", HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, COLOR_HEADER)
+	var bar_x: float = area.position.x + BODY_NAME_WIDTH
+	var bar_width: float = minf(area.size.x - BODY_NAME_WIDTH - 140.0, 520.0)
+	for id in BodyPartDB.ids():
+		y += BODY_ROW_HEIGHT
+		var hp: float = player.part_hp(id)
+		var max_hp: float = BodyPartDB.max_hp_of(id)
+		var ratio: float = clampf(hp / max_hp, 0.0, 1.0)
+		var color: Color = COLOR_BAR_GOOD if ratio > 0.6 else (COLOR_BAR_MID if ratio > 0.3 else COLOR_WARN)
+		_view.draw_string(font, Vector2(area.position.x + 8, y), BodyPartDB.name_of(id), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, COLOR_TEXT)
+		if BodyPartDB.is_vital(id):
+			_view.draw_string(font, Vector2(area.position.x + 8, y + 18), "vital : mort à 0 PV", HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE - 4, COLOR_MUTED)
+		var bar := Rect2(Vector2(bar_x, y - BODY_BAR_HEIGHT + 4.0), Vector2(bar_width, BODY_BAR_HEIGHT))
+		_view.draw_rect(bar, COLOR_BAR_BACK)
+		_view.draw_rect(Rect2(bar.position, Vector2(bar.size.x * ratio, bar.size.y)), color)
+		_view.draw_rect(bar, COLOR_BORDER, false, 1.5)
+		var value_text: String = "%d / %d" % [ceili(hp), int(max_hp)]
+		if hp <= 0.0:
+			value_text += "  HORS D'USAGE" if not BodyPartDB.is_vital(id) else "  DÉTRUIT"
+		_view.draw_string(font, Vector2(bar.end.x + 12.0, y), value_text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, COLOR_WARN if hp <= 0.0 else COLOR_TEXT)
+	y += BODY_ROW_HEIGHT
+	_view.draw_string(font, Vector2(area.position.x, y), "Les membres à 0 PV n'ont pas encore d'effet (à venir : bras = dégâts, jambes = vitesse).",
+		HORIZONTAL_ALIGNMENT_LEFT, area.size.x, FONT_SIZE - 3, COLOR_MUTED)
+	y += 22.0
+	_view.draw_string(font, Vector2(area.position.x, y), "Les probabilités de toucher chaque partie s'affichent en observant un monstre (survol ou touche x).",
+		HORIZONTAL_ALIGNMENT_LEFT, area.size.x, FONT_SIZE - 3, COLOR_MUTED)

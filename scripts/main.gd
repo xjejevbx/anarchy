@@ -38,6 +38,10 @@ func _ready() -> void:
 	posture_ui.player = player
 	add_child(posture_ui)
 
+	var look_ui := LookUI.new()   # mode regard : x ou Maj + pavé numérique
+	look_ui.player = player
+	add_child(look_ui)
+
 	var hud := CanvasLayer.new()
 	hud.set_script(load("res://scripts/ui/hud.gd"))
 	add_child(hud)
@@ -47,7 +51,7 @@ func _ready() -> void:
 		var spawn_key: Vector3i = ChunkManager.key_of(spawn)
 		spawn_town = SettlementMap.for_seed(world.world_seed).town_at(Vector2i(spawn_key.x, spawn_key.y))
 	var spawn_note: String = (" en lisière de « %s »" % spawn_town["name"]) if not spawn_town.is_empty() else ""
-	EventBus.message_logged.emit("Monde : seed « %s » (%d)%s. Départ en (%d, %d)%s. m : carte de debug." % \
+	EventBus.message_logged.emit("Monde : seed « %s » (%d)%s. Départ en (%d, %d)%s. m : carte de debug, x : regarder." % \
 		[WORLD_SEED_TEXT, world.world_seed, ", arène de test" if USE_TEST_ARENA else "", spawn.x, spawn.y, spawn_note])
 
 	# Quelques zombies pour tester (placés relativement au joueur)

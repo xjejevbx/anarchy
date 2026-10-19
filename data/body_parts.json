@@ -1,0 +1,11 @@
+{
+ "_doc": "Parties du corps du joueur (ecran personnage, onglet Corps). max_hp = PV max de la partie ; vital = la mort survient quand cette partie tombe a 0 (comme CDDA : tete et torse) ; name = nom complet, short = nom court (infobulles des monstres). L'ORDRE des entrees donne l'ordre d'affichage. Les membres a 0 PV n'ont pas encore d'effet sur le jeu (a venir : bras = degats, jambes = vitesse). Les monstres choisissent la partie touchee selon les poids attack_zones / special_zones de MonsterData.",
+ "parts": {
+  "head":  {"name": "Tête",          "short": "Tête",    "max_hp": 40, "vital": true},
+  "torso": {"name": "Torse",         "short": "Torse",   "max_hp": 60, "vital": true},
+  "arm_l": {"name": "Bras gauche",   "short": "Bras g.", "max_hp": 40},
+  "arm_r": {"name": "Bras droit",    "short": "Bras d.", "max_hp": 40},
+  "leg_l": {"name": "Jambe gauche",  "short": "Jambe g.", "max_hp": 50},
+  "leg_r": {"name": "Jambe droite",  "short": "Jambe d.", "max_hp": 50}
+ }
+}
