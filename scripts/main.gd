@@ -4,6 +4,19 @@ extends Node2D
 # --- Réglages de la partie (la saisie de la seed viendra avec le menu de création) ---
 const WORLD_SEED_TEXT: String = "cataclysme"  # nombre ou texte : même seed = même monde
 const USE_TEST_ARENA: bool = false           # true : ancienne carte fermée 60x40 (debug)
+const SPAWN_BESTIARY: bool = true            # true : tous les types de monstres près du départ (debug) ; false : 3 zombies seulement
+
+# Monstres de test : [id MonsterData, décalage par rapport au départ]. Tous dans les ~30 cases (chunks proches chargés au démarrage).
+const BASE_MONSTERS: Array = [
+	["zombie", Vector2i(9, 3)], ["zombie", Vector2i(15, 9)], ["zombie", Vector2i(5, 15)],
+]
+const BESTIARY_MONSTERS: Array = [
+	["zombie_child", Vector2i(-10, 6)], ["zombie_fast", Vector2i(18, -8)], ["zombie_crawler", Vector2i(-6, 12)],
+	["zombie_brute", Vector2i(22, 12)], ["zombie_spitter", Vector2i(-14, -9)], ["zombie_screecher", Vector2i(12, -16)],
+	["zombie_electric", Vector2i(-18, 14)], ["zombie_soldier", Vector2i(24, -4)], ["zombie_dog", Vector2i(-8, -14)],
+	["wolf", Vector2i(-24, 4)], ["wolf", Vector2i(-26, 7)], ["wolf", Vector2i(-23, 9)],
+	["giant_spider", Vector2i(8, 22)], ["bear", Vector2i(-20, -20)], ["zombie_hulk", Vector2i(28, 24)],
+]
 
 
 func _ready() -> void:
@@ -38,6 +51,10 @@ func _ready() -> void:
 	posture_ui.player = player
 	add_child(posture_ui)
 
+	var use_ui := UseUI.new()     # menu « utiliser un objet » : touche u (antibiotiques...)
+	use_ui.player = player
+	add_child(use_ui)
+
 	var look_ui := LookUI.new()   # mode regard : x ou Maj + pavé numérique
 	look_ui.player = player
 	add_child(look_ui)
@@ -51,13 +68,15 @@ func _ready() -> void:
 		var spawn_key: Vector3i = ChunkManager.key_of(spawn)
 		spawn_town = SettlementMap.for_seed(world.world_seed).town_at(Vector2i(spawn_key.x, spawn_key.y))
 	var spawn_note: String = (" en lisière de « %s »" % spawn_town["name"]) if not spawn_town.is_empty() else ""
-	EventBus.message_logged.emit("Monde : seed « %s » (%d)%s. Départ en (%d, %d)%s. m : carte de debug, x : regarder." % \
+	EventBus.message_logged.emit("Monde : seed « %s » (%d)%s. Départ en (%d, %d)%s. m : carte de debug, x : regarder, u : utiliser." % \
 		[WORLD_SEED_TEXT, world.world_seed, ", arène de test" if USE_TEST_ARENA else "", spawn.x, spawn.y, spawn_note])
 
-	# Quelques zombies pour tester (placés relativement au joueur)
-	world.spawn_monster(MonsterData.zombie(), spawn + Vector2i(9, 3))
-	world.spawn_monster(MonsterData.zombie(), spawn + Vector2i(15, 9))
-	world.spawn_monster(MonsterData.zombie(), spawn + Vector2i(5, 15))
+	# Monstres de test (placés relativement au joueur ; survolez-les ou utilisez x pour voir leurs compétences)
+	var roster: Array = BASE_MONSTERS.duplicate()
+	if SPAWN_BESTIARY:
+		roster.append_array(BESTIARY_MONSTERS)
+	for entry: Array in roster:
+		world.spawn_monster(MonsterData.create(String(entry[0])), spawn + (entry[1] as Vector2i))
 
 	# Objets de test au sol, autour du joueur : i = inventaire, g = ramasser
 	var at := func(dx: int, dy: int) -> Vector2i: return spawn + Vector2i(dx, dy)
@@ -74,3 +93,4 @@ func _ready() -> void:
 	world.add_ground_item(at.call(0, -1), Item.create("can_beans", 4))
 	world.add_ground_item(at.call(0, -1), Item.create("bottle_plastic", 2))
 	world.add_ground_item(at.call(0, -1), Item.create("rope_6"))
+	world.add_ground_item(at.call(1, 1), Item.create("antibiotics", 3))

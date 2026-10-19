@@ -1,5 +1,5 @@
 {
- "_doc": "size = [longueur, largeur] en cm. weight en kg. container : max_length/max_width (cm), weight_limit (kg de contenu REEL), weight_ratio (le contenu pese reel/ratio quand le conteneur est equipe). slot : head, torso, outer, legs, feet, back. tile/worn_tile : ids de tuiles UltiCa.",
+ "_doc": "size = [longueur, largeur] en cm. weight en kg. container : max_length/max_width (cm), weight_limit (kg de contenu REEL), weight_ratio (le contenu pese reel/ratio quand le conteneur est equipe). slot : head, torso, outer, legs, feet, back. tile/worn_tile : ids de tuiles UltiCa. use : objet utilisable avec la touche u (UseUI) = {action : \"antibiotic\", label : verbe affiche, time : secondes de base, desc : aide affichee} ; l'objet est consomme (une unite) quand son action a un effet.",
  "items": {
   "undershirt": {"name": "T-shirt", "weight": 0.2, "size": [30, 25], "slot": "torso",
    "tile": "overlay_male_worn_undershirt", "worn_tile": "overlay_male_worn_undershirt"},
@@ -32,6 +32,9 @@
   "pipe": {"name": "Tuyau en métal", "weight": 1.2, "size": [60, 5], "tile": "pipe"},
   "stick": {"name": "Bâton", "weight": 0.5, "size": [80, 4], "tile": "stick"},
   "2x4": {"name": "Planche 2x4", "weight": 2.0, "size": [120, 9], "tile": "2x4"},
-  "sheet_metal_small": {"name": "Plaque de métal", "weight": 3.5, "size": [45, 45], "tile": "sheet_metal_small"}
+  "sheet_metal_small": {"name": "Plaque de métal", "weight": 3.5, "size": [45, 45], "tile": "sheet_metal_small"},
+  "antibiotics": {"name": "Antibiotiques", "weight": 0.05, "size": [8, 4], "tile": "antibiotics",
+   "use": {"action": "antibiotic", "label": "Prendre", "time": 3.0,
+	"desc": "Soigne une infection si pris à temps ; ralentit seulement le mal s'il est trop tard."}}
  }
 }

@@ -1,5 +1,5 @@
 extends CanvasLayer
-## HUD : heure, PV, stamina, charge, journal de messages, infobulle des monstres.
+## HUD : heure, PV, stamina, charge, effets d'état, journal de messages, infobulle des monstres.
 
 const MAX_MESSAGES: int = 6
 
@@ -17,6 +17,7 @@ var _weight: float = 0.0
 var _capacity: float = 1.0
 var _last_action: String = ""
 var _posture: String = "Marche"
+var _status: String = ""   # effets d'état en cours (saignement, poison, infection...)
 var _messages: Array[String] = []
 var _hovered: Monster = null
 
@@ -59,6 +60,10 @@ func _process(_delta: float) -> void:
 		_tooltip.visible = false
 	var viewport_height: float = get_viewport().get_visible_rect().size.y
 	_log_label.position = Vector2(12, viewport_height - _log_label.size.y - 12)
+	var status: String = StatusEffects.summary()   # les effets changent après le signal de temps : on compare à chaque image
+	if status != _status:
+		_status = status
+		_refresh()
 
 
 func _on_stamina_changed(current: float, maximum: float, time_penalty: float) -> void:
@@ -105,6 +110,8 @@ func _refresh() -> void:
 		_posture,
 		_last_action,
 	]
+	if _status != "":
+		_label.text += "\nEffets : %s" % _status
 
 
 func _on_posture_changed(posture_name: String) -> void:
