@@ -3,14 +3,24 @@ extends Node2D
 ## Monstre : joue quand son "prochain moment d'action" est atteint.
 ## take_turn() fait UNE action et renvoie son coût en points d'action.
 ## Compétences (voir MonsterData) : attaque spéciale, effets d'état, tir à distance, hurlement, meute.
+##
+## Mêlée : orthogonale OU diagonale (règle de l'angle : une des deux cases « de l'angle » doit être franchissable, comme pour
+## les diagonales du joueur ; voir _can_melee). Le joueur, lui, frappe toujours en orthogonal.
+##
+## Stamina : les monstres ont la même stamina que le joueur (Player.STAMINA_MAX) et les mêmes règles de ralentissement :
+## chaque tranche de 30 % perdue ajoute +10 % à la durée de leurs actions (max +30 %). Se déplacer à terre regagne de la stamina,
+## nager (eau peu profonde ; ils ne vont pas en eau profonde) en coûte, attendre régénère, attaquer fatigue.
+## Mêmes fonctions statiques que le joueur (Player.load_stamina_delta, swim_move_stamina_delta, swim_wait_stamina_delta), charge nulle.
 
 const IDLE_COST: float = 5.0   # rien à faire : on revient voir plus tard
 const BLOCKED_COST: float = 1.0 # chemin bloqué : on attend un peu
+const ATTACK_STAMINA_PER_SECOND: float = 1.0  # fatigue d'une attaque ou d'un tir : -1 par seconde d'action (le joueur : -2 pour 2 s)
 
 var data: MonsterData
 var world: World
 var grid_pos: Vector2i = Vector2i.ZERO
 var hp: float = 1.0
+var stamina: float = Player.STAMINA_MAX
 var next_action_time: float = 0.0
 var has_target: bool = false            # sait où est (ou était) le joueur
 var target_cell: Vector2i = Vector2i.ZERO
@@ -58,16 +68,65 @@ func take_turn() -> float:
 			alert(player.grid_pos)
 			if data.scream_radius > 0 and GameClock.elapsed_points >= _scream_ready_at:
 				return _scream()
-		if World.are_adjacent(grid_pos, player.grid_pos):
+		if _can_melee(player.grid_pos):
 			return _attack_player()
 		if has_target:
 			if sees and _can_shoot(delta):
 				return _shoot()
 			if grid_pos == target_cell:
 				has_target = false  # arrivé là où on a vu le joueur pour la dernière fois : plus personne
-				return IDLE_COST
+				return _rest(IDLE_COST)
 			return _move_toward(target_cell)
-	return IDLE_COST
+	return _rest(IDLE_COST)
+
+
+# --- Mêlée ---
+
+## Le monstre peut-il frapper la case `cell` ? Voisine en orthogonal, ou en diagonale si l'une des deux cases de l'angle est
+## franchissable (même règle que les diagonales du joueur : on ne frappe pas à travers l'angle de deux murs / arbres).
+func _can_melee(cell: Vector2i) -> bool:
+	var d: Vector2i = cell - grid_pos
+	if absi(d.x) + absi(d.y) == 1:
+		return true
+	if absi(d.x) == 1 and absi(d.y) == 1:
+		return world.can_player_enter(grid_pos + Vector2i(d.x, 0)) or world.can_player_enter(grid_pos + Vector2i(0, d.y))
+	return false
+
+
+# --- Stamina et temps (mêmes règles que le joueur) ---
+
+## Pénalité de temps actuelle (0.0, 0.1, 0.2 ou 0.3), comme Player.get_time_penalty.
+func time_penalty() -> float:
+	var steps: int = mini(int((Player.STAMINA_MAX - stamina) / Player.STAMINA_STEP), Player.MAX_PENALTY_STEPS)
+	return steps * Player.PENALTY_PER_STEP
+
+
+## Applique la variation de stamina et renvoie le coût RÉEL de l'action = base x (1 + pénalité), comme Player._perform_action.
+func _finish(base_cost: float, stamina_delta: float) -> float:
+	var cost: float = base_cost * (1.0 + time_penalty())
+	stamina = clampf(stamina + stamina_delta, 0.0, Player.STAMINA_MAX)
+	return cost
+
+
+## Variation de stamina pour UNE seconde d'attente : planche en eau peu profonde, récupération à terre.
+func _wait_stamina_delta() -> float:
+	var depth: int = world.swim_depth(grid_pos)
+	if depth != TerrainDB.SWIM_NONE:
+		return Player.swim_wait_stamina_delta(depth, 0.0)
+	return Player.load_stamina_delta(0.0, Player.WAIT_REGEN_MAX)
+
+
+## Variation de stamina pour UN pas, selon la case où le monstre se trouve (à appeler après le déplacement).
+func _move_stamina_delta() -> float:
+	var depth: int = world.swim_depth(grid_pos)
+	if depth != TerrainDB.SWIM_NONE:
+		return Player.swim_move_stamina_delta(depth, 0.0)
+	return Player.load_stamina_delta(0.0, Player.MOVE_REGEN_MAX)
+
+
+## Attendre / ne rien faire pendant `cost` secondes (récupère de la stamina, sauf en eau profonde).
+func _rest(cost: float) -> float:
+	return _finish(cost, _wait_stamina_delta() * cost)
 
 
 ## Le monstre sait où chercher (il a vu le joueur, ou s'est fait frapper). Les membres d'une meute proche le savent aussi.
@@ -99,7 +158,7 @@ func _attack_player() -> float:
 	var infection_chance: float = data.special_infection if use_special else data.attack_infection
 	if infection_chance > 0.0 and not world.player.dead and _rng.randf() < infection_chance:
 		Infection.infect(world.player)
-	return cost
+	return _finish(cost, -cost * ATTACK_STAMINA_PER_SECOND)
 
 ## Tire l'effet d'état d'un coup (chance) et l'inflige au joueur s'il est encore en vie.
 func _apply_effect(effect: Dictionary, part: String) -> void:
@@ -120,7 +179,7 @@ func _shoot() -> float:
 	EventBus.message_logged.emit("%s utilise %s (%s) : -%d PV." % [data.display_name, data.ranged_name, BodyPartDB.name_of(part), int(data.ranged_damage)])
 	world.player.take_damage(data.ranged_damage, part)
 	_apply_effect(data.ranged_effect, part)
-	return data.ranged_cost
+	return _finish(data.ranged_cost, -data.ranged_cost * ATTACK_STAMINA_PER_SECOND)
 
 # --- Hurlement ---
 ## Alerte tous les monstres dans le rayon : ils se dirigent vers la position du joueur.
@@ -137,19 +196,19 @@ func _scream() -> float:
 			alerted += 1
 	EventBus.message_logged.emit("%s pousse un %s !%s" % [data.display_name, data.scream_name.to_lower(),
 		" Les créatures alentour accourent." if alerted > 0 else ""])
-	return data.scream_cost
+	return _finish(data.scream_cost, 0.0)
 
 func _move_toward(cell: Vector2i) -> float:
 	var path: Array[Vector2i] = world.find_path(grid_pos, cell)
 	if path.size() < 2:
 		has_target = false
-		return IDLE_COST
+		return _rest(IDLE_COST)
 	var next_cell: Vector2i = path[1]
 	if world.is_occupied(next_cell):
-		return BLOCKED_COST
+		return _rest(BLOCKED_COST)
 	grid_pos = next_cell  # la position affichée suit en glissant (voir _process)
 	position = Vector2(grid_pos * World.TILE_SIZE)
-	return data.move_cost
+	return _finish(data.move_cost, _move_stamina_delta())
 
 
 ## Renvoie true si le monstre meurt.
@@ -163,6 +222,8 @@ func take_damage(amount: float) -> bool:
 func get_tooltip_lines() -> Array[String]:
 	var lines: Array[String] = []
 	lines.append("%s   PV %d/%d" % [data.display_name, ceili(hp), int(data.max_hp)])
+	if time_penalty() > 0.0:
+		lines.append("Essoufflé : actions +%d %% de durée" % roundi(time_penalty() * 100.0))
 	lines.append("Déplacement : %.1f pts" % data.move_cost)
 	lines.append("%s : %.1f pts, %d dégâts" % [data.attack_name, data.attack_cost, int(data.attack_damage)])
 	for zone_line in BodyPartDB.zone_lines(data.attack_zones):
