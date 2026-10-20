@@ -12,6 +12,7 @@ const SPLASH: bool = true
 const WIND: bool = true
 
 const SHADOW_COLOR: Color = Color(0, 0, 0, 0.3)
+const SHADOW_RADII: Vector2 = Vector2(46.0, 15.0)   # rayons de l'ombre du joueur et des monstres (pixels, case de 128 px)
 const MOVE_SMOOTHING: float = 28.0     # plus grand = glisse plus vite vers la case (la logique est, elle, instantanée)
 const HOP_HEIGHT: float = 9.0          # petit rebond (pixels) pendant un pas
 const BREATH: float = 0.012            # respiration à l'arrêt (étirement vertical)

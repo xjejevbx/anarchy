@@ -18,7 +18,6 @@ var spotted: bool = false               # déjà signalé au joueur (message « 
 var hidden_since: float = 0.0           # moment (points d'action) où il est sorti du champ de vision
 
 var _rng := RandomNumberGenerator.new()
-var _bg_sprite: String = ""
 var _fg_sprite: String = ""
 var _ranged_ready_at: float = 0.0       # moment (points d'action) où le prochain tir est possible
 var _scream_ready_at: float = 0.0       # idem pour le hurlement
@@ -33,8 +32,7 @@ func _ready() -> void:
 	# Chaque monstre garde la variante de sprite tirée à sa création.
 	var variant_seed: int = randi()
 	_anim_phase = float(variant_seed % 628) / 100.0
-	_bg_sprite = UlticaTiles.pick_sprite(data.tile_id, "bg", variant_seed)
-	_fg_sprite = UlticaTiles.pick_sprite(data.tile_id, "fg", variant_seed)
+	_fg_sprite = UlticaTiles.pick_sprite(data.tile_id, "fg", variant_seed)  # la couche "bg" d'UltiCa (ombre) n'est plus dessinée : voir Fx
 
 
 ## Purement visuel : l'affichage glisse vers la case logique (déjà atteinte) avec un petit rebond.
@@ -101,8 +99,6 @@ func _attack_player() -> float:
 	var infection_chance: float = data.special_infection if use_special else data.attack_infection
 	if infection_chance > 0.0 and not world.player.dead and _rng.randf() < infection_chance:
 		Infection.infect(world.player)
-	EventBus.message_logged.emit("%s utilise %s : -%d PV." % [data.display_name, attack_label, int(damage)])
-	world.player.take_damage(damage)
 	return cost
 
 ## Tire l'effet d'état d'un coup (chance) et l'inflige au joueur s'il est encore en vie.
@@ -205,9 +201,8 @@ func _draw() -> void:
 	var pivot := Vector2(World.TILE_SIZE / 2.0, World.TILE_SIZE - 10.0)  # bas et centre de la case
 	if Fx.SHADOWS:
 		var squeeze: float = 1.0 - _hop / 60.0
-		draw_colored_polygon(Fx.ellipse_points(pivot + Vector2(0, 2), Vector2(34.0, 11.0) * squeeze), Fx.SHADOW_COLOR)
+		draw_colored_polygon(Fx.ellipse_points(pivot + Vector2(0, 2), Fx.SHADOW_RADII * squeeze), Fx.SHADOW_COLOR)
 	draw_set_transform(pivot + Vector2(0, -_hop), 0.0, Vector2(1.0 - _breath * 0.5, 1.0 + _breath))
-	UlticaTiles.draw_sprite(self, _bg_sprite, -pivot)
 	UlticaTiles.draw_sprite(self, _fg_sprite, -pivot)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# Barre de vie au-dessus de la tête (le sprite dépasse de 64 px au-dessus de la case).

@@ -8,7 +8,7 @@ extends Node2D
 const SIZE: int = 24
 const CELLS: int = SIZE * SIZE
 const TREE_SHADOW_CENTER: Vector2 = Vector2(64.0, 108.0)   # pied du tronc dans la case (pixels)
-const TREE_SHADOW_RADII: Vector2 = Vector2(40.0, 13.0)
+const TREE_SHADOW_RADII: Vector2 = Vector2(52.0, 17.0)
 
 var key: Vector3i = Vector3i.ZERO
 var terrain: PackedByteArray = PackedByteArray()

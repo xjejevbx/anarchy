@@ -94,7 +94,6 @@ var posture: int = Posture.WALK
 var stats: Dictionary = {}              # id de stat (data/stats.json) -> valeur
 var avoid_scenery: bool = true          # option « esquive automatique du décor » (menu |)
 
-var _bg_sprite: String = ""
 var _fg_sprite: String = ""
 var _held_key: Key = KEY_NONE
 var _repeat_timer: float = 0.0
@@ -137,8 +136,7 @@ func _ready() -> void:
 	for item_id: String in START_LOOSE:
 		inventory.add_loose(Item.create(item_id))
 	position = Vector2(grid_pos * World.TILE_SIZE)
-	_bg_sprite = UlticaTiles.pick_sprite("player_male", "bg", 0)
-	_fg_sprite = UlticaTiles.pick_sprite("player_male", "fg", 0)
+	_fg_sprite = UlticaTiles.pick_sprite("player_male", "fg", 0)  # la couche "bg" d'UltiCa (ombre) n'est plus dessinée : voir Fx
 	camera = Camera2D.new()
 	add_child(camera)
 	camera.position = Vector2(World.TILE_SIZE, World.TILE_SIZE) / 2.0
@@ -990,9 +988,8 @@ func _draw() -> void:
 	var pivot := Vector2(World.TILE_SIZE / 2.0, World.TILE_SIZE - 10.0)  # bas et centre de la case : rebond et respiration s'y ancrent
 	if Fx.SHADOWS and not swimming:
 		var squeeze: float = 1.0 - _hop / 60.0  # l'ombre rétrécit quand le personnage rebondit
-		draw_colored_polygon(Fx.ellipse_points(pivot + Vector2(0, 2), Vector2(34.0, 11.0) * squeeze), Fx.SHADOW_COLOR)
+		draw_colored_polygon(Fx.ellipse_points(pivot + Vector2(0, 2), Fx.SHADOW_RADII * squeeze), Fx.SHADOW_COLOR)
 	draw_set_transform(pivot + Vector2(0, -_hop), 0.0, Vector2(1.0 - _breath * 0.5, 1.0 + _breath))
-	UlticaTiles.draw_sprite(self, _bg_sprite, -pivot, tint)
 	UlticaTiles.draw_sprite(self, _fg_sprite, -pivot, tint)
 	for slot: String in ItemDB.WORN_DRAW_ORDER:  # vêtements portés, par-dessus le mannequin
 		var worn := inventory.equipment.get(slot) as Item
