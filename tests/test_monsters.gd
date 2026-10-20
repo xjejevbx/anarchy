@@ -66,8 +66,32 @@ func _initialize() -> void:
 	_check(MonsterData.effect_text(MonsterData.effect("bleed", 0.35, 10.0, 0.6)) == "35% : Saignement (10 s, 0.6 PV/s)", "texte d'effet : saignement")
 	_check(MonsterData.effect_text(MonsterData.effect("", 1.0, 0.0, 0.0, 30.0)) == "100% : -30 stamina", "texte d'effet : drain de stamina")
 
+	# --- Orientation des monstres ---
+	_check_facing()
+
 	print("RÉSULTAT : %s (%d échec(s))" % ["OK" if _failures == 0 else "ÉCHEC", _failures])
 	quit(_failures)
+
+
+func _check_facing() -> void:
+	var up := Vector2i(0, -1)
+	var right := Vector2i(1, 0)
+	var down := Vector2i(0, 1)
+	var left := Vector2i(-1, 0)
+	_check(Monster.RING.size() == 4, "orientation : 4 directions (haut, droite, bas, gauche)")
+	# Zone d'attaque : la case en face et ses deux diagonales avant, pas les flancs ni le dos.
+	_check(Monster.in_front_arc(up, up) and Monster.in_front_arc(up, Vector2i(1, -1)) and Monster.in_front_arc(up, Vector2i(-1, -1)), "zone : face + 2 diagonales avant (regard haut)")
+	_check(not Monster.in_front_arc(up, right) and not Monster.in_front_arc(up, left) and not Monster.in_front_arc(up, down), "zone : flancs et dos exclus (regard haut)")
+	_check(not Monster.in_front_arc(up, Vector2i(1, 1)) and not Monster.in_front_arc(up, Vector2i(-1, 1)), "zone : diagonales arrière exclues (regard haut)")
+	_check(Monster.in_front_arc(right, Vector2i(1, 1)) and Monster.in_front_arc(right, Vector2i(1, -1)) and not Monster.in_front_arc(right, Vector2i(-1, 1)), "zone : regard droite")
+	# Pivotement : quarts de tour, par le côté le plus court.
+	_check(Monster.turn_distance(up, right) == 1 and Monster.turn_distance(up, left) == 1 and Monster.turn_distance(up, down) == 2, "distance de pivotement")
+	_check(Monster.turned(up, right, 1) == right and Monster.turned(up, left, 1) == left, "un quart de tour vers le côté")
+	_check(Monster.turned(up, down, 1) == right and Monster.turned(up, down, 2) == down, "demi-tour : un quart par action, sens horaire")
+	_check(Monster.turned(up, Vector2i(1, 1), 1) == right, "cible en diagonale (bas-droite) : pivote vers le côté le plus proche (droite)")
+	_check(Monster.turned(left, Vector2i(1, 1), 1) == down, "cible en diagonale (bas-droite) depuis la gauche : bas, pas droite")
+	_check(Monster.target_facing(up, Vector2i(1, -1)) == up and Monster.target_facing(up, Vector2i.ZERO) == up, "diagonale avant : déjà bien orienté")
+	_check(Monster.TURN_COST_FACTOR > 0.0 and Monster.TURN_STEPS_PER_ACTION >= 1, "réglages de pivotement cohérents")
 
 
 func _check_zones(label: String, zones: Dictionary) -> void:
