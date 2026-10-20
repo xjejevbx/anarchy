@@ -7,6 +7,7 @@ extends CanvasLayer
 ##     chaque partie du corps, comme l'infobulle de survol) ;
 ##   - case seulement VUE (mémoire) : terrain et mobilier (objets et monstres sont inconnus hors de vue) ;
 ##   - case JAMAIS VUE : rien (on n'apprend rien sur l'inconnu).
+## Le trajet qu'emprunterait le déplacement automatique vers la case du curseur s'affiche (carré blanc + points, voir World.show_target).
 ## Pavé numérique / flèches (avec ou sans Maj) : déplacer le curseur ; 5 : recentrer sur le joueur ; * : quitter et aller à la case ciblée
 ## (déplacement automatique du double-clic : Player.travel_to) ; + / - : zoom ; x ou Échap : quitter
 ## (la caméra revient sur le joueur).
@@ -62,6 +63,7 @@ func _close() -> void:
 	player.world.fog.look_offset = Vector2i.ZERO
 	player.world.fog.queue_redraw()
 	player.world.show_pick_overlay({})
+	player.clear_target()   # l'aperçu du trajet disparaît (la touche * le réaffiche en lançant le déplacement)
 	player.input_blocked = false
 	_view.visible = false
 
@@ -81,6 +83,7 @@ func _apply() -> void:
 	player.world.fog.look_offset = offset
 	player.world.fog.queue_redraw()
 	player.world.show_pick_overlay({_cursor: ""})   # surligne la case (même calque que le choix de case du ramassage)
+	player.set_target(_cursor)                      # carré + points du trajet qu'emprunterait « * » (rien si le curseur est sur le joueur)
 	_build_lines()
 	_view.queue_redraw()
 

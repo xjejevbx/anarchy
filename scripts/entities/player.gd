@@ -51,6 +51,13 @@ const AUTO_LOOKAHEAD: int = 12          # touche maintenue : on vise la case la 
 const AUTO_CLEAR_RANGE: int = 4         # tant que ces cases devant sont libres, on avance tout droit
 const TRAVEL_MAX_RADIUS: int = 45       # double-clic : le chemin reste dans ce carré autour du joueur
 
+# --- Esquive automatique du décor (option du menu |) ---
+# Un appui sur une direction (orthogonale) bloquée par le décor (arbre, mur, meuble...) contourne l'obstacle : petit détour de
+# quelques pas qui se termine une case plus loin dans la direction demandée. Sert aussi à la touche maintenue. Utilise le terrain
+# RÉEL des cases (pas besoin d'avoir la vue derrière l'arbre) et ne s'engage jamais dans l'eau si on n'y est pas déjà.
+const DODGE_RADIUS: int = 3             # écart latéral maximal du détour (cases)
+const DODGE_MAX_STEPS: int = 6          # longueur maximale du détour (pas)
+
 # --- Inventaire : coûts en points d'action (avant pénalité de stamina) ---
 const PICKUP_BASE_COST: float = 1.0     # ramasser = base + poids réel de l'objet (kg) x coût/kg
 const PICKUP_COST_PER_KG: float = 0.8
@@ -85,6 +92,7 @@ var camera: Camera2D
 var zoom_index: int = ZOOM_START_INDEX
 var posture: int = Posture.WALK
 var stats: Dictionary = {}              # id de stat (data/stats.json) -> valeur
+var avoid_scenery: bool = true          # option « esquive automatique du décor » (menu |)
 
 var _bg_sprite: String = ""
 var _fg_sprite: String = ""
@@ -92,6 +100,12 @@ var _held_key: Key = KEY_NONE
 var _repeat_timer: float = 0.0
 var _travel_path: Array[Vector2i] = []  # déplacement automatique en cours (double-clic) : cases restant à parcourir
 var _travel_timer: float = 0.0
+var _has_target: bool = false           # une case ciblée est affichée (carré + trajet), voir World.show_target
+var _target_cell: Vector2i = Vector2i.ZERO
+var _target_from: Vector2i = Vector2i.ZERO   # position du joueur lors du dernier calcul du trajet affiché
+var _target_travelling: bool = false         # état « déplacement lancé » lors du dernier affichage
+var _dodge_side: int = 1                # côté préféré du dernier détour (+1 / -1) : évite de zigzaguer d'un côté à l'autre
+var _hostile_seen: bool = false         # un monstre est apparu pendant un détour (le détour s'arrête)
 var _shift_released_msec: int = -1000
 var _announced_swim: int = TerrainDB.SWIM_NONE  # dernière profondeur annoncée dans le journal (évite de répéter le message)
 var _anim_time: float = 0.0             # animation purement visuelle (voir Fx)
@@ -129,7 +143,7 @@ func _ready() -> void:
 	add_child(camera)
 	camera.position = Vector2(World.TILE_SIZE, World.TILE_SIZE) / 2.0
 	camera.zoom = Vector2.ONE * ZOOM_LEVELS[zoom_index]
-	EventBus.hostile_spotted.connect(func(_m: Node) -> void: _stop_repeat())
+	EventBus.hostile_spotted.connect(_on_hostile_spotted)
 	_emit_stamina()
 	_emit_load()
 	_emit_health()
@@ -189,6 +203,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			EventBus.ground_requested.emit()
 
+## Un monstre apparaît : le déplacement automatique (double-clic, *) s'arrête, mais la touche MAINTENUE continue
+## (elle ne s'arrête que si le joueur est blessé : voir take_damage).
+func _on_hostile_spotted(_monster: Node) -> void:
+	_travel_path.clear()
+	_hostile_seen = true
+
 ## Maj enfoncé ? Tient compte du faux « Maj relâché » que Windows envoie juste avant une touche du pavé numérique tapée avec Maj.
 func _shift_held(event: InputEventKey) -> bool:
 	return event.shift_pressed or Input.is_physical_key_pressed(KEY_SHIFT) \
@@ -220,11 +240,15 @@ func _change_zoom(step: int) -> void:
 	world.fog.queue_redraw()
 
 
-## Double-clic gauche sur une case visible : déplacement automatique (une vraie action par pas).
+## Clic gauche sur une case : elle devient la case ciblée (carré blanc + points du trajet). Double-clic : déplacement automatique.
 func _on_mouse_button(button: InputEventMouseButton) -> void:
-	if input_blocked or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT or not button.double_click:
+	if input_blocked or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT:
 		return
-	_start_travel(Vector2i((world.get_global_mouse_position() / World.TILE_SIZE).floor()))
+	var cell := Vector2i((world.get_global_mouse_position() / World.TILE_SIZE).floor())
+	if button.double_click:
+		_start_travel(cell)
+	else:
+		set_target(cell)
 
 ## Déplacement automatique vers une case (même système que le double-clic) : utilisé par le mode regard (touche *).
 func travel_to(cell: Vector2i) -> void:
@@ -233,6 +257,7 @@ func travel_to(cell: Vector2i) -> void:
 func _start_travel(cell: Vector2i) -> void:
 	if cell == grid_pos:
 		return
+	set_target(cell)
 	if not world.is_visible_cell(cell):
 		EventBus.message_logged.emit("Vous ne voyez pas cette case.")
 		return
@@ -247,21 +272,104 @@ func _start_travel(cell: Vector2i) -> void:
 	path.remove_at(0)
 	_travel_path = path
 	_travel_timer = 0.0
+	_update_target()  # le contour passe au vert tout de suite
 
 
+## Un pas du déplacement automatique. Les pas diagonaux (cases voisines en diagonale dans le chemin) déplacent directement le
+## joueur sur la case en diagonale, sans passer par une case intermédiaire, mais comptent pour DEUX déplacements (temps, stamina).
 func _travel_step() -> void:
 	var next: Vector2i = _travel_path[0]
 	var step: Vector2i = next - grid_pos
-	if absi(step.x) + absi(step.y) != 1 or not world.is_walkable(next) or world.get_monster_at(next) != null:
+	if maxi(absi(step.x), absi(step.y)) != 1 or not world.is_walkable(next) or world.get_monster_at(next) != null:
 		_travel_path.clear()  # chemin bloqué
+		return
+	if step.x != 0 and step.y != 0:
+		if not _diagonal_passable(step):
+			_travel_path.clear()
+			return
+		_travel_path.remove_at(0)
+		_move_diagonal_direct(step)
 		return
 	_travel_path.remove_at(0)
 	_try_move(step)
 
 
+## Une diagonale est permise si l'une des deux cases « de l'angle » est libre (même règle que _try_diagonal, pour les touches 7 9 1 3).
+func _diagonal_passable(dir: Vector2i) -> bool:
+	for first: Vector2i in [Vector2i(0, dir.y), Vector2i(dir.x, 0)]:
+		var middle: Vector2i = grid_pos + first
+		if world.can_player_enter(middle) and world.get_monster_at(middle) == null:
+			return true
+	return false
+
+
+## Déplacement diagonal direct (déplacement automatique) : le joueur arrive tout de suite sur la case en diagonale, puis le temps
+## de DEUX déplacements passe, un par un (les monstres peuvent agir entre les deux).
+func _move_diagonal_direct(dir: Vector2i) -> void:
+	var from_cell: Vector2i = grid_pos
+	var was_swimming: bool = is_swimming()
+	grid_pos += dir
+	position = Vector2(grid_pos * World.TILE_SIZE)
+	world.update_fov()  # avant que le temps passe : les monstres réagissent à ce que tu viens de révéler
+	_announce_swim()
+	var swimming: bool = is_swimming()
+	Fx.footstep(world, from_cell, grid_pos, posture == Posture.SPRINT, posture == Posture.CROUCH, was_swimming, swimming)
+	var time_factor: float = 1.0 if swimming else POSTURE_TIME_FACTOR[posture]
+	for i in 2:
+		if dead:
+			return
+		_perform_action("Nage" if swimming else "Déplacement", MOVE_BASE_COST * time_factor, get_move_stamina_delta())
+
+
+# --- Case ciblée (carré + trajet affichés par World) ---
+
+## Désigne une case : carré blanc autour d'elle et points sur le trajet qu'emprunterait le déplacement automatique.
+func set_target(cell: Vector2i) -> void:
+	if cell == grid_pos:
+		clear_target()
+		return
+	_travel_path.clear()  # choisir une autre case interrompt un déplacement en cours
+	_has_target = true
+	_target_cell = cell
+	_target_from = grid_pos
+	_target_travelling = not _travel_path.is_empty()
+	_refresh_target()
+
+
+func clear_target() -> void:
+	_has_target = false
+	world.clear_target()
+
+
+## Appelé à chaque image : suit les déplacements du joueur (trajet raccourci / recalculé), passe le contour au vert pendant le
+## déplacement automatique, efface la case une fois atteinte.
+func _update_target() -> void:
+	if not _has_target:
+		return
+	if grid_pos == _target_cell:
+		clear_target()
+		return
+	var travelling: bool = not _travel_path.is_empty()
+	if grid_pos != _target_from or travelling != _target_travelling:
+		_target_from = grid_pos
+		_target_travelling = travelling
+		_refresh_target()
+
+
+func _refresh_target() -> void:
+	var path: Array[Vector2i] = []
+	if not _travel_path.is_empty():
+		path.append(grid_pos)       # déplacement lancé : on montre ce qui reste du chemin réellement suivi
+		path.append_array(_travel_path)
+	else:
+		path = AutoPath.find(world, grid_pos, _target_cell, TRAVEL_MAX_RADIUS)
+	world.show_target(_target_cell, path, not _travel_path.is_empty())
+
+
 ## Touche maintenue : chaque répétition est une action complète (temps, stamina, monstres...).
 func _process(delta: float) -> void:
 	_update_visual(delta)
+	_update_target()
 	if input_blocked:
 		_held_key = KEY_NONE
 		_travel_path.clear()
@@ -308,7 +416,7 @@ func _do_repeatable_action(key: Key) -> void:
 		if dir.x != 0 and dir.y != 0:
 			_try_diagonal(dir)
 		else:
-			_try_move(dir)
+			_move_with_dodge(dir)
 	else:
 		_wait()
 
@@ -326,6 +434,17 @@ func _repeat_action(key: Key) -> void:
 	if _ray_clear(dir):
 		_do_repeatable_action(key)
 		return
+	if avoid_scenery and (dir.x == 0 or dir.y == 0):
+		# Esquive du décor : on avance tant que la case devant est libre (même inconnue), on contourne l'obstacle sinon.
+		var ahead: Vector2i = grid_pos + dir
+		if world.get_monster_at(ahead) == null:
+			if world.is_walkable(ahead) or (is_swimming() and world.can_player_enter(ahead)):
+				_do_repeatable_action(key)
+				return
+			if not world.can_player_enter(ahead) and _dodge(dir):
+				return
+		_stop_repeat()  # monstre devant, eau profonde depuis la rive ou détour impossible
+		return
 	var target: Vector2i = _lookahead_target(dir)
 	if target != grid_pos:
 		var path: Array[Vector2i] = AutoPath.find(world, grid_pos, target, AUTO_LOOKAHEAD + 6, dir)
@@ -333,6 +452,95 @@ func _repeat_action(key: Key) -> void:
 			_try_move(path[1] - grid_pos)
 			return
 	_stop_repeat()  # rien de praticable devant
+
+
+# --- Esquive automatique du décor ---
+
+func set_avoid_scenery(value: bool) -> void:
+	avoid_scenery = value
+	EventBus.message_logged.emit("Esquive automatique du décor : %s." % ("OUI" if value else "NON"))
+
+
+## Pas orthogonal dans la direction `dir` ; si le décor bloque la case devant (et qu'aucun monstre ne s'y trouve) et que l'option est
+## active, on contourne l'obstacle. Sans détour possible, rien ne se passe (comme avant).
+func _move_with_dodge(dir: Vector2i) -> void:
+	var target: Vector2i = grid_pos + dir
+	if avoid_scenery and world.get_monster_at(target) == null and not world.can_player_enter(target) and _dodge(dir):
+		return
+	_try_move(dir)
+
+
+## Joue le détour (un vrai déplacement par pas : temps, stamina, monstres). false s'il n'y a pas de détour.
+## Il s'interrompt si un monstre apparaît, si on est blessé ou si la route est prise.
+func _dodge(dir: Vector2i) -> bool:
+	var path: Array[Vector2i] = _dodge_path(dir)
+	if path.is_empty():
+		return false
+	_hostile_seen = false
+	var hp_before: float = total_hp()
+	for cell: Vector2i in path:
+		if dead or _hostile_seen or total_hp() < hp_before or world.get_monster_at(cell) != null:
+			break
+		var step: Vector2i = cell - grid_pos
+		if absi(step.x) + absi(step.y) != 1:
+			break
+		_try_move(step)
+	return true
+
+
+## Plus court détour (parcours en largeur, 4 directions) vers une case située UNE case plus loin dans la direction `dir`, sans jamais
+## reculer, à au plus DODGE_RADIUS cases de côté et DODGE_MAX_STEPS pas. Le côté du dernier détour est essayé en premier.
+func _dodge_path(dir: Vector2i) -> Array[Vector2i]:
+	var empty: Array[Vector2i] = []
+	var origin: Vector2i = grid_pos
+	var base_perp := Vector2i(-dir.y, dir.x)
+	var perp: Vector2i = base_perp * _dodge_side
+	var dirs: Array[Vector2i] = [dir, perp, -perp]
+	var swimmer: bool = is_swimming()
+	var came: Dictionary = {origin: origin}
+	var depth: Dictionary = {origin: 0}
+	var queue: Array[Vector2i] = [origin]
+	var head: int = 0
+	while head < queue.size():
+		var node: Vector2i = queue[head]
+		head += 1
+		var d: int = int(depth[node])
+		if d >= DODGE_MAX_STEPS:
+			continue
+		for step in dirs:
+			var next: Vector2i = node + step
+			if came.has(next):
+				continue
+			var off: Vector2i = next - origin
+			var along: int = off.x * dir.x + off.y * dir.y
+			var lateral: int = off.x * base_perp.x + off.y * base_perp.y
+			if along < 0 or along > 1 or absi(lateral) > DODGE_RADIUS:
+				continue
+			if not _dodge_cell_ok(next, swimmer):
+				continue
+			came[next] = node
+			depth[next] = d + 1
+			if along == 1:
+				if lateral != 0:
+					_dodge_side = signi(lateral)
+				var path: Array[Vector2i] = [next]
+				var current: Vector2i = next
+				while came[current] != origin:
+					current = came[current]
+					path.append(current)
+				path.reverse()
+				return path
+			queue.append(next)
+	return empty
+
+
+## Case utilisable pour un détour : libre de monstre, praticable à pied et hors de l'eau (sauf si on nage déjà).
+func _dodge_cell_ok(cell: Vector2i, swimmer: bool) -> bool:
+	if world.get_monster_at(cell) != null:
+		return false
+	if swimmer:
+		return world.can_player_enter(cell)
+	return world.is_walkable(cell) and world.swim_depth(cell) == TerrainDB.SWIM_NONE
 
 
 ## Cases devant libres : praticables à pied et connues ; en nageant, l'eau profonde connue compte aussi (jamais depuis la rive).
@@ -516,10 +724,11 @@ func take_damage(amount: float, part_id: String = "torso") -> void:
 		else:
 			EventBus.message_logged.emit("%s : 0 PV (hors d'usage)." % BodyPartDB.name_of(part_id))
 
-## Une diagonale n'est PAS un déplacement spécial : c'est « vertical + horizontal »
+## Une diagonale au clavier (7 9 1 3) n'est PAS un déplacement spécial : c'est « vertical + horizontal »
 ## (ex. bas + gauche), deux pas orthogonaux avec chacun son temps, sa stamina, et pendant
 ## lesquels les monstres peuvent agir. On passe par une case intermédiaire libre ; si la case
 ## visée est occupée par un monstre, le second pas devient une attaque.
+## (Le déplacement automatique, lui, saute directement sur la case en diagonale : voir _move_diagonal_direct.)
 func _try_diagonal(dir: Vector2i) -> void:
 	var target: Vector2i = grid_pos + dir
 	if world.get_monster_at(target) == null and not world.can_player_enter(target):

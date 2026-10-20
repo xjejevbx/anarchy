@@ -11,12 +11,19 @@ extends Node2D
 ##   3b. `fx`            : particules et ondes (poussière, éclaboussures), voir Fx
 ##   4. `fog`            : brouillard de guerre par-dessus
 ##   5. `_pick_overlay`  : touches de choix de la case où ramasser
+##   6. `_target_overlay`: case ciblée par le déplacement automatique (carré + points du trajet)
 ## Les nœuds sont positionnés sur le coin haut-gauche de leur case ; UlticaTiles applique
 ## les décalages de chaque sprite (personnages 32x48, arbres 96x96...).
 
 const TILE_SIZE: int = 128
 const ALERT_REARM_POINTS: float = 5.0    # secondes hors de vue (dans le brouillard) avant qu'un monstre puisse être signalé à nouveau ; 0 = dès qu'il sort de vue
 const VIEW_RADIUS: int = 20              # portée de vue en cases (plein jour pour l'instant)
+
+# --- Case ciblée (déplacement automatique) ---
+const TARGET_COLOR_IDLE: Color = Color(1, 1, 1, 0.95)          # case choisie, déplacement pas lancé
+const TARGET_COLOR_TRAVEL: Color = Color(0.3, 1.0, 0.35, 0.95)  # déplacement automatique en cours
+const TARGET_BORDER: float = 8.0
+const TARGET_DOT_RADIUS: float = 12.0
 
 var world_seed: int = 4444                  # à fixer AVANT add_child()
 var use_arena: bool = false              # true : ancienne carte fermée 60x40 (debug), à fixer AVANT add_child()
@@ -30,9 +37,15 @@ var ground_items: Dictionary = {}   # Vector2i -> Array (d'Item posés au sol)
 var pick_labels: Dictionary = {}    # Vector2i -> touche affichée (choix de la case où ramasser)
 var visible_cells: Dictionary = {}  # cases actuellement visibles
 
+var target_active: bool = false             # une case ciblée est affichée
+var target_cell: Vector2i = Vector2i.ZERO
+var target_path: Array[Vector2i] = []       # trajet complet (départ et arrivée inclus) ; vide = aucun chemin connu
+var target_travelling: bool = false         # vrai : déplacement lancé (contour vert)
+
 var _terrain_layer: Node2D
 var _items_layer: Node2D
 var _pick_overlay: Node2D
+var _target_overlay: Node2D
 var _hovered: Monster = null
 
 
@@ -57,6 +70,10 @@ func _ready() -> void:
 	_pick_overlay.z_index = 11  # au-dessus du brouillard
 	_pick_overlay.draw.connect(_draw_pick_overlay)
 	add_child(_pick_overlay)
+	_target_overlay = Node2D.new()
+	_target_overlay.z_index = 11  # au-dessus du brouillard (ajouté après l'overlay de choix : dessiné par-dessus)
+	_target_overlay.draw.connect(_draw_target_overlay)
+	add_child(_target_overlay)
 	chunks = ChunkManager.new()
 	chunks.setup(world_seed, use_arena, _terrain_layer, entities)
 	EventBus.time_advanced.connect(_on_time_advanced)
@@ -82,6 +99,40 @@ func _draw_pick_overlay() -> void:
 		_pick_overlay.draw_rect(cell, Color(0.55, 0.8, 1.0, 0.95), false, 8.0)
 		_pick_overlay.draw_string(font, cell.position + Vector2(0, 92), String(pick_labels[pos]),
 			HORIZONTAL_ALIGNMENT_CENTER, TILE_SIZE, 80, Color.WHITE)
+
+
+# --- Case ciblée du déplacement automatique ---
+
+## Affiche le carré autour de `cell` et les points du trajet `path` (départ et arrivée inclus, peut être vide).
+## `travelling` : le déplacement est lancé (contour vert au lieu de blanc).
+func show_target(cell: Vector2i, path: Array[Vector2i], travelling: bool) -> void:
+	target_active = true
+	target_cell = cell
+	target_path = path
+	target_travelling = travelling
+	_target_overlay.queue_redraw()
+
+
+func clear_target() -> void:
+	if not target_active:
+		return
+	target_active = false
+	target_path = []
+	target_travelling = false
+	_target_overlay.queue_redraw()
+
+
+func _draw_target_overlay() -> void:
+	if not target_active:
+		return
+	var color: Color = TARGET_COLOR_TRAVEL if target_travelling else TARGET_COLOR_IDLE
+	var half := Vector2(TILE_SIZE, TILE_SIZE) / 2.0
+	# Points sur les cases INTERMÉDIAIRES (ni le joueur ni la case ciblée).
+	for i in range(1, target_path.size() - 1):
+		_target_overlay.draw_circle(Vector2(target_path[i] * TILE_SIZE) + half, TARGET_DOT_RADIUS, color)
+	var inset: float = TARGET_BORDER / 2.0 + 2.0
+	var square := Rect2(Vector2(target_cell * TILE_SIZE) + Vector2(inset, inset), Vector2(TILE_SIZE, TILE_SIZE) - Vector2(inset, inset) * 2.0)
+	_target_overlay.draw_rect(square, color, false, TARGET_BORDER)
 
 
 func get_ground_items(pos: Vector2i) -> Array:
