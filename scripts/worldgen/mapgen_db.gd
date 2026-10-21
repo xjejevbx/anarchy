@@ -2,7 +2,7 @@ class_name MapgenDB
 extends RefCounted
 ## Plans de maisons (jalon 3c), de lieux spéciaux (jalons 4, 5 et 10), de lieux urbains / côtiers / routiers (jalons 11 et 12) et de lieux
 ## militaires (jalon 13), chargés depuis res://data/worldgen/mapgen/houses.json puis places.json, big_places.json, access_places.json,
-## urban.json et military.json.
+## urban.json, military.json, naval.json et rural.json.
 ## Les plans de MAISON viennent en premier (indices 0 à plan_count() - 1, tirés par pick()) ; les plans de lieux suivent (retrouvés par plan_by_id()).
 ## Les bâtiments de ville (urban.json, ids « urban_* ») sont aussi retrouvés par plan_by_id() : SettlementMap.lot_plan() les pose sur les parcelles
 ## selon le zonage de towns.json.
@@ -12,7 +12,7 @@ extends RefCounted
 
 const PATHS: Array[String] = ["res://data/worldgen/mapgen/houses.json", "res://data/worldgen/mapgen/places.json",
 	"res://data/worldgen/mapgen/big_places.json", "res://data/worldgen/mapgen/access_places.json",
-	"res://data/worldgen/mapgen/urban.json", "res://data/worldgen/mapgen/military.json"]
+	"res://data/worldgen/mapgen/urban.json", "res://data/worldgen/mapgen/military.json", "res://data/worldgen/mapgen/naval.json", "res://data/worldgen/mapgen/rural.json"]
 const NATURE: int = 255
 const SIZE: int = 24
 
