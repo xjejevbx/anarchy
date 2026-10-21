@@ -1,17 +1,194 @@
 {
-    "_doc": "Villes (jalon 3). Le monde est découpé en régions de region_size x region_size cellules (1 cellule = 1 chunk = 24 x 24 cases). Chaque région tire 0 à 2 villes (count_weights = poids pour 0, 1, 2 villes) ; une ville tient entièrement dans sa région (marge incluse). sizes : radius en cellules (la ville couvre (2*radius+1)^2 cellules), street_spacing = écart des rues secondaires (0 = seulement la croix principale), weight = poids du tirage. Un site est refusé s'il y a moins de min_land_ratio de terre constructible sous la ville. outer_ring_keep = part des cellules du bord conservées (bords irréguliers). yard_tree_keep = part d'arbres conservés dans les parcelles. house_chance = part des parcelles (LOT) qui reçoivent une maison (plans : data/worldgen/mapgen/houses.json). colors = couleurs de la mini-carte. routes (jalon 3b) : liaisons entre villes. near_count = nombre de voisines les plus proches reliées à chaque ville (near_count_by_size : valeur par taille) ; une arête (a,b) existe si b est parmi les plus proches de a OU a parmi les plus proches de b ; neighbor_window = régions cherchées autour de la ville pour trouver ses voisines ; max_link_distance = distance maximale d'une liaison (cellules) ; margin = marge de la boîte de recherche du chemin (cellules) ; max_expansions = garde-fou de l'A* ; heuristic_cost = poids de l'heuristique (supérieur au coût de la plaine : A* glouton, plus rapide, chemins un peu moins optimaux) ; road_cost = coût d'une rue de ville ; costs = coût d'une cellule par nature de case (-1 = interdit). Entiers uniquement (aucun flottant dans les décisions).",
+    "_doc": "Villes (jalon 3). Le monde est découpé en régions de region_size x region_size cellules (1 cellule = 1 chunk = 24 x 24 cases). Chaque région tire 0 à 2 villes (count_weights = poids pour 0, 1, 2 villes) ; une ville tient entièrement dans sa région (marge incluse). sizes : radius en cellules (la ville couvre (2*radius+1)^2 cellules), street_spacing = écart des rues secondaires (0 = seulement la croix principale), weight = poids du tirage. Un site est refusé s'il y a moins de min_land_ratio de terre constructible sous la ville. outer_ring_keep = part des cellules du bord conservées (bords irréguliers). yard_tree_keep = part d'arbres conservés dans les parcelles. house_chance = part des parcelles (LOT) qui reçoivent un bâtiment (plans de maison : data/worldgen/mapgen/houses.json ; bâtiments de ville : mapgen/urban.json). colors = couleurs de la mini-carte. routes (jalon 3b) : liaisons entre villes. near_count = nombre de voisines les plus proches reliées à chaque ville (near_count_by_size : valeur par taille) ; une arête (a,b) existe si b est parmi les plus proches de a OU a parmi les plus proches de b ; neighbor_window = régions cherchées autour de la ville pour trouver ses voisines ; max_link_distance = distance maximale d'une liaison (cellules) ; margin = marge de la boîte de recherche du chemin (cellules) ; max_expansions = garde-fou de l'A* ; heuristic_cost = poids de l'heuristique (supérieur au coût de la plaine : A* glouton, plus rapide, chemins un peu moins optimaux) ; road_cost = coût d'une rue de ville ; costs = coût d'une cellule par nature de case (-1 = interdit). Entiers uniquement (aucun flottant dans les décisions). Zonage urbain (jalon 11) : la zone d'une parcelle dépend de sa distance au centre de la ville (distance de Tchebychev en cellules, comparée au rayon). zone_limits (pourcents ENTIERS du rayon) : center jusqu'à N %, mid jusqu'à M %, au-delà outskirts. size_urban_scale : multiplicateur de urban_chance par taille de ville (0 = que des maisons). zones : pour chaque zone, urban_chance = probabilité qu'une parcelle qui reçoit un bâtiment reçoive un bâtiment de ville plutôt qu'une maison (plafonnée à 0,95), buildings = liste {plan (id de urban.json), weight (poids du tirage), min_radius (rayon minimal de la ville)}. Les tirages sont des fonctions pures de (seed, cellule) : mix(seed, LAYER_MAPGEN, x, y, 3) pour urbain ou maison, 4 pour le bâtiment.",
     "region_size": 32,
     "margin": 1,
     "attempts": 8,
     "count_weights": [
         0.35,
-        0.50,
+        0.5,
         0.15
     ],
     "min_land_ratio": 0.7,
     "outer_ring_keep": 0.6,
     "yard_tree_keep": 0.03,
     "house_chance": 0.85,
+    "zone_limits": {
+        "center": 50,
+        "mid": 75
+    },
+    "size_urban_scale": {
+        "hamlet": 0.0,
+        "village": 0.6,
+        "town": 1.0,
+        "city": 1.2
+    },
+    "zones": {
+        "center": {
+            "urban_chance": 0.7,
+            "buildings": [
+                {
+                    "plan": "urban_supermarket",
+                    "weight": 6,
+                    "min_radius": 4
+                },
+                {
+                    "plan": "urban_pharmacy",
+                    "weight": 8,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_bank",
+                    "weight": 6,
+                    "min_radius": 4
+                },
+                {
+                    "plan": "urban_town_hall",
+                    "weight": 3,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_police",
+                    "weight": 4,
+                    "min_radius": 4
+                },
+                {
+                    "plan": "urban_bar",
+                    "weight": 8,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_restaurant",
+                    "weight": 8,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_grocery",
+                    "weight": 8,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_hardware",
+                    "weight": 5,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_apartments",
+                    "weight": 10,
+                    "min_radius": 4
+                },
+                {
+                    "plan": "urban_parking",
+                    "weight": 4,
+                    "min_radius": 3
+                },
+                {
+                    "plan": "urban_fire_station",
+                    "weight": 2,
+                    "min_radius": 4
+                }
+            ]
+        },
+        "mid": {
+            "urban_chance": 0.4,
+            "buildings": [
+                {
+                    "plan": "urban_apartments",
+                    "weight": 10,
+                    "min_radius": 4
+                },
+                {
+                    "plan": "urban_grocery",
+                    "weight": 8,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_bar",
+                    "weight": 5,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_restaurant",
+                    "weight": 5,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_hardware",
+                    "weight": 6,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_church",
+                    "weight": 5,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_school",
+                    "weight": 4,
+                    "min_radius": 4
+                },
+                {
+                    "plan": "urban_parking",
+                    "weight": 4,
+                    "min_radius": 3
+                },
+                {
+                    "plan": "urban_pharmacy",
+                    "weight": 3,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_police",
+                    "weight": 2,
+                    "min_radius": 4
+                },
+                {
+                    "plan": "urban_fire_station",
+                    "weight": 3,
+                    "min_radius": 4
+                }
+            ]
+        },
+        "outskirts": {
+            "urban_chance": 0.15,
+            "buildings": [
+                {
+                    "plan": "urban_church",
+                    "weight": 4,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_school",
+                    "weight": 4,
+                    "min_radius": 4
+                },
+                {
+                    "plan": "urban_parking",
+                    "weight": 3,
+                    "min_radius": 3
+                },
+                {
+                    "plan": "urban_hardware",
+                    "weight": 4,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_fire_station",
+                    "weight": 4,
+                    "min_radius": 4
+                },
+                {
+                    "plan": "urban_grocery",
+                    "weight": 4,
+                    "min_radius": 2
+                },
+                {
+                    "plan": "urban_supermarket",
+                    "weight": 3,
+                    "min_radius": 4
+                }
+            ]
+        }
+    },
     "sizes": [
         {
             "id": "hamlet",

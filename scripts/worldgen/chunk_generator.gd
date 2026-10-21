@@ -3,6 +3,7 @@ extends RefCounted
 ## Génère le terrain d'un chunk. FONCTION PURE de (seed, clé de chunk, mode) : aucune dépendance à l'ordre
 ## de génération, aucun état global (docs/WORLD_GEN.md §3). Monde normal : biomes, lacs et rivières (WorldMap), puis villes
 ## et rues par-dessus (SettlementMap). Maisons, routes entre villes, lieux spéciaux et pistes (jalon 10) se posent par-dessus le terrain naturel.
+## Jalon 12 : un lieu « sur la route » (péage, barrage...) se pose PAR-DESSUS la chaussée de sa cellule (ses '.' gardent la route).
 
 # --- Arène de test (ancienne carte fermée 60 x 40, option debug USE_TEST_ARENA) ---
 const ARENA_WIDTH: int = 60
@@ -28,7 +29,8 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 	var track_mask: int = settlement.track_mask(cell_coord) if cell_type == SettlementMap.CellType.NONE and key.z == 0 else -1
 	var spawn: Vector2i = settlement.spawn_cell()
 	var house: Dictionary = settlement.cell_plan(cell_coord) \
-			if cell_type == SettlementMap.CellType.LOT or cell_type == SettlementMap.CellType.SPECIAL else {}
+			if cell_type == SettlementMap.CellType.LOT or cell_type == SettlementMap.CellType.SPECIAL \
+				or cell_type == SettlementMap.CellType.ROAD else {}
 	var house_plan: int = int(house.get("plan", -1))
 	var house_rot: int = int(house.get("rot", 0))
 	var near_spawn: bool = absi(ChunkManager.key_of(spawn).x - key.x) <= 1 and absi(ChunkManager.key_of(spawn).y - key.y) <= 1

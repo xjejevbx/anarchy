@@ -1,5 +1,5 @@
 {
- "_doc": "Mobilier (jalon 3c). tile : id de tuile UltiCa ; walkable : on peut marcher dessus (defaut false) ; opaque : bloque la vue (defaut false). L'ORDRE des entrees donne l'index stocke dans les chunks (1 = premier, 0 = pas de mobilier ; max 255). Ajouter a la suite pour ne rien renumeroter.",
+ "_doc": "Mobilier (jalon 3c). tile : id de tuile UltiCa ; walkable : on peut marcher dessus (defaut false) ; opaque : bloque la vue (defaut false). L'ORDRE des entrees donne l'index stocke dans les chunks (1 = premier, 0 = pas de mobilier ; max 255). Ajouter a la suite pour ne rien renumeroter. Jalon 11 : f_desk a f_machinery_heavy ajoutes a la fin.",
  "furniture": {
   "f_bed": {
    "name": "Lit",
@@ -105,6 +105,69 @@
    "walkable": false,
    "opaque": false,
    "color": "#8a8a3a"
+  },
+  "f_desk": {
+   "name": "Bureau",
+   "tile": "f_desk",
+   "walkable": false,
+   "opaque": false,
+   "color": "#8a7048"
+  },
+  "f_bench": {
+   "name": "Banc",
+   "tile": "f_bench",
+   "walkable": false,
+   "opaque": false,
+   "color": "#7a5a38"
+  },
+  "f_locker": {
+   "name": "Casier",
+   "tile": "f_locker",
+   "walkable": false,
+   "opaque": false,
+   "color": "#6f8090"
+  },
+  "f_glass_fridge": {
+   "name": "Frigo vitrine",
+   "tile": "f_glass_fridge",
+   "walkable": false,
+   "opaque": false,
+   "color": "#b8d0e0"
+  },
+  "f_safe": {
+   "name": "Coffre-fort",
+   "tile": "f_safe_c",
+   "walkable": false,
+   "opaque": false,
+   "color": "#4a4a50"
+  },
+  "f_altar": {
+   "name": "Autel",
+   "tile": "f_altar",
+   "walkable": false,
+   "opaque": false,
+   "color": "#c8c0a8"
+  },
+  "f_crate": {
+   "name": "Caisse",
+   "tile": "f_crate_c",
+   "walkable": false,
+   "opaque": false,
+   "color": "#a88858"
+  },
+  "f_container": {
+   "name": "Conteneur",
+   "tile": "f_container",
+   "walkable": false,
+   "opaque": false,
+   "color": "#b5533c"
+  },
+  "f_machinery_heavy": {
+   "name": "Machine lourde",
+   "tile": "f_machinery_heavy",
+   "walkable": false,
+   "opaque": false,
+   "color": "#707a52"
   }
  }
 }

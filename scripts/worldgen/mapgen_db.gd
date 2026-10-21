@@ -1,14 +1,17 @@
 class_name MapgenDB
 extends RefCounted
-## Plans de maisons (jalon 3c) et de lieux spéciaux (jalons 4, 5 et 10), chargés depuis res://data/worldgen/mapgen/houses.json puis places.json,
-## big_places.json et access_places.json.
+## Plans de maisons (jalon 3c), de lieux spéciaux (jalons 4, 5 et 10) et de lieux urbains / côtiers (jalon 11), chargés depuis
+## res://data/worldgen/mapgen/houses.json puis places.json, big_places.json, access_places.json et urban.json.
 ## Les plans de MAISON viennent en premier (indices 0 à plan_count() - 1, tirés par pick()) ; les plans de lieux suivent (retrouvés par plan_by_id()).
+## Les bâtiments de ville (urban.json, ids « urban_* ») sont aussi retrouvés par plan_by_id() : SettlementMap.lot_plan() les pose sur les parcelles
+## selon le zonage de towns.json.
 ## Chaque plan (24 x 24 caractères, façade au SUD) est compilé une fois : un octet de terrain (index TerrainDB, ou NATURE =
 ## « garder le terrain naturel ») et un octet de mobilier (index FurnitureDB) par case. Les erreurs de plan sont listées par
 ## errors() et affichées au chargement : un plan invalide est ignoré, le jeu continue.
 
 const PATHS: Array[String] = ["res://data/worldgen/mapgen/houses.json", "res://data/worldgen/mapgen/places.json",
-	"res://data/worldgen/mapgen/big_places.json", "res://data/worldgen/mapgen/access_places.json"]
+	"res://data/worldgen/mapgen/big_places.json", "res://data/worldgen/mapgen/access_places.json",
+	"res://data/worldgen/mapgen/urban.json"]
 const NATURE: int = 255
 const SIZE: int = 24
 

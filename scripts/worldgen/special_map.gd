@@ -1,6 +1,6 @@
 class_name SpecialMap
 extends RefCounted
-## Lieux spéciaux : station-service, motel, ferme... (docs/WORLD_GEN.md §5.4, jalons 4 et 10). FONCTION PURE de (seed, région) :
+## Lieux spéciaux : station-service, motel, ferme... (docs/WORLD_GEN.md §5.4, jalons 4, 10 et 12). FONCTION PURE de (seed, région) :
 ## les lieux d'une région ne dépendent que de la seed et de la région, jamais d'une autre région déjà générée.
 ##
 ## Une EMPREINTE (cellules macro d'un chunk chacune, facade au sud) est placée dans une région, sans jamais franchir sa frontière.
@@ -16,12 +16,24 @@ extends RefCounted
 ##     aucune piste), "pier" (la façade donne sur l'eau : le plan contient la jetée), "none" (aucun accès) ;
 ##   - la distance à la ville la plus proche est dans [min_town_distance, max_town_distance].
 ## La rotation tourne la facade vers la route (ou vers l'eau, ou la piste) ; le plan de chaque cellule tourne avec elle.
+##
+## Jalon 12 : accès "on_road" (seul, empreinte d'UNE cellule) = lieu posé SUR une cellule de route entre villes (péage, barrage, poste-frontière).
+## Le plan se superpose à la chaussée (ses '.' gardent le terrain de la route) et tourne dans l'axe réel de la route : rot 0 ou 2 pour une
+## route est-ouest, 1 ou 3 pour une route nord-sud. La cellule reste de type ROAD. Placement APRÈS les autres lieux, par candidats : les cellules
+## de route de la région, triées par (x, y), puis filtrées (route droite, hors bordure de région, pas de piste voisine, espacement ROAD_SPACING,
+## biome, climat, distance à la ville, `road_site`), une est tirée. Pas de piste ni de lieu ordinaire ne peut se brancher sur une cellule
+## retenue : on exclut la bordure de région (les pistes d'une région voisine ne la touchent donc jamais).
+##   - `road_site` : "any" (défaut), "bridge" (la cellule est de l'eau : la route y est un pont), "bridge_end" (la cellule est de la terre
+##     et l'un de ses deux voisins DANS L'AXE de la route est de l'eau : bout de pont).
+## Ces lieux sont dans `region_road_places` (PAS dans `region_places`) et dans special_cell() / special_plan(), donc le mode regard les nomme.
 ## Réglages : data/worldgen/specials.json. Plans : data/worldgen/mapgen/*.json.
 
 const PATH: String = "res://data/worldgen/specials.json"
 const FAR: int = 1 << 30
-const ACCESS_IDS: Array[String] = ["road", "track", "helipad", "pier", "none"]
+const ACCESS_IDS: Array[String] = ["road", "track", "helipad", "pier", "none", "on_road"]
 const ZONES: Array[String] = ["land", "island", "coast", "open_ocean"]
+const ROAD_SITES: Array[String] = ["any", "bridge_end", "bridge"]
+const ROAD_SPACING: int = 4   # distance minimale (Tchebychev, en cellules) entre deux lieux « sur la route » d'une même région
 
 static var _config: Dictionary = {}
 
@@ -34,7 +46,7 @@ var _attempts: int
 var _track_max: int
 var _places: Array[Dictionary] = []   # triés (priorité décroissante, puis id)
 var _by_id: Dictionary = {}
-var _regions: Dictionary = {}         # Vector2i (région) -> {cells: {cellule: {place, plan, rot}}, placed: [...], tracks: {cellule: masque}}
+var _regions: Dictionary = {}         # Vector2i (région) -> {cells: {cellule: {place, plan, rot}}, placed: [...], tracks: {cellule: masque}, road_placed: [...]}
 var _errors: Array[String] = []
 
 
@@ -127,6 +139,14 @@ func _add_place(id: String, def: Dictionary) -> void:
 	if access.is_empty():
 		_fail("%s : liste d'accès vide (mettre \"none\")." % id)
 		return
+	var on_road: bool = access.has("on_road")
+	if on_road and (access.size() != 1 or cells.size() != 1):
+		_fail("%s : l'accès on_road est seul et l'empreinte tient en une cellule." % id)
+		return
+	var road_site: String = String(def.get("road_site", "any"))
+	if not ROAD_SITES.has(road_site):
+		_fail("%s : road_site inconnu « %s »." % [id, road_site])
+		return
 	if (access.has("track") or access.has("pier")) and not has_door:
 		_fail("%s : accès piste / jetée mais aucun plan avec une porte." % id)
 		return
@@ -144,6 +164,7 @@ func _add_place(id: String, def: Dictionary) -> void:
 		"min_town_distance": int(def.get("min_town_distance", -1)), "max_town_distance": int(def.get("max_town_distance", -1)),
 		"max_per_region": int(def.get("max_per_region", 1)), "cells": cells, "width": width, "height": height,
 		"hash": WorldRng.seed_from_text(id), "common": bool(def.get("common", true)),
+		"on_road": on_road, "road_site": road_site,
 	}
 	_by_id[id] = place
 	_places.append(place)
@@ -179,7 +200,17 @@ func place_needs_road(id: String) -> bool:
 	return access.size() == 1 and access[0] == "road"
 
 
-## Modes d'accès possibles du lieu ("road", "track", "helipad", "pier", "none").
+## Lieu posé SUR une route (accès "on_road", jalon 12).
+func place_is_on_road(id: String) -> bool:
+	return bool((_by_id.get(id, {}) as Dictionary).get("on_road", false))
+
+
+## "any", "bridge" ou "bridge_end" (voir l'en-tête).
+func place_road_site(id: String) -> String:
+	return String((_by_id.get(id, {}) as Dictionary).get("road_site", "any"))
+
+
+## Modes d'accès possibles du lieu ("road", "track", "helipad", "pier", "none", "on_road").
 func place_access_options(id: String) -> Array:
 	return (_by_id.get(id, {}) as Dictionary).get("access", [])
 
@@ -221,7 +252,7 @@ func _region_of(cell: Vector2i) -> Vector2i:
 	return Vector2i(floori(float(cell.x) / _region_size), floori(float(cell.y) / _region_size))
 
 
-## {place, plan (id du plan), rot} si la cellule fait partie d'un lieu, sinon {}.
+## {place, plan (id du plan), rot} si la cellule fait partie d'un lieu (y compris un lieu « sur la route »), sinon {}.
 func special_cell(cell: Vector2i) -> Dictionary:
 	var cells: Dictionary = region_data(_region_of(cell))["cells"]
 	return cells.get(cell, {})
@@ -248,11 +279,17 @@ func track_links(cell: Vector2i, bit: int) -> bool:
 
 
 ## Lieux placés dans la région : [{id, origin, rot, cells: Array[Vector2i], access: String, track_cells: Array (dans l'ordre, de la porte à la route)}].
+## Les lieux « sur la route » n'y sont PAS : voir region_road_places.
 func region_places(region: Vector2i) -> Array:
 	return region_data(region)["placed"]
 
 
-## Empreinte des lieux et des pistes d'une région (test de déterminisme).
+## Lieux « sur la route » de la région (jalon 12) : [{id, cell, rot, axis (0 = route est-ouest, 1 = nord-sud)}].
+func region_road_places(region: Vector2i) -> Array:
+	return region_data(region)["road_placed"]
+
+
+## Empreinte des lieux et des pistes d'une région (test de déterminisme ; les lieux sur la route sont dans `cells`).
 func region_fingerprint(region: Vector2i) -> int:
 	var cells: Dictionary = region_data(region)["cells"]
 	var tracks: Dictionary = region_data(region)["tracks"]
@@ -286,6 +323,8 @@ func _generate(region: Vector2i) -> Dictionary:
 	var placed: Array = []
 	var tracks: Dictionary = {}
 	for place: Dictionary in _places:
+		if bool(place["on_road"]):
+			continue   # placés après les autres lieux (voir _place_on_road)
 		var rng: RandomNumberGenerator = WorldRng.rng_for(world_seed, WorldRng.LAYER_SPECIAL, region.x, region.y, int(place["hash"]))
 		for n in int(place["max_per_region"]):
 			if rng.randf() >= float(place["chance"]):
@@ -308,7 +347,8 @@ func _generate(region: Vector2i) -> Dictionary:
 					placed.append({"id": place["id"], "origin": origin, "rot": rot, "cells": footprint, "access": access,
 						"track_cells": new_track.keys()})
 					break
-	return {"cells": cells, "placed": placed, "tracks": tracks}
+	var road_placed: Array = _place_on_road(settlement, region, low, cells, tracks)
+	return {"cells": cells, "placed": placed, "tracks": tracks, "road_placed": road_placed}
 
 
 ## Mode d'accès de la tentative. Un tirage n'a lieu que s'il y a le choix (les lieux à accès unique gardent leur suite de tirages).
@@ -475,6 +515,101 @@ func _town_distance_ok(settlement: SettlementMap, place: Dictionary, footprint: 
 	if min_d >= 0 and nearest < min_d:
 		return false
 	return max_d < 0 or nearest <= max_d
+
+
+# --- Lieux sur la route (jalon 12) ---
+
+static func _cell_before(a: Vector2i, b: Vector2i) -> bool:
+	return a.x < b.x or (a.x == b.x and a.y < b.y)
+
+
+## Place les lieux « on_road » de la région. Ne lit que les cellules de la région (route, nature) : jamais road_mask() ni le masque de piste d'une
+## autre région (ils redéclencheraient region_data). Renvoie [{id, cell, rot, axis}] et ajoute chaque lieu à `cells`.
+func _place_on_road(settlement: SettlementMap, region: Vector2i, low: Vector2i, cells: Dictionary, tracks: Dictionary) -> Array:
+	var road_placed: Array = []
+	var candidates: Array = []
+	var candidates_ready: bool = false
+	for place: Dictionary in _places:
+		if not bool(place["on_road"]):
+			continue
+		var rng: RandomNumberGenerator = WorldRng.rng_for(world_seed, WorldRng.LAYER_SPECIAL, region.x, region.y, int(place["hash"]))
+		for n in int(place["max_per_region"]):
+			if rng.randf() >= float(place["chance"]):
+				continue
+			if not candidates_ready:
+				candidates = _road_candidates(settlement, region, low, tracks)
+				candidates_ready = true
+			var valid: Array = []
+			for candidate: Dictionary in candidates:
+				if _road_site_ok(settlement, place, candidate, cells, road_placed):
+					valid.append(candidate)
+			if valid.is_empty():
+				continue
+			var chosen: Dictionary = valid[rng.randi_range(0, valid.size() - 1)]
+			var axis: int = chosen["axis"]
+			var rot: int = axis + 2 * rng.randi_range(0, 1)   # axe est-ouest : 0 ou 2 ; nord-sud : 1 ou 3
+			var cell: Vector2i = chosen["cell"]
+			var mapgen_id: String = String(((place["cells"] as Array)[0] as Dictionary)["mapgen"])
+			cells[cell] = {"place": place["id"], "plan": mapgen_id, "rot": rot}
+			road_placed.append({"id": place["id"], "cell": cell, "rot": rot, "axis": axis})
+	return road_placed
+
+
+## Cellules de route droites de la région, triées par (x, y) : [{cell, axis}] (axis 0 = est-ouest, 1 = nord-sud). Exclut la bordure de la région
+## et toute cellule voisine d'une piste (une piste ajouterait un embranchement à la chaussée).
+func _road_candidates(settlement: SettlementMap, region: Vector2i, low: Vector2i, tracks: Dictionary) -> Array:
+	var high: Vector2i = low + Vector2i(_region_size - 1, _region_size - 1)
+	var cell_list: Array[Vector2i] = []
+	cell_list.assign(settlement.routes().region_cells(region).keys())
+	cell_list.sort_custom(_cell_before)
+	var out: Array = []
+	for cell: Vector2i in cell_list:
+		if cell.x <= low.x or cell.y <= low.y or cell.x >= high.x or cell.y >= high.y:
+			continue
+		var mask: int = 0
+		var near_track: bool = tracks.has(cell)
+		for i in SettlementMap.DIRS.size():
+			var neighbor: Vector2i = cell + SettlementMap.DIRS[i]
+			if tracks.has(neighbor):
+				near_track = true
+			if settlement.cell_type(neighbor, true, false) == SettlementMap.CellType.ROAD:
+				mask |= 1 << i
+		if near_track:
+			continue
+		if mask == (SettlementMap.DIR_E | SettlementMap.DIR_W):
+			out.append({"cell": cell, "axis": 0})
+		elif mask == (SettlementMap.DIR_N | SettlementMap.DIR_S):
+			out.append({"cell": cell, "axis": 1})
+	return out
+
+
+func _road_site_ok(settlement: SettlementMap, place: Dictionary, candidate: Dictionary, cells: Dictionary, road_placed: Array) -> bool:
+	var cell: Vector2i = candidate["cell"]
+	if cells.has(cell):
+		return false
+	for other: Dictionary in road_placed:
+		var d: Vector2i = (other["cell"] as Vector2i) - cell
+		if maxi(absi(d.x), absi(d.y)) < ROAD_SPACING:
+			return false
+	var kind: int = _world_map.cell_kind(cell)
+	if not (place["biomes"] as Array).has(kind):
+		return false
+	if String(place["road_site"]) == "bridge_end":
+		var ends: Array[Vector2i] = []
+		if int(candidate["axis"]) == 0:
+			ends.append(Vector2i.LEFT)
+			ends.append(Vector2i.RIGHT)
+		else:
+			ends.append(Vector2i.UP)
+			ends.append(Vector2i.DOWN)
+		var at_water: bool = false
+		for end: Vector2i in ends:
+			if WorldMap.is_water(_world_map.cell_kind(cell + end)):
+				at_water = true
+		if not at_water:
+			return false
+	var footprint: Array[Vector2i] = [cell]
+	return _climate_ok(place, footprint) and _town_distance_ok(settlement, place, footprint)
 
 
 # --- Pistes ---

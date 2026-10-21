@@ -12,6 +12,10 @@ extends RefCounted
 ## Jalon 10 : pistes (SpecialMap) qui relient un lieu à une route : ce ne sont PAS des CellType (cell_type() les ignore) mais des
 ## cellules à part (track_mask / track_terrain) ; une route qui reçoit une piste y gagne un embranchement (road_mask). Les villes
 ## ne se fondent jamais sur une petite île. Départ « perdu sur une île » : island_spawn_cell().
+## Jalon 11 : zonage urbain. Une parcelle qui reçoit un bâtiment reçoit une maison OU un bâtiment de ville (supermarché, banque,
+## école...), selon sa zone (lot_zone : center / mid / outskirts, d'après sa distance au centre de la ville) et la taille de la ville.
+## Réglages : zone_limits, size_urban_scale et zones de towns.json ; plans : mapgen/urban.json.
+## Jalon 12 : cell_plan() renvoie aussi le plan d'un lieu « sur la route » (SpecialMap, accès on_road) ; la cellule reste de type ROAD.
 
 const PATH: String = "res://data/worldgen/towns.json"
 
@@ -48,6 +52,12 @@ const ISLAND_SEARCH_STEP: int = 6        # écart entre deux cellules testées (
 const ISLAND_SEARCH_RINGS: int = 120     # jusqu'à ~720 cellules macro de l'origine (~17 000 cases)
 const ISLAND_SPOT_RADIUS: int = 10       # recherche d'une case de départ autour du centre de chaque cellule de l'île
 
+# --- Zonage urbain (jalon 11) ---
+const URBAN_CHANCE_MAX: float = 0.95     # plafond de la probabilité d'un bâtiment de ville (après l'échelle de taille)
+const ZONE_CENTER: String = "center"
+const ZONE_MID: String = "mid"
+const ZONE_OUTSKIRTS: String = "outskirts"
+
 static var _config: Dictionary = {}
 static var _cache: Dictionary = {}  # seed -> SettlementMap
 
@@ -72,6 +82,7 @@ var _island_spawn_found: bool = false
 var _island_spawn_ready: bool = false
 var _routes: RouteMap
 var _specials: SpecialMap
+var _zone_tables: Dictionary = {}   # zone -> {plans: Array (indices MapgenDB), weights: Array, radii: Array}, résolus à la demande
 
 var _t_grass: int
 var _t_tree: int
@@ -274,13 +285,15 @@ func special_plan(cell: Vector2i) -> Dictionary:
 	return {"plan": plan, "rot": int(info["rot"])}
 
 
-## Plan à poser sur une cellule (maison d'une parcelle ou cellule d'un lieu spécial) : {plan, rot} ou {}.
+## Plan à poser sur une cellule (bâtiment d'une parcelle, cellule d'un lieu spécial, ou lieu posé sur une route : péage, barrage...) : {plan, rot} ou {}.
 func cell_plan(cell: Vector2i) -> Dictionary:
 	var type: int = cell_type(cell)
 	if type == CellType.LOT:
 		return lot_plan(cell)
 	if type == CellType.SPECIAL:
 		return special_plan(cell)
+	if type == CellType.ROAD:
+		return special_plan(cell)   # lieu posé SUR une route entre villes (jalon 12) ; {} pour une rue ou une route ordinaire
 	return {}
 
 
@@ -324,9 +337,10 @@ func town_cell_type(cell: Vector2i) -> int:
 	return CellType.YARD
 
 
-## Maison d'une parcelle : {} si aucune, sinon {plan: indice MapgenDB, rot: 0..3}. FONCTION PURE de (seed, cellule).
+## Bâtiment d'une parcelle : {} si aucun, sinon {plan: indice MapgenDB, rot: 0..3}. FONCTION PURE de (seed, cellule).
+## C'est une maison (houses.json) ou, selon la zone et la taille de la ville, un bâtiment de ville (urban.json : voir lot_zone).
 ## La façade (le sud du plan) est tournée vers une rue voisine (voir HOUSE_FRONTS) ; s'il y en a plusieurs, le choix est tiré.
-## Pas de maison sur une berge, un marais ni une cellule d'eau (le plan écraserait l'eau).
+## Pas de bâtiment sur une berge, un marais ni une cellule d'eau (le plan écraserait l'eau).
 func lot_plan(cell: Vector2i) -> Dictionary:
 	if MapgenDB.plan_count() == 0 or town_cell_type(cell) != CellType.LOT:
 		return {}
@@ -342,11 +356,97 @@ func lot_plan(cell: Vector2i) -> Dictionary:
 			fronts.append(rot)
 	if fronts.is_empty():
 		return {}
-	var plan: int = MapgenDB.pick(WorldRng.unit(WorldRng.mix(world_seed, WorldRng.LAYER_MAPGEN, cell.x, cell.y, 1)))
+	var plan: int = _urban_plan(cell, town)   # bâtiment de ville, ou -1 : maison
+	if plan < 0:
+		plan = MapgenDB.pick(WorldRng.unit(WorldRng.mix(world_seed, WorldRng.LAYER_MAPGEN, cell.x, cell.y, 1)))
 	if plan < 0:
 		return {}
 	var rot_roll: int = WorldRng.mix(world_seed, WorldRng.LAYER_MAPGEN, cell.x, cell.y, 2) & 0x7FFFFFFF
 	return {"plan": plan, "rot": fronts[rot_roll % fronts.size()]}
+
+
+## Id du plan posé sur une parcelle (« house_small », « urban_bank »...), "" si la parcelle n'a pas de bâtiment.
+func lot_plan_id(cell: Vector2i) -> String:
+	var info: Dictionary = lot_plan(cell)
+	return MapgenDB.plan_id(int(info["plan"])) if not info.is_empty() else ""
+
+
+# --- Zonage urbain (jalon 11) ---
+
+## Zone d'une parcelle (ZONE_CENTER / ZONE_MID / ZONE_OUTSKIRTS), "" hors de toute ville. Selon la distance de Tchebychev au centre de la
+## ville, comparée à son rayon. Entiers seulement : zone_limits de towns.json est en pourcents du rayon (center : jusqu'à N %, mid : jusqu'à M %).
+func lot_zone(cell: Vector2i) -> String:
+	var town: Dictionary = town_at(cell)
+	if town.is_empty():
+		return ""
+	var d: Vector2i = cell - (town["center"] as Vector2i)
+	var distance: int = maxi(absi(d.x), absi(d.y))
+	var radius: int = maxi(int(town["radius"]), 1)
+	var limits: Dictionary = _config.get("zone_limits", {})
+	if distance * 100 <= int(limits.get("center", 50)) * radius:
+		return ZONE_CENTER
+	if distance * 100 <= int(limits.get("mid", 75)) * radius:
+		return ZONE_MID
+	return ZONE_OUTSKIRTS
+
+
+## Indice MapgenDB du bâtiment de ville de la parcelle, -1 si elle reçoit une maison. Deux tirages indépendants, fonctions pures de
+## (seed, cellule) : couche MAPGEN, indice 3 (urbain ou maison), indice 4 (quel bâtiment). Les indices 0, 1 et 2 restent ceux des maisons.
+func _urban_plan(cell: Vector2i, town: Dictionary) -> int:
+	var zones: Dictionary = _config.get("zones", {})
+	var zone: String = lot_zone(cell)
+	if not zones.has(zone):
+		return -1
+	var size_scales: Dictionary = _config.get("size_urban_scale", {})
+	var size_scale: float = float(size_scales.get(String(town["size_id"]), 1.0))
+	var chance: float = minf(float((zones[zone] as Dictionary).get("urban_chance", 0.0)) * size_scale, URBAN_CHANCE_MAX)
+	if chance <= 0.0 or not WorldRng.chance(world_seed, WorldRng.LAYER_MAPGEN, cell.x, cell.y, 3, chance):
+		return -1
+	var table: Dictionary = _zone_table(zone)
+	var plans: Array = table["plans"]
+	var weights: Array = table["weights"]
+	var radii: Array = table["radii"]
+	var radius: int = town["radius"]
+	var total: float = 0.0
+	for i in plans.size():
+		if int(radii[i]) <= radius:
+			total += float(weights[i])
+	if total <= 0.0:
+		return -1
+	var target: float = WorldRng.unit(WorldRng.mix(world_seed, WorldRng.LAYER_MAPGEN, cell.x, cell.y, 4)) * total
+	var acc: float = 0.0
+	var last: int = -1
+	for i in plans.size():
+		if int(radii[i]) > radius:
+			continue
+		acc += float(weights[i])
+		last = int(plans[i])
+		if target < acc:
+			return last
+	return last
+
+
+## Table des bâtiments d'une zone, plans résolus en indices MapgenDB (un plan inconnu est ignoré avec un avertissement).
+func _zone_table(zone: String) -> Dictionary:
+	if _zone_tables.has(zone):
+		return _zone_tables[zone]
+	var plans: Array = []
+	var weights: Array = []
+	var radii: Array = []
+	var zone_def: Dictionary = (_config.get("zones", {}) as Dictionary).get(zone, {})
+	var buildings: Array = zone_def.get("buildings", [])
+	for entry: Dictionary in buildings:
+		var plan_name: String = String(entry.get("plan", ""))
+		var plan: int = MapgenDB.plan_by_id(plan_name)
+		if plan < 0:
+			push_warning("SettlementMap : zone « %s » : plan « %s » introuvable (ignoré)." % [zone, plan_name])
+			continue
+		plans.append(plan)
+		weights.append(maxf(float(entry.get("weight", 1.0)), 0.0))
+		radii.append(int(entry.get("min_radius", 0)))
+	var table: Dictionary = {"plans": plans, "weights": weights, "radii": radii}
+	_zone_tables[zone] = table
+	return table
 
 
 ## Masque des connexions d'une cellule de route (DIR_N | DIR_E | DIR_S | DIR_W) : rues ou routes voisines, et pistes qui s'y raccordent
