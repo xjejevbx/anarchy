@@ -1,0 +1,41 @@
+{
+ "_doc": "Groupes de spawn (jalon 6a : couche AMBIANTE seulement, voir docs/MONSTER_SPAWN.md sections 10 et 12). Un groupe = liste d'entrees ponderees, soit {monster, weight}, soit {group, weight} (groupe inclus, profondeur max 3, pas de cycle). Les poids peuvent etre decimaux. Tout monstre cite doit exister dans data/monsters.json (verifie par tests/test_spawn.gd). Les groupes de lieux (hopital, labo, bunker...) arrivent au jalon 6b.",
+ "groups": {
+  "amb_street": {"entries": [
+   {"monster": "zombie_civilian", "weight": 6}, {"monster": "zombie", "weight": 5}, {"monster": "zombie_elder", "weight": 2},
+   {"monster": "zombie_teen", "weight": 2}, {"monster": "zombie_child", "weight": 1}, {"monster": "zombie_fast", "weight": 1},
+   {"monster": "zombie_drunk", "weight": 1}, {"monster": "zombie_crawler", "weight": 1}, {"monster": "zombie_scavenger", "weight": 1}]},
+  "amb_yard": {"entries": [
+   {"monster": "zombie_civilian", "weight": 4}, {"monster": "zombie_homeowner", "weight": 2}, {"monster": "zombie_child", "weight": 2},
+   {"monster": "zombie_elder", "weight": 1}, {"monster": "dog_feral", "weight": 1}, {"monster": "crow", "weight": 1}]},
+  "eco_road": {"entries": [
+   {"monster": "zombie_driver", "weight": 5}, {"monster": "zombie_trucker", "weight": 2}, {"monster": "zombie_biker", "weight": 2},
+   {"monster": "zombie_cop", "weight": 1}, {"monster": "crow", "weight": 2}, {"monster": "zombie_scavenger", "weight": 1}]},
+  "eco_temperate_plain": {"entries": [
+   {"monster": "deer", "weight": 4}, {"monster": "fox", "weight": 2}, {"monster": "crow", "weight": 3}, {"monster": "coyote", "weight": 2},
+   {"monster": "boar", "weight": 1}, {"monster": "zombie_hiker", "weight": 1}, {"monster": "zombie_civilian", "weight": 1}, {"monster": "zombie_dog", "weight": 1}]},
+  "eco_temperate_forest": {"entries": [
+   {"monster": "deer", "weight": 3}, {"monster": "boar", "weight": 3}, {"monster": "wolf", "weight": 3}, {"monster": "bear", "weight": 2},
+   {"monster": "fox", "weight": 2}, {"monster": "giant_spider", "weight": 1}, {"monster": "zombie_hiker", "weight": 1}]},
+  "eco_swamp": {"entries": [
+   {"monster": "frog_mutant", "weight": 4}, {"monster": "snake", "weight": 3}, {"monster": "alligator", "weight": 2},
+   {"monster": "leech_swarm", "weight": 2}, {"monster": "zombie_drowned", "weight": 2}, {"monster": "zombie_bloated", "weight": 1}]},
+  "eco_taiga": {"entries": [
+   {"monster": "wolf", "weight": 4}, {"monster": "deer", "weight": 2}, {"monster": "zombie_hiker", "weight": 1}, {"monster": "zombie_frozen", "weight": 1}]},
+  "eco_tundra": {"entries": [
+   {"monster": "wolf_arctic", "weight": 4}, {"monster": "bear_polar", "weight": 1}, {"monster": "zombie_frozen", "weight": 2}, {"monster": "mutant_yeti", "weight": 0.1}]},
+  "eco_desert": {"entries": [
+   {"monster": "snake_rattle", "weight": 4}, {"monster": "scorpion_giant", "weight": 4}, {"monster": "vulture_mutant", "weight": 3},
+   {"monster": "zombie_mummified", "weight": 3}, {"monster": "sandworm", "weight": 0.1}]},
+  "eco_savanna": {"entries": [
+   {"monster": "lion", "weight": 3}, {"monster": "hyena", "weight": 4}, {"monster": "vulture_mutant", "weight": 2},
+   {"monster": "zombie", "weight": 2}, {"monster": "snake_rattle", "weight": 1}]},
+  "eco_jungle": {"entries": [
+   {"monster": "jaguar", "weight": 3}, {"monster": "python_giant", "weight": 3}, {"monster": "tarantula_giant", "weight": 3},
+   {"monster": "monkey_mutant", "weight": 3}, {"monster": "mosquito_swarm", "weight": 2}, {"monster": "zombie_overgrown", "weight": 3}, {"monster": "crocodile", "weight": 1}]},
+  "eco_beach": {"entries": [
+   {"monster": "crab_giant", "weight": 5}, {"monster": "seagull_mutant", "weight": 4}, {"monster": "zombie_swimmer", "weight": 2}, {"monster": "zombie_drowned", "weight": 1}]},
+  "eco_shore_river": {"entries": [
+   {"monster": "zombie_drowned", "weight": 3}, {"monster": "snake", "weight": 2}, {"monster": "boar", "weight": 1}]}
+ }
+}

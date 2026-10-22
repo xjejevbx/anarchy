@@ -1,0 +1,22 @@
+{
+ "_doc": "Ecologie ambiante (jalon 6a, docs/MONSTER_SPAWN.md section 12). ambient : pour chaque contexte, le groupe tire (spawn_groups.json) et la densite = nombre de monstres attendus pour 100 cases candidates (avant le reglage de population). street = rues de ville (cases asphalte, trottoir, beton) ; yard = parcelles et jardins de ville (cases de terrain naturel, hors batiment) ; road = routes entre villes (cases asphalte) ; kinds = chunk hors ville, selon la nature de case de la cellule macro (ids de biomes.json). Une nature absente de kinds (eau, lacs, ocean) n'a aucun monstre en 6a (les aquatiques arrivent en 6d). Les lieux speciaux n'ont pas de population ambiante (jalon 6b). limits : max_per_chunk = plafond de monstres par chunk, threat_budget = somme maximale de la menace (monstre.threat) par chunk, safe_radius = rayon (cases) sans monstre autour du depart du joueur, min_spacing = ecart minimal (Tchebychev) entre deux monstres d'un meme chunk.",
+ "limits": {"max_per_chunk": 12, "threat_budget": 30, "safe_radius": 12, "min_spacing": 2},
+ "ambient": {
+  "street": {"group": "amb_street", "density": 0.25},
+  "yard": {"group": "amb_yard", "density": 0.15},
+  "road": {"group": "eco_road", "density": 0.08},
+  "kinds": {
+   "plain": {"group": "eco_temperate_plain", "density": 0.04},
+   "forest": {"group": "eco_temperate_forest", "density": 0.06},
+   "swamp": {"group": "eco_swamp", "density": 0.06},
+   "taiga": {"group": "eco_taiga", "density": 0.05},
+   "tundra": {"group": "eco_tundra", "density": 0.03},
+   "desert": {"group": "eco_desert", "density": 0.025},
+   "savanna": {"group": "eco_savanna", "density": 0.05},
+   "jungle": {"group": "eco_jungle", "density": 0.08},
+   "beach": {"group": "eco_beach", "density": 0.06},
+   "shore_lake": {"group": "eco_shore_river", "density": 0.05},
+   "bank_river": {"group": "eco_shore_river", "density": 0.05}
+  }
+ }
+}

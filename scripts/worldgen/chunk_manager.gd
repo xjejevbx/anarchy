@@ -3,6 +3,9 @@ extends RefCounted
 ## Chunks chargés autour du joueur (docs/WORLD_GEN.md §7). Génère à la demande (déterministe, voir ChunkGenerator),
 ## étale la génération des chunks lointains sur plusieurs frames et décharge ceux qui sont trop loin.
 ## La mémoire de la carte (cases vues) survit au déchargement.
+## Jalon 6a (docs/MONSTER_SPAWN.md §2.3) : à son PREMIER chargement, un chunk reçoit ses monstres (SpawnGenerator, fonction pure) ;
+## à son déchargement, ses monstres vivants sont mis en réserve (`_monster_store`, comme `_seen_store`) et rendus tels quels au
+## rechargement. Un chunk déjà peuplé n'est jamais repeuplé : un monstre tué reste tué.
 
 # --- Réglages ---
 const GEN_RADIUS: int = 3         # chunks maintenus autour du joueur (7 x 7)
@@ -13,18 +16,22 @@ const CHUNKS_PER_FRAME: int = 1   # génération étalée des chunks lointains (
 var world_seed: int = 0
 var arena: bool = false
 var chunks: Dictionary = {}       # Vector3i -> Chunk
+var world: World = null           # propriétaire des monstres (null : aucun monstre n'est créé ni mis en réserve)
 
 var _root: Node2D                 # parent des chunks (le sol)
 var _entities: Node2D             # parent des sprites d'arbres
 var _seen_store: Dictionary = {}  # Vector3i -> PackedByteArray (cases vues des chunks déchargés)
+var _populated: Dictionary = {}   # Vector3i -> true : chunks déjà peuplés (ne le sont plus jamais)
+var _monster_store: Dictionary = {}  # Vector3i -> Array[Dictionary] (Monster.to_dict) des chunks déchargés
 var _queue: Array[Vector3i] = []
 
 
-func setup(seed_value: int, use_arena: bool, root: Node2D, entities: Node2D) -> void:
+func setup(seed_value: int, use_arena: bool, root: Node2D, entities: Node2D, owner_world: World = null) -> void:
 	world_seed = seed_value
 	arena = use_arena
 	_root = root
 	_entities = entities
+	world = owner_world
 
 
 static func key_of(cell: Vector2i, z: int = 0) -> Vector3i:
@@ -82,13 +89,61 @@ func _load(key: Vector3i) -> void:
 				var other := chunks.get(Vector3i(key.x + dx, key.y + dy, key.z)) as Chunk
 				if other != null and other != chunk and other.has_autotile:
 					other.queue_redraw()
+	_populate(key, chunk)
 
 
 func _unload(key: Vector3i) -> void:
 	var chunk := chunks[key] as Chunk
+	_store_monsters(key)
 	_seen_store[key] = chunk.seen
 	chunk.release()
 	chunks.erase(key)
+
+
+# --- Monstres du chunk (jalon 6a) ---
+
+## Premier chargement : les monstres initiaux (SpawnGenerator). Rechargement : les monstres mis en réserve, tels quels.
+func _populate(key: Vector3i, chunk: Chunk) -> void:
+	if world == null or arena:
+		return
+	if _monster_store.has(key):
+		var saved: Array = _monster_store[key]
+		_monster_store.erase(key)
+		for entry: Dictionary in saved:
+			world.restore_monster(entry)
+		return
+	if _populated.has(key) or world.monsters.size() >= World.MAX_MONSTERS:
+		return  # déjà peuplé (monstres tués compris) ; ou plafond global atteint : on retentera au prochain chargement
+	_populated[key] = true
+	var entries: Array[Dictionary] = SpawnGenerator.generate(world_seed, key, chunk.terrain, chunk.furniture, world.population, world.safe_centers)
+	for entry: Dictionary in entries:
+		world.spawn_monster_at(entry)
+
+
+## Déchargement : les monstres qui se trouvent dans le chunk quittent le monde et sont mis en réserve.
+func _store_monsters(key: Vector3i) -> void:
+	if world == null:
+		return
+	var saved: Array[Dictionary] = []
+	for m: Monster in world.monsters.duplicate():
+		if key_of(m.grid_pos, key.z) == key:
+			saved.append(m.to_dict())
+			world.remove_monster(m)
+	if not saved.is_empty():
+		_monster_store[key] = saved
+
+
+## Le chunk a-t-il déjà été peuplé ? (tests)
+func is_populated(key: Vector3i) -> bool:
+	return _populated.has(key)
+
+
+## Nombre de monstres en réserve (chunks déchargés). (tests)
+func stored_monster_count() -> int:
+	var total: int = 0
+	for key: Vector3i in _monster_store:
+		total += (_monster_store[key] as Array).size()
+	return total
 
 
 # --- Requêtes sur les cases (une case hors des chunks chargés est inconnue : ni praticable, opaque) ---

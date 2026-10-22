@@ -3,14 +3,17 @@ extends Node2D
 
 # --- Réglages de la partie (la saisie de la seed viendra avec le menu de création) ---
 const WORLD_SEED_TEXT: String = "cataclysme"  # nombre ou texte : même seed = même monde
-const USE_TEST_ARENA: bool = false           # true : ancienne carte fermée 60x40 (debug)
-const SPAWN_BESTIARY: bool = false            # true : tous les types de monstres près du départ (debug) ; false : 3 zombies seulement 
+const USE_TEST_ARENA: bool = false           # true : ancienne carte fermée 60x40 (debug), avec 3 zombies de test
+const SPAWN_BESTIARY: bool = false            # true : tous les types de monstres près du départ (debug) ; false : population normale seulement
+# Densité de monstres (jalon 6a) : multiplie les densités de data/worldgen/ecology.json. 0 = aucun monstre, 1 = normal, 2 = très peuplé.
+const POPULATION: float = 1.0
 # Scénario de départ (le menu de création de partie viendra plus tard) :
 #   "default" : en lisière de la ville la plus proche de l'origine (sinon pleine nature)
 #   "island"  : perdu sur une petite île (SettlementMap.island_spawn_cell ; repli sur "default" s'il n'y en a pas près de l'origine)
 const START_SCENARIO: String = "default"
 
 # Monstres de test : [id MonsterData, décalage par rapport au départ]. Tous dans les ~30 cases (chunks proches chargés au démarrage).
+# BASE_MONSTERS : seulement dans l'arène de test (le monde normal a sa propre population, voir SpawnGenerator).
 const BASE_MONSTERS: Array = [
 	["zombie", Vector2i(9, 3)], ["zombie", Vector2i(15, 9)], ["zombie", Vector2i(5, 15)],
 ]
@@ -27,6 +30,7 @@ func _ready() -> void:
 	var world := World.new()
 	world.world_seed = WorldRng.seed_from_text(WORLD_SEED_TEXT)
 	world.use_arena = USE_TEST_ARENA
+	world.population = POPULATION
 	add_child(world)
 
 	# Point de départ : déterministe selon la seed (lisière de la ville la plus proche, sinon pleine nature ; une île selon le scénario) ;
@@ -42,6 +46,7 @@ func _ready() -> void:
 				scenario_note = " Scénario : perdu sur une île."
 			else:
 				scenario_note = " Aucune île trouvée près de l'origine : départ par défaut."
+	world.safe_centers.append(spawn)  # aucun monstre ne naît à moins de 12 cases du départ (avant le premier chargement de chunk)
 
 	var player := Player.new()
 	player.world = world
@@ -86,8 +91,11 @@ func _ready() -> void:
 	EventBus.message_logged.emit("Monde : seed « %s » (%d)%s. Départ en (%d, %d)%s.%s m : carte de debug." % \
 		[WORLD_SEED_TEXT, world.world_seed, ", arène de test" if USE_TEST_ARENA else "", spawn.x, spawn.y, spawn_note, scenario_note])
 
-	# Monstres de test (placés relativement au joueur ; survolez-les ou utilisez x pour voir leurs compétences)
-	var roster: Array = BASE_MONSTERS.duplicate()
+	# Monstres de test (placés relativement au joueur ; survolez-les ou utilisez x pour voir leurs compétences).
+	# Monde normal : la population vient des chunks (SpawnGenerator) ; l'arène de test garde ses 3 zombies.
+	var roster: Array = []
+	if USE_TEST_ARENA:
+		roster.append_array(BASE_MONSTERS)
 	if SPAWN_BESTIARY:
 		roster.append_array(BESTIARY_MONSTERS)
 	for entry: Array in roster:

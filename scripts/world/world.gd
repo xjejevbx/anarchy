@@ -3,6 +3,8 @@ extends Node2D
 ## Le monde : chunks (via ChunkManager), objets au sol, monstres, file d'actions et champ de vision.
 ## La carte est INFINIE et générée par chunks de façon déterministe à partir de `world_seed`
 ## (voir docs/WORLD_GEN.md). Le terrain n'est jamais stocké ici : on interroge le ChunkManager.
+## Jalon 6a : les monstres initiaux d'un chunk sont créés par ChunkManager (SpawnGenerator) à son premier chargement ;
+## un chunk déchargé met ses monstres en réserve, un chunk rechargé les restaure (voir docs/MONSTER_SPAWN.md).
 ##
 ## Rendu en couches (de bas en haut) :
 ##   1. `_terrain_layer` : les chunks (sol : herbe, murs)
@@ -18,6 +20,7 @@ extends Node2D
 const TILE_SIZE: int = 128
 const ALERT_REARM_POINTS: float = 5.0    # secondes hors de vue (dans le brouillard) avant qu'un monstre puisse être signalé à nouveau ; 0 = dès qu'il sort de vue
 const VIEW_RADIUS: int = 20              # portée de vue en cases (plein jour pour l'instant)
+const MAX_MONSTERS: int = 300            # plafond global de monstres chargés (au-delà, un chunk neuf n'est pas peuplé)
 
 # --- Case ciblée (déplacement automatique) ---
 const TARGET_COLOR_IDLE: Color = Color(1, 1, 1, 0.95)          # case choisie, déplacement pas lancé
@@ -27,6 +30,8 @@ const TARGET_DOT_RADIUS: float = 12.0
 
 var world_seed: int = 4444                  # à fixer AVANT add_child()
 var use_arena: bool = false              # true : ancienne carte fermée 60x40 (debug), à fixer AVANT add_child()
+var population: float = 1.0              # multiplicateur des densités de monstres (0 = aucun), à fixer AVANT le premier chargement
+var safe_centers: Array[Vector2i] = []   # cases autour desquelles aucun monstre n'apparaît (départ du joueur), voir SpawnGenerator
 var chunks: ChunkManager
 var player: Player
 var monsters: Array[Monster] = []
@@ -75,7 +80,7 @@ func _ready() -> void:
 	_target_overlay.draw.connect(_draw_target_overlay)
 	add_child(_target_overlay)
 	chunks = ChunkManager.new()
-	chunks.setup(world_seed, use_arena, _terrain_layer, entities)
+	chunks.setup(world_seed, use_arena, _terrain_layer, entities, self)
 	EventBus.time_advanced.connect(_on_time_advanced)
 
 
@@ -281,18 +286,46 @@ func find_free_cell_near(origin: Vector2i) -> Vector2i:
 	return origin
 
 
-func spawn_monster(data: MonsterData, near: Vector2i) -> Monster:
+## Crée le nœud d'un monstre sur `cell` (sans vérification) ; il reste caché jusqu'au prochain calcul de vue.
+func _create_monster(data: MonsterData, cell: Vector2i) -> Monster:
 	var m := Monster.new()
 	m.data = data
 	m.world = self
 	m.hp = data.max_hp
-	m.grid_pos = find_free_cell_near(near)
+	m.grid_pos = cell
 	m.next_action_time = GameClock.elapsed_points
 	m.hidden_since = GameClock.elapsed_points
 	m.visible = false  # update_fov() décidera
 	entities.add_child(m)
 	monsters.append(m)
+	return m
+
+
+func spawn_monster(data: MonsterData, near: Vector2i) -> Monster:
+	var m: Monster = _create_monster(data, find_free_cell_near(near))
 	_refresh_monster_visibility()
+	return m
+
+
+## Monstre initial d'un chunk (SpawnGenerator : {monster, cell, facing}). Null si la case n'est plus libre.
+## Pas de recalcul de la visibilité ici : update_fov() (ou le prochain déplacement du joueur) s'en charge.
+func spawn_monster_at(entry: Dictionary) -> Monster:
+	var cell: Vector2i = entry["cell"]
+	if not is_walkable(cell) or is_occupied(cell):
+		return null
+	var m: Monster = _create_monster(MonsterDB.create(String(entry["monster"])), cell)
+	m.facing = entry.get("facing", m.facing)
+	return m
+
+
+## Rend vie à un monstre mis en réserve par Monster.to_dict() quand son chunk est rechargé.
+func restore_monster(entry: Dictionary) -> Monster:
+	var data: MonsterData = MonsterDB.create(String(entry["id"]))
+	var m: Monster = _create_monster(data, entry["cell"])
+	m.hp = float(entry.get("hp", data.max_hp))
+	m.stamina = float(entry.get("stamina", Player.STAMINA_MAX))
+	m.facing = entry.get("facing", m.facing)
+	m.spotted = bool(entry.get("spotted", false))
 	return m
 
 

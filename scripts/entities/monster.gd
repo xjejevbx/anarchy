@@ -16,6 +16,11 @@ extends Node2D
 ## ORDRE DES TOURS : le joueur agit toujours d'abord (il change de case, la vue est recalculée), PUIS le temps passe et les monstres dont
 ## le moment d'action est arrivé jouent (World._on_time_advanced) : un monstre prêt à frapper ne frappe pas un joueur qui s'est éloigné.
 ##
+## COMPORTEMENTS (jalon 6a, champ `behavior` de monsters.json) : « hostile » (défaut) ; « passive » : fuit le joueur (cerf, renard) et
+## ne se défend que s'il est acculé ; « territorial » : ne repère le joueur que dans un rayon de TERRITORY_RADIUS cases et abandonne la
+## poursuite au-delà de TERRITORY_LEASH (sanglier, ours).
+## ARMURE : `data.armor` (capacité ARMOR(n)) retire n PV à chaque coup reçu, 1 PV au minimum.
+##
 ## Stamina : les monstres ont la même stamina que le joueur (Player.STAMINA_MAX) et les mêmes règles de ralentissement :
 ## chaque tranche de 30 % perdue ajoute +10 % à la durée de leurs actions (max +30 %). Se déplacer à terre regagne de la stamina,
 ## nager (eau peu profonde ; ils ne vont pas en eau profonde) en coûte, attendre régénère, attaquer fatigue.
@@ -24,6 +29,11 @@ extends Node2D
 const IDLE_COST: float = 5.0   # rien à faire : on revient voir plus tard
 const BLOCKED_COST: float = 1.0 # chemin bloqué : on attend un peu
 const ATTACK_STAMINA_PER_SECOND: float = 1.0  # fatigue d'une attaque ou d'un tir : -1 par seconde d'action (le joueur : -2 pour 2 s)
+
+# --- Comportements (jalon 6a) ---
+const TERRITORY_RADIUS: float = 5.0   # territorial : portée de détection maximale (cases)
+const TERRITORY_LEASH: int = 10       # territorial : au-delà de cette distance, il abandonne la poursuite
+const FLEE_RANGE: float = 8.0         # passif : distance à laquelle il commence à fuir
 
 # --- Orientation ---
 const TURN_STEPS_PER_ACTION: int = 1   # quarts de tour (90°) par pivotement (1 = un quart par action ; 2 = demi-tour en une action)
@@ -53,6 +63,7 @@ var facing: Vector2i = Vector2i(0, 1)   # direction du regard (une des 4 de RING
 
 var _rng := RandomNumberGenerator.new()
 var _fg_sprite: String = ""
+var _tint: Color = Color.WHITE          # teinte du sprite (blanc, sauf sprite de repli : data.tint)
 var _ranged_ready_at: float = 0.0       # moment (points d'action) où le prochain tir est possible
 var _scream_ready_at: float = 0.0       # idem pour le hurlement
 var _anim_time: float = 0.0
@@ -64,11 +75,14 @@ var _threat: bool = false               # le joueur est dans sa zone d'attaque (
 
 func _ready() -> void:
 	position = Vector2(grid_pos * World.TILE_SIZE)
-	facing = RING[_rng.randi() % RING.size()]   # orientation de départ au hasard
+	facing = RING[_rng.randi() % RING.size()]   # orientation de départ au hasard (World peut la remplacer juste après)
 	# Chaque monstre garde la variante de sprite tirée à sa création.
 	var variant_seed: int = randi()
 	_anim_phase = float(variant_seed % 628) / 100.0
 	_fg_sprite = UlticaTiles.pick_sprite(data.tile_id, "fg", variant_seed)  # la couche "bg" d'UltiCa (ombre) n'est plus dessinée : voir Fx
+	if _fg_sprite == "":  # tuile absente du pack : sprite de repli, teinté (voir data.fallback_tile et data.tint)
+		_fg_sprite = UlticaTiles.pick_sprite(data.fallback_tile, "fg", variant_seed)
+		_tint = data.tint
 
 
 ## Purement visuel : l'affichage glisse vers la case logique (déjà atteinte) avec un petit rebond.
@@ -85,13 +99,24 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
+## État à sauvegarder quand le chunk est déchargé (voir ChunkManager) : World.restore_monster() le relit.
+func to_dict() -> Dictionary:
+	return {"id": data.id, "cell": grid_pos, "hp": hp, "stamina": stamina, "facing": facing, "spotted": spotted}
+
+
 func take_turn() -> float:
 	var player: Player = world.player
 	var delta: Vector2i = player.grid_pos - grid_pos
 	var distance: int = maxi(absi(delta.x), absi(delta.y))  # distance en cases (diagonales incluses)
+	if data.behavior == "passive":
+		return _passive_turn(player, delta, distance)
 	# Le joueur et le monstre se voient mutuellement : on s'appuie sur le champ de vision du
 	# joueur (les arbres et les murs bloquent donc aussi la vue des monstres).
 	var reach: float = data.detect_range * player.get_detect_factor()  # posture du joueur : sprint = plus loin, accroupi = moins loin
+	if data.behavior == "territorial":
+		reach = minf(reach, TERRITORY_RADIUS)
+		if has_target and distance > TERRITORY_LEASH:
+			has_target = false  # le joueur est sorti de son territoire
 	var sees: bool = distance <= reach and world.is_visible_cell(grid_pos)
 	if sees:
 		if distance <= reach and world.is_visible_cell(grid_pos):
@@ -110,6 +135,33 @@ func take_turn() -> float:
 				has_target = false  # arrivé là où on a vu le joueur pour la dernière fois : plus personne
 				return _rest(IDLE_COST)
 			return _move_toward(target_cell)
+	return _rest(IDLE_COST)
+
+
+# --- Comportement passif (cerf, renard) ---
+
+## Fuit le joueur tant qu'il le voit à moins de FLEE_RANGE cases ; acculé, il se défend ; sinon il reste tranquille.
+func _passive_turn(player: Player, _delta: Vector2i, distance: int) -> float:
+	var reach: float = minf(float(data.detect_range) * player.get_detect_factor(), FLEE_RANGE)
+	if float(distance) > reach or not world.is_visible_cell(grid_pos):
+		return _rest(IDLE_COST)
+	var best: Vector2i = grid_pos
+	var best_d2: int = (player.grid_pos - grid_pos).length_squared()
+	for dir: Vector2i in RING:
+		var candidate: Vector2i = grid_pos + dir
+		if not world.is_walkable(candidate) or world.is_occupied(candidate) or world.swim_depth(candidate) != TerrainDB.SWIM_NONE:
+			continue
+		var d2: int = (player.grid_pos - candidate).length_squared()
+		if d2 > best_d2:
+			best_d2 = d2
+			best = candidate
+	if best != grid_pos:
+		face(best - grid_pos)
+		grid_pos = best
+		position = Vector2(grid_pos * World.TILE_SIZE)
+		return _finish(data.move_cost, _move_stamina_delta())
+	if _can_melee(player.grid_pos):
+		return _attack_player()  # acculé : il se défend
 	return _rest(IDLE_COST)
 
 
@@ -326,9 +378,12 @@ func _move_toward(cell: Vector2i) -> float:
 	return _finish(data.move_cost * steps, _move_stamina_delta() * steps)
 
 
-## Renvoie true si le monstre meurt.
+## Renvoie true si le monstre meurt. L'armure (data.armor) retire des PV à chaque coup, 1 PV au minimum.
 func take_damage(amount: float) -> bool:
-	hp = maxf(hp - amount, 0.0)
+	var dealt: float = amount
+	if data.armor > 0:
+		dealt = maxf(amount - float(data.armor), 1.0)
+	hp = maxf(hp - dealt, 0.0)
 	queue_redraw()
 	return hp <= 0.0
 
@@ -339,6 +394,12 @@ func get_tooltip_lines() -> Array[String]:
 	lines.append("%s   PV %d/%d" % [data.display_name, ceili(hp), int(data.max_hp)])
 	if time_penalty() > 0.0:
 		lines.append("Essoufflé : actions +%d %% de durée" % roundi(time_penalty() * 100.0))
+	if data.armor > 0:
+		lines.append("Armure : -%d PV par coup reçu" % data.armor)
+	if data.behavior == "passive":
+		lines.append("Passif : fuit, ne se défend que s'il est acculé")
+	elif data.behavior == "territorial":
+		lines.append("Territorial : n'attaque que si on s'approche (à moins de %d cases)" % roundi(TERRITORY_RADIUS))
 	lines.append("Déplacement : %.1f pts" % data.move_cost)
 	lines.append("Pivoter (90°) : %.1f pts (frappe devant lui, flèche rouge)" % (data.move_cost * TURN_COST_FACTOR))
 	lines.append("%s : %.1f pts, %d dégâts" % [data.attack_name, data.attack_cost, int(data.attack_damage)])
@@ -380,7 +441,7 @@ func _draw() -> void:
 		var squeeze: float = 1.0 - _hop / 60.0
 		draw_colored_polygon(Fx.ellipse_points(pivot + Vector2(0, 2), Fx.SHADOW_RADII * squeeze), Fx.SHADOW_COLOR)
 	draw_set_transform(pivot + Vector2(0, -_hop), 0.0, Vector2(1.0 - _breath * 0.5, 1.0 + _breath))
-	UlticaTiles.draw_sprite(self, _fg_sprite, -pivot)
+	UlticaTiles.draw_sprite(self, _fg_sprite, -pivot, _tint)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if SHOW_FACING_ARROW:
 		_draw_facing_arrow()
