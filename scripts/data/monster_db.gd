@@ -1,10 +1,12 @@
 class_name MonsterDB
 extends RefCounted
-## Bestiaire, chargé depuis res://data/monsters.json (voir le champ "_doc" du fichier et docs/MONSTER_SPAWN.md).
+## Bestiaire, chargé depuis res://data/monsters.json puis monsters_places.json (voir le champ "_doc" des fichiers et docs/MONSTER_SPAWN.md).
+## Jalon 6b : create(id, affixes) applique des affixes (data/monster_affixes.json : nom accordé, PV, vitesse, dégâts, armure).
 ## create(id) fabrique un MonsterData neuf. Les erreurs de données sont listées par errors() (un monstre invalide est tout de même
 ## chargé : le jeu continue, le test tests/test_spawn.gd les signale).
 
-const PATH: String = "res://data/monsters.json"
+const PATHS: Array[String] = ["res://data/monsters.json", "res://data/monsters_places.json"]
+const AFFIX_PATH: String = "res://data/monster_affixes.json"
 
 ## Capacités connues (MONSTER_SPAWN.md section 7). En 6a, seule ARMOR(n) agit ; les autres sont lues et ignorées.
 const ABILITIES: Array[String] = ["ARMOR", "DORMANT", "GUARD", "AMBUSH", "ERRATIC", "EXPLODE", "AURA_RAD", "COLD_AURA", "FIRE_AURA",
@@ -18,24 +20,53 @@ static var _loaded: bool = false
 static var _ids: Array[String] = []
 static var _defs: Dictionary = {}
 static var _errors: Array[String] = []
+static var _affixes: Dictionary = {}
+static var _affix_ids: Array[String] = []
 
 
 static func _ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	if not FileAccess.file_exists(PATH):
-		_fail("%s introuvable." % PATH)
+	for path: String in PATHS:
+		_load_file(path)
+	_load_affixes()
+
+
+static func _load_file(path: String) -> void:
+	if not FileAccess.file_exists(path):
+		_fail("%s introuvable." % path)
 		return
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PATH))
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(parsed) != TYPE_DICTIONARY:
-		_fail("monsters.json invalide.")
+		_fail("%s invalide." % path)
 		return
 	var monsters: Dictionary = (parsed as Dictionary).get("monsters", {})
 	for id: String in monsters:
+		if _defs.has(id):
+			_fail("%s : monstre « %s » défini deux fois." % [path, id])
+			continue
 		_ids.append(id)
 		_defs[id] = monsters[id]
 		_validate(id, monsters[id])
+
+
+static func _load_affixes() -> void:
+	if not FileAccess.file_exists(AFFIX_PATH):
+		_fail("%s introuvable." % AFFIX_PATH)
+		return
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(AFFIX_PATH))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		_fail("monster_affixes.json invalide.")
+		return
+	_affixes = (parsed as Dictionary).get("affixes", {})
+	for id: String in _affixes:
+		_affix_ids.append(id)
+		var def: Dictionary = _affixes[id]
+		if String(def.get("adj_m", "")) == "" or String(def.get("adj_f", "")) == "":
+			_fail("affixe %s : adjectifs adj_m / adj_f manquants." % id)
+		if float(def.get("hp", 1.0)) <= 0.0 or float(def.get("speed", 1.0)) <= 0.0 or float(def.get("dmg", 1.0)) <= 0.0:
+			_fail("affixe %s : multiplicateur nul ou négatif." % id)
 
 
 static func _fail(message: String) -> void:
@@ -112,13 +143,14 @@ static func threat_of(id: String) -> int:
 	return clampi(int(def.get("threat", fallback)), 1, MAX_THREAT)
 
 
-## Fabrique un MonsterData neuf. Id inconnu : erreur et zombie.
-static func create(monster_id: String) -> MonsterData:
+## Fabrique un MonsterData neuf, avec des affixes éventuels (ids de monster_affixes.json ; ceux qui ne conviennent pas sont ignorés).
+## Id inconnu : erreur et zombie.
+static func create(monster_id: String, affix_ids: Array = []) -> MonsterData:
 	_ensure_loaded()
 	if not _defs.has(monster_id):
 		push_error("MonsterDB : monstre inconnu « %s »." % monster_id)
 		if monster_id != "zombie" and _defs.has("zombie"):
-			return create("zombie")
+			return create("zombie", affix_ids)
 		return MonsterData.new()
 	var d: Dictionary = _defs[monster_id]
 	var m := MonsterData.new()
@@ -179,7 +211,65 @@ static func create(monster_id: String) -> MonsterData:
 		m.scream_radius = int(scream.get("radius", 20))
 		m.scream_cost = float(scream.get("cost", 3.0))
 		m.scream_cooldown = float(scream.get("cooldown", 25.0))
+	_apply_affixes(m, affix_ids)
 	return m
+
+
+## Applique les affixes (au plus 2, ceux que le monstre accepte) : nom accordé au genre, PV, durée du pas, dégâts, armure, menace.
+static func _apply_affixes(m: MonsterData, affix_ids: Array) -> void:
+	for raw: Variant in affix_ids:
+		var affix_id: String = String(raw)
+		if m.affixes.size() >= 2 or m.affixes.has(affix_id) or not affix_ok(m.id, affix_id):
+			continue
+		var a: Dictionary = _affixes[affix_id]
+		m.affixes.append(affix_id)
+		m.max_hp *= float(a.get("hp", 1.0))
+		m.move_cost *= float(a.get("speed", 1.0))
+		var dmg: float = float(a.get("dmg", 1.0))
+		m.attack_damage *= dmg
+		m.special_damage *= dmg
+		m.ranged_damage *= dmg
+		m.armor += int(a.get("armor", 0))
+		m.threat = clampi(m.threat + int(a.get("threat", 0)), 1, MAX_THREAT)
+		if bool(a.get("never_sleeps", false)):
+			m.never_sleeps = true
+		m.display_name += " " + String(a.get("adj_f" if m.gender == "f" else "adj_m", ""))
+
+
+## Ids des affixes, dans l'ordre du fichier.
+static func affix_ids() -> Array[String]:
+	_ensure_loaded()
+	return _affix_ids
+
+
+## Le monstre accepte-t-il cet affixe ? (au moins un tag de allowed_tags, aucun de forbidden_tags)
+static func affix_ok(monster_id: String, affix_id: String) -> bool:
+	_ensure_loaded()
+	if not _affixes.has(affix_id) or not _defs.has(monster_id):
+		return false
+	var a: Dictionary = _affixes[affix_id]
+	var tags: Array = tags_of(monster_id)
+	for tag: Variant in a.get("forbidden_tags", []):
+		if tags.has(tag):
+			return false
+	var allowed: Array = a.get("allowed_tags", [])
+	if allowed.is_empty():
+		return true
+	for tag: Variant in allowed:
+		if tags.has(tag):
+			return true
+	return false
+
+
+## État de départ d'un monstre créé par un chunk : "guard" (GUARD), "sleep" (DORMANT ou AMBUSH), sinon la valeur de default_state.
+static func default_state_of(monster_id: String) -> String:
+	var def: Dictionary = def_of(monster_id)
+	var abilities: Array = def.get("abilities", [])
+	if abilities.has("GUARD"):
+		return "guard"
+	if abilities.has("DORMANT") or abilities.has("AMBUSH"):
+		return "sleep"
+	return String(def.get("default_state", "idle"))
 
 
 ## Table de zones : nom d'une table de MonsterData.ZONE_TABLES, ou dictionnaire {partie: poids} (copié).

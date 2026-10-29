@@ -2,12 +2,13 @@ extends SceneTree
 ## Test du jalon 11 (zonage urbain, bâtiments de ville, port et aéroport). À lancer à la demande :
 ##   godot --headless --path <projet> --script res://tests/test_jalon11.gd
 ## Code de sortie 0 = tout est bon. Complète tests/test_worldgen_determinism.gd (qui valide déjà la structure de TOUS les plans de
-## lieux, urban.json compris : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations) et tests/test_jalon10.gd
-## (accès des lieux, pistes).
+## lieux, urban.json et medical.json compris : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations) et tests/test_jalon10.gd
+## (accès des lieux, pistes). Jalon 6b : les 4 bâtiments médicaux (medical.json) font partie des bâtiments de ville.
 
 const URBAN_IDS: Array[String] = [
 	"urban_apartments", "urban_grocery", "urban_supermarket", "urban_pharmacy", "urban_hardware", "urban_bar", "urban_restaurant",
 	"urban_police", "urban_school", "urban_church", "urban_parking", "urban_town_hall", "urban_fire_station", "urban_bank",
+	"urban_hospital", "urban_clinic", "urban_nursing_home", "urban_garage",
 ]
 const COAST_BUILDING_IDS: Array[String] = ["port_warehouse", "port_office", "airport_hangar", "airport_terminal", "airport_tower"]
 const COAST_OPEN_IDS: Array[String] = ["port_quay_a", "port_quay_b", "port_quay_c", "port_yard", "airport_runway", "airport_runway_taxi", "airport_apron"]

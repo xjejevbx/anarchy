@@ -4,6 +4,8 @@ extends RefCounted
 ## Règle : jamais de randi() / randf() / shuffle() globaux dans la génération. Tout vient de
 ## mix(seed, couche, x, y, z) : la même seed donne le même monde, quel que soit l'ordre d'exploration.
 ## Les entiers GDScript sont sur 64 bits avec retour à zéro en cas de dépassement (même résultat partout).
+## Jalon 6b : une 4e coordonnée optionnelle `d` (0 = ignorée : les résultats existants ne changent PAS) sert à séparer des flux
+## indépendants quand `c` est déjà pris par l'étage (z).
 
 # Couches de génération : entiers CONSTANTS, ne jamais renuméroter (ajouter à la suite).
 const LAYER_TERRAIN: int = 1
@@ -33,13 +35,16 @@ static func _finalize(value: int) -> int:
 	return z ^ _lsr(z, 31)
 
 
-## Mélange la seed, une couche et jusqu'à trois coordonnées en un entier 64 bits bien réparti.
-static func mix(world_seed: int, layer: int, a: int = 0, b: int = 0, c: int = 0) -> int:
+## Mélange la seed, une couche et jusqu'à quatre coordonnées en un entier 64 bits bien réparti (d = 0 : ignorée).
+static func mix(world_seed: int, layer: int, a: int = 0, b: int = 0, c: int = 0, d: int = 0) -> int:
 	var h: int = _finalize(world_seed + _GOLDEN)
 	h = _finalize(h + _GOLDEN + layer)
 	h = _finalize(h + _GOLDEN + a)
 	h = _finalize(h + _GOLDEN + b)
-	return _finalize(h + _GOLDEN + c)
+	h = _finalize(h + _GOLDEN + c)
+	if d != 0:
+		h = _finalize(h + _GOLDEN + d)
+	return h
 
 
 ## Réel dans [0, 1) dérivé d'un entier (53 bits de précision).
@@ -53,9 +58,9 @@ static func chance(world_seed: int, layer: int, a: int, b: int, c: int, probabil
 
 
 ## Générateur local (PCG32 de Godot) pour une zone : à créer par zone, jamais partagé.
-static func rng_for(world_seed: int, layer: int, a: int = 0, b: int = 0, c: int = 0) -> RandomNumberGenerator:
+static func rng_for(world_seed: int, layer: int, a: int = 0, b: int = 0, c: int = 0, d: int = 0) -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = mix(world_seed, layer, a, b, c)
+	rng.seed = mix(world_seed, layer, a, b, c, d)
 	return rng
 
 

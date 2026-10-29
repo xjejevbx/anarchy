@@ -1,9 +1,10 @@
 class_name FurnitureDB
 extends RefCounted
-## Mobilier du monde, chargé depuis res://data/worldgen/furniture.json (voir le champ "_doc" du fichier).
-## Les chunks stockent l'INDEX du mobilier (un octet par case) : 0 = rien, 1 = premier de la liste, etc.
+## Mobilier du monde, chargé depuis res://data/worldgen/furniture.json puis furniture_medical.json (voir le champ "_doc" des fichiers).
+## Les chunks stockent l'INDEX du mobilier (un octet par case) : 0 = rien, 1 = premier de la liste, etc. L'ordre de chargement des
+## fichiers donne l'index : ajouter toujours à la suite (jamais de renumérotation).
 
-const PATH: String = "res://data/worldgen/furniture.json"
+const PATHS: Array[String] = ["res://data/worldgen/furniture.json", "res://data/worldgen/furniture_medical.json"]
 
 static var _loaded: bool = false
 static var _ids: Array[String] = []
@@ -15,20 +16,25 @@ static func _ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	if not FileAccess.file_exists(PATH):
-		push_error("FurnitureDB : %s introuvable." % PATH)
+	for path: String in PATHS:
+		_load_file(path)
+	if _ids.size() > 255:
+		push_error("FurnitureDB : plus de 255 meubles (un chunk stocke un octet par case).")
+
+
+static func _load_file(path: String) -> void:
+	if not FileAccess.file_exists(path):
+		push_error("FurnitureDB : %s introuvable." % path)
 		return
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PATH))
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error("FurnitureDB : furniture.json invalide.")
+		push_error("FurnitureDB : %s invalide." % path)
 		return
 	var furniture: Dictionary = parsed.get("furniture", {})
 	for id: String in furniture:
 		_ids.append(id)
 		_defs.append(furniture[id])
 		_index[id] = _ids.size()   # 1-based
-	if _ids.size() > 255:
-		push_error("FurnitureDB : plus de 255 meubles (un chunk stocke un octet par case).")
 
 
 static func has_id(id: String) -> bool:

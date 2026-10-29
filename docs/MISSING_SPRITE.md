@@ -37,6 +37,14 @@ Plan de repli suggéré : pour chaque id absent, ajouter dans `monsters.json` un
 ### Mobilier prévu pour le jalon 6 (à la FIN de `furniture.json`)
 Tuiles demandées (confiance faible, repli en carré de la `color`) : `f_hospital_bed` (essayer `f_bed`), `f_gurney`, `f_surgery_table`, `f_morgue_drawer`, `f_cell_bed` (essayer `f_bed`), `f_quarantine_bed` (essayer `f_bed`), `f_lab_table` (essayer `f_table`), `f_cryo_pod`, `f_cage`, `f_vat`, `f_server`, `f_garage_pit`.
 
+## Jalon 6b : axe vertical, mobilier médical, monstres de lieux
+
+**Terrains verticaux** (`data/worldgen/terrain_vertical.json`) : `t_rock` (roche pleine ; `t_rock` existe dans CDDA, confiance haute), `t_open_air` (vide ; id de tuile probable, confiance moyenne), `t_stairs_up` et `t_stairs_down` (confiance haute). Un id absent n'empêche pas de jouer : carré de la `color` du JSON (roche grise, vide presque noir, escaliers beiges). Les étages (z != 0) ne sont affichés qu'après le jalon 8 (changement d'étage), donc ces tuiles ne servent pas encore.
+
+**Mobilier médical** (`data/worldgen/furniture_medical.json`, à la suite de `furniture.json`) : `f_hospital_bed` (essayer `f_bed`), `f_gurney`, `f_surgery_table`, `f_morgue_drawer` (confiance faible, repli en carré de la `color`). Ils étaient déjà annoncés plus haut (« Mobilier prévu pour le jalon 6 ») ; `f_cell_bed`, `f_quarantine_bed`, `f_lab_table`, `f_cryo_pod`, `f_cage`, `f_vat`, `f_server`, `f_garage_pit` ne sont PAS encore utilisés.
+
+**Monstres de lieux** (`data/monsters_places.json`, 60 monstres) : aucun nouvel id, tous les `mon_<id>` utilisés sont déjà listés dans la section « Jalon 6 » ci-dessus (même repli teinté `mon_zombie` / `mon_wolf`). Les affixes ne demandent aucun sprite (nom, PV, vitesse et armure seulement).
+
 ## Attention : `tools/build_ultica_pack.py`
 `IDS` ne contient que `t_grass_dead`, `t_grass_long`, `t_moss` : relancé tel quel, le script réécrit `tiles.json` avec ces 3 tuiles seulement. Remettre d'abord tous les ids utilisés.
 

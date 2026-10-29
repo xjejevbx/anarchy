@@ -6,6 +6,8 @@ extends RefCounted
 ## Jalon 6a (docs/MONSTER_SPAWN.md §2.3) : à son PREMIER chargement, un chunk reçoit ses monstres (SpawnGenerator, fonction pure) ;
 ## à son déchargement, ses monstres vivants sont mis en réserve (`_monster_store`, comme `_seen_store`) et rendus tels quels au
 ## rechargement. Un chunk déjà peuplé n'est jamais repeuplé : un monstre tué reste tué.
+## Axe vertical (jalon 6b) : le gestionnaire ne charge QU'UN étage (`level`, 0 = surface). Les requêtes par case (Vector2i) portent sur cet
+## étage ; set_level() décharge tous les chunks de l'ancien étage (cases vues et monstres sont gardés par clé Vector3i, z compris).
 
 # --- Réglages ---
 const GEN_RADIUS: int = 3         # chunks maintenus autour du joueur (7 x 7)
@@ -17,6 +19,7 @@ var world_seed: int = 0
 var arena: bool = false
 var chunks: Dictionary = {}       # Vector3i -> Chunk
 var world: World = null           # propriétaire des monstres (null : aucun monstre n'est créé ni mis en réserve)
+var level: int = 0                # étage actif (z des chunks chargés)
 
 var _root: Node2D                 # parent des chunks (le sol)
 var _entities: Node2D             # parent des sprites d'arbres
@@ -42,9 +45,20 @@ static func index_of(cell: Vector2i) -> int:
 	return posmod(cell.y, Chunk.SIZE) * Chunk.SIZE + posmod(cell.x, Chunk.SIZE)
 
 
+## Change d'étage : l'ancien est déchargé en entier (monstres en réserve) ; le nouveau se charge au prochain update_around().
+func set_level(new_level: int) -> void:
+	if new_level == level:
+		return
+	level = new_level
+	_queue.clear()
+	for key: Vector3i in chunks.keys():
+		if key.z != level:
+			_unload(key)
+
+
 ## Charge les chunks proches de `cell` (tout de suite) et programme les plus lointains ; décharge les trop éloignés.
 func update_around(cell: Vector2i) -> void:
-	var center: Vector3i = key_of(cell)
+	var center: Vector3i = key_of(cell, level)
 	_queue.clear()
 	for r in range(0, GEN_RADIUS + 1):  # du plus proche au plus lointain
 		for dy in range(-r, r + 1):
@@ -59,7 +73,7 @@ func update_around(cell: Vector2i) -> void:
 				else:
 					_queue.append(key)
 	for key: Vector3i in chunks.keys():
-		if maxi(absi(key.x - center.x), absi(key.y - center.y)) > KEEP_RADIUS:
+		if key.z != level or maxi(absi(key.x - center.x), absi(key.y - center.y)) > KEEP_RADIUS:
 			_unload(key)
 
 
@@ -126,7 +140,7 @@ func _store_monsters(key: Vector3i) -> void:
 		return
 	var saved: Array[Dictionary] = []
 	for m: Monster in world.monsters.duplicate():
-		if key_of(m.grid_pos, key.z) == key:
+		if m.z == key.z and key_of(m.grid_pos, key.z) == key:
 			saved.append(m.to_dict())
 			world.remove_monster(m)
 	if not saved.is_empty():
@@ -149,7 +163,7 @@ func stored_monster_count() -> int:
 # --- Requêtes sur les cases (une case hors des chunks chargés est inconnue : ni praticable, opaque) ---
 
 func chunk_at(cell: Vector2i) -> Chunk:
-	return chunks.get(key_of(cell)) as Chunk
+	return chunks.get(key_of(cell, level)) as Chunk
 
 
 ## Index de terrain de la case, -1 si son chunk n'est pas chargé.

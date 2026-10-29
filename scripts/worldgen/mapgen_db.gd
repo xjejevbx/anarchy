@@ -1,18 +1,20 @@
 class_name MapgenDB
 extends RefCounted
-## Plans de maisons (jalon 3c), de lieux spéciaux (jalons 4, 5 et 10), de lieux urbains / côtiers / routiers (jalons 11 et 12) et de lieux
-## militaires (jalon 13), chargés depuis res://data/worldgen/mapgen/houses.json puis places.json, big_places.json, access_places.json,
-## urban.json, military.json, naval.json et rural.json.
+## Plans de maisons (jalon 3c), de lieux spéciaux (jalons 4, 5 et 10), de lieux urbains / côtiers / routiers (jalons 11 et 12), de lieux
+## militaires (jalon 13) et de bâtiments médicaux (jalon 6b), chargés depuis res://data/worldgen/mapgen/houses.json puis places.json,
+## big_places.json, access_places.json, urban.json, military.json, naval.json, rural.json et medical.json.
 ## Les plans de MAISON viennent en premier (indices 0 à plan_count() - 1, tirés par pick()) ; les plans de lieux suivent (retrouvés par plan_by_id()).
-## Les bâtiments de ville (urban.json, ids « urban_* ») sont aussi retrouvés par plan_by_id() : SettlementMap.lot_plan() les pose sur les parcelles
-## selon le zonage de towns.json.
+## Les bâtiments de ville (urban.json, medical.json, ids « urban_* ») sont aussi retrouvés par plan_by_id() : SettlementMap.lot_plan() les pose sur
+## les parcelles selon le zonage de towns.json.
+## Un plan nommé « <id>@<z> » (z entier, ex. « urban_hospital@-1 ») est le plan d'ÉTAGE du plan « <id> » (voir ChunkGenerator.level_plan).
 ## Chaque plan (24 x 24 caractères, façade au SUD) est compilé une fois : un octet de terrain (index TerrainDB, ou NATURE =
 ## « garder le terrain naturel ») et un octet de mobilier (index FurnitureDB) par case. Les erreurs de plan sont listées par
 ## errors() et affichées au chargement : un plan invalide est ignoré, le jeu continue.
 
 const PATHS: Array[String] = ["res://data/worldgen/mapgen/houses.json", "res://data/worldgen/mapgen/places.json",
 	"res://data/worldgen/mapgen/big_places.json", "res://data/worldgen/mapgen/access_places.json",
-	"res://data/worldgen/mapgen/urban.json", "res://data/worldgen/mapgen/military.json", "res://data/worldgen/mapgen/naval.json", "res://data/worldgen/mapgen/rural.json"]
+	"res://data/worldgen/mapgen/urban.json", "res://data/worldgen/mapgen/military.json", "res://data/worldgen/mapgen/naval.json",
+	"res://data/worldgen/mapgen/rural.json", "res://data/worldgen/mapgen/medical.json"]
 const NATURE: int = 255
 const SIZE: int = 24
 

@@ -1,5 +1,5 @@
 extends SceneTree
-## Test du jalon 6a (bestiaire en JSON, population ambiante, monstres rattachés aux chunks). À lancer à la demande :
+## Test des jalons 6a et 6b (bestiaire en JSON, population ambiante et par lieu, états, affixes, monstres rattachés aux chunks). À lancer à la demande :
 ##   godot --headless --path <projet> --script res://tests/test_spawn.gd
 ## Code de sortie 0 = tout est bon. Complète tests/test_monsters.gd (qui contrôle les 14 monstres d'origine).
 
@@ -17,6 +17,9 @@ func _initialize() -> void:
 	_check_determinism(seeds)
 	_check_placement(seeds)
 	_check_persistence(WorldRng.seed_from_text("cataclysme"))
+	_check_affixes()
+	_check_places(seeds[2])
+	_check_states(WorldRng.seed_from_text("cataclysme"))
 	print("RÉSULTAT : %s (%d échec(s))" % ["OK" if _failures == 0 else "ÉCHEC", _failures])
 	quit(_failures)
 
@@ -120,8 +123,8 @@ func _check_determinism(seeds: Array[int]) -> void:
 # --- Placement ---
 
 func _check_placement(seeds: Array[int]) -> void:
-	var max_per_chunk: int = SpawnGenerator.limit("max_per_chunk", 12)
-	var budget: int = SpawnGenerator.limit("threat_budget", 30)
+	var max_per_chunk: int = maxi(SpawnGenerator.limit("max_per_chunk", 12), SpawnGenerator.limit("place_max_per_chunk", 20))
+	var budget: int = maxi(SpawnGenerator.limit("threat_budget", 30), SpawnGenerator.limit("place_threat_budget", 60))
 	var safe_radius: float = float(SpawnGenerator.limit("safe_radius", 12))
 	var total: int = 0
 	var low_total: int = 0
@@ -235,6 +238,118 @@ func _check_persistence(world_seed: int) -> void:
 	world.chunks.update_around(far)
 	world.chunks.update_around(spawn)
 	_check(_signature(world) == after_wound, "un monstre blessé garde ses PV après rechargement")
+	world.queue_free()
+
+
+# --- Affixes ---
+
+func _check_affixes() -> void:
+	_check(MonsterDB.affix_ids().size() >= 9, "au moins 9 affixes (%d)" % MonsterDB.affix_ids().size())
+	var cop: MonsterData = MonsterDB.create("zombie_cop", ["armored"])
+	_check(cop.armor == 3 and is_equal_approx(cop.max_hp, 60.0) and cop.display_name == "Policier zombie blindé" and cop.affixes == ["armored"],
+		"affixe blindé : armure 1 + 2, PV x1.5, nom accordé (%s)" % cop.display_name)
+	var receptionist: MonsterData = MonsterDB.create("zombie_receptionist", ["frozen"])
+	_check(receptionist.display_name == "Réceptionniste zombie gelée", "affixe accordé au féminin (%s)" % receptionist.display_name)
+	var two: MonsterData = MonsterDB.create("zombie", ["frozen", "rotten", "feral"])
+	_check(two.affixes.size() == 2 and two.display_name == "Zombie gelé putréfié", "au plus 2 affixes (%s)" % two.display_name)
+	_check(MonsterDB.create("zombie", ["feral"]).never_sleeps, "affixe enragé : ne dort jamais")
+	_check(MonsterDB.create("deer", ["armored"]).affixes.is_empty() and not MonsterDB.affix_ok("deer", "armored"), "affixe refusé selon les tags (cerf blindé)")
+	_check(MonsterDB.create("wolf", ["veteran"]).affixes.is_empty(), "affixe interdit par forbidden_tags (loup vétéran)")
+	_check(MonsterDB.default_state_of("zombie_patient") == "sleep" and MonsterDB.default_state_of("zombie_sentry") == "guard"
+		and MonsterDB.default_state_of("zombie_grave") == "sleep" and MonsterDB.default_state_of("zombie") == "idle", "états par défaut (DORMANT, GUARD, AMBUSH)")
+
+
+# --- Population par lieu ---
+
+func _check_places(world_seed: int) -> void:
+	var plan_ids: Array[String] = SpawnGenerator.place_plan_ids()
+	_check(plan_ids.size() >= 60, "des règles de lieu sont définies (%d plans)" % plan_ids.size())
+	for plan_id in plan_ids:
+		var rules: Array = SpawnGenerator.place_rules(plan_id)
+		_check(not rules.is_empty(), "plan %s : au moins une règle" % plan_id)
+	for plan_id in ["urban_hospital", "urban_clinic", "urban_nursing_home", "urban_garage", "urban_police", "urban_church", "urban_school",
+			"house_small", "gas_station", "cemetery", "road_roadblock", "airport_terminal"]:
+		_check_plan_population(world_seed, plan_id)
+
+
+## Applique les règles d'un plan à son propre terrain (rotation 0) sur plusieurs chunks : monstres cohérents avec les groupes du plan.
+func _check_plan_population(world_seed: int, plan_id: String) -> void:
+	var plan: int = MapgenDB.plan_by_id(plan_id)
+	_check(plan >= 0, "plan %s existe" % plan_id)
+	if plan < 0:
+		return
+	var terrain := PackedByteArray()
+	var furniture := PackedByteArray()
+	terrain.resize(Chunk.CELLS)
+	furniture.resize(Chunk.CELLS)
+	var nature: int = TerrainDB.index_of("t_grass")
+	for i in Chunk.CELLS:
+		var t: int = MapgenDB.terrain_at(plan, i)
+		terrain[i] = nature if t == MapgenDB.NATURE else t
+		furniture[i] = MapgenDB.furniture_at(plan, i)
+	var themed: Dictionary = {}
+	for rule: Dictionary in SpawnGenerator.place_rules(plan_id):
+		for monster_id in SpawnGenerator.group_monsters(String(rule["group"])):
+			themed[monster_id] = true
+	var total: int = 0
+	var off_theme: int = 0
+	var sleepers: int = 0
+	var bad_cell: int = 0
+	var door: int = TerrainDB.index_of("t_door")
+	for n in 12:
+		var key := Vector3i(1000 + n, 1000, 0)   # loin du départ (zone sûre)
+		var entries: Array[Dictionary] = SpawnGenerator.generate(world_seed, key, terrain, furniture, 1.0, [], plan_id)
+		if n == 0:
+			_check(entries == SpawnGenerator.generate(world_seed, key, terrain, furniture, 1.0, [], plan_id), "%s : génération répétable" % plan_id)
+		for entry: Dictionary in entries:
+			total += 1
+			if not themed.has(String(entry["monster"])):
+				off_theme += 1
+			if String(entry["state"]) == "sleep":
+				sleepers += 1
+			var cell: Vector2i = entry["cell"]
+			var index: int = ChunkManager.index_of(cell)
+			if ChunkManager.key_of(cell) != key or not TerrainDB.is_walkable(terrain[index]) or terrain[index] == door 					or not FurnitureDB.is_walkable(furniture[index]):
+				bad_cell += 1
+	_check(total > 0, "%s : des monstres apparaissent (%d sur 12 tirages)" % [plan_id, total])
+	_check(off_theme == 0, "%s : tous les monstres sont dans le thème du lieu (%d hors thème)" % [plan_id, off_theme])
+	_check(bad_cell == 0, "%s : monstres sur des cases praticables, hors porte (%d anomalies)" % [plan_id, bad_cell])
+	if plan_id == "urban_hospital" or plan_id == "urban_church":
+		_check(sleepers > 0, "%s : des dormeurs (%d sur %d)" % [plan_id, sleepers, total])
+
+
+# --- États : sommeil, réveil, bruit ---
+
+func _check_states(world_seed: int) -> void:
+	var world := World.new()
+	world.world_seed = world_seed
+	root.add_child(world)
+	var spawn: Vector2i = SettlementMap.for_seed(world_seed).spawn_cell()
+	world.chunks.update_around(spawn)
+	for m in world.monsters.duplicate():
+		world.remove_monster(m)
+	var cell: Vector2i = world.find_free_cell_near(spawn)
+	var sleeper: Monster = world.spawn_monster_at({"monster": "zombie", "cell": cell, "facing": Vector2i(0, 1), "state": "sleep", "affixes": []})
+	_check(sleeper != null and sleeper.state == "sleep", "un monstre peut être créé endormi")
+	world.make_noise(cell + Vector2i(30, 0), 8)
+	_check(sleeper.state == "sleep", "un bruit trop loin ne réveille pas")
+	world.make_noise(cell + Vector2i(3, 0), 8)
+	_check(sleeper.state == "idle", "un bruit proche réveille")
+	var ambusher: Monster = world.spawn_monster_at({"monster": "zombie_grave", "cell": world.find_free_cell_near(cell + Vector2i(2, 2)), "facing": Vector2i(0, 1), "state": "sleep", "affixes": []})
+	if ambusher != null:
+		world.make_noise(ambusher.grid_pos, 10)
+		_check(ambusher.state == "sleep", "une embuscade n'écoute pas le bruit")
+		ambusher.take_damage(1.0)
+		_check(ambusher.state == "idle", "un coup réveille même une embuscade")
+	var guard_entry: Monster = world.spawn_monster_at({"monster": "zombie_sentry", "cell": world.find_free_cell_near(cell + Vector2i(0, 4)), "facing": Vector2i(0, 1), "state": "sleep", "affixes": []})
+	if guard_entry != null:
+		_check(guard_entry.state != "sleep", "un garde ne peut pas dormir")
+	var first: Monster = world.spawn_monster_at({"monster": "zombie", "cell": world.find_free_cell_near(cell + Vector2i(4, 4)), "facing": Vector2i(0, 1), "state": "sleep", "affixes": []})
+	var second: Monster = world.spawn_monster_at({"monster": "zombie", "cell": world.find_free_cell_near(first.grid_pos + Vector2i(1, 0)), "facing": Vector2i(0, 1), "state": "sleep", "affixes": []})
+	first.wake()
+	_check(second.state == "idle", "un réveil réveille les dormeurs voisins")
+	var saved: Dictionary = first.to_dict()
+	_check(saved.has("state") and saved.has("affixes") and int(saved["z"]) == 0, "to_dict garde état, affixes et étage")
 	world.queue_free()
 
 

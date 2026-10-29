@@ -1,9 +1,10 @@
 class_name TerrainDB
 extends RefCounted
-## Terrains du monde, chargés depuis res://data/worldgen/terrain.json (voir le champ "_doc" du fichier).
+## Terrains du monde, chargés depuis res://data/worldgen/terrain.json puis terrain_vertical.json (voir le champ "_doc" des fichiers).
 ## Les chunks stockent l'INDEX du terrain (un octet par case) ; cette classe donne les propriétés d'un index.
+## Jalon 6b (axe vertical) : terrain_vertical.json ajoute roche, vide et escaliers ; `connects_z` (+1 / -1) = liaison vers l'étage voisin.
 
-const PATH: String = "res://data/worldgen/terrain.json"
+const PATHS: Array[String] = ["res://data/worldgen/terrain.json", "res://data/worldgen/terrain_vertical.json"]
 
 # Profondeur de nage (champ "swim" de terrain.json) : le joueur nage dans l'eau, qu'elle soit « praticable à pied » ou non.
 const SWIM_NONE: int = 0
@@ -18,18 +19,26 @@ static var _walkable: PackedByteArray = PackedByteArray()
 static var _opaque: PackedByteArray = PackedByteArray()
 static var _entity: PackedByteArray = PackedByteArray()
 static var _swim: PackedByteArray = PackedByteArray()
+static var _z_link: PackedInt32Array = PackedInt32Array()
 
 
 static func _ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	if not FileAccess.file_exists(PATH):
-		push_error("TerrainDB : %s introuvable." % PATH)
+	for path: String in PATHS:
+		_load_file(path)
+	if _ids.size() > 255:
+		push_error("TerrainDB : plus de 255 terrains (un chunk stocke un octet par case).")
+
+
+static func _load_file(path: String) -> void:
+	if not FileAccess.file_exists(path):
+		push_error("TerrainDB : %s introuvable." % path)
 		return
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PATH))
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error("TerrainDB : terrain.json invalide.")
+		push_error("TerrainDB : %s invalide." % path)
 		return
 	var terrains: Dictionary = parsed.get("terrains", {})
 	for id: String in terrains:
@@ -41,8 +50,7 @@ static func _ensure_loaded() -> void:
 		_opaque.append(1 if bool(def.get("opaque", false)) else 0)
 		_entity.append(1 if bool(def.get("entity_sprite", false)) else 0)
 		_swim.append(_swim_value(id, def))
-	if _ids.size() > 255:
-		push_error("TerrainDB : plus de 255 terrains (un chunk stocke un octet par case).")
+		_z_link.append(clampi(int(def.get("connects_z", 0)), -1, 1))
 
 
 static func _swim_value(id: String, def: Dictionary) -> int:
@@ -88,6 +96,12 @@ static func is_walkable(index: int) -> bool:
 static func swim_depth(index: int) -> int:
 	_ensure_loaded()
 	return _swim[index] if index >= 0 and index < _swim.size() else SWIM_NONE
+
+
+## Liaison verticale : +1 (monte à l'étage du dessus), -1 (descend), 0 (aucune). Escaliers, échelles, trappes.
+static func z_link(index: int) -> int:
+	_ensure_loaded()
+	return _z_link[index] if index >= 0 and index < _z_link.size() else 0
 
 
 static func is_opaque(index: int) -> bool:

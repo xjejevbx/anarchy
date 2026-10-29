@@ -1,0 +1,9 @@
+{
+ "_doc": "Mobilier medical (jalon 6b), ajoute APRES furniture.json (l'index suit l'ordre de chargement des fichiers : ne jamais renumeroter). Memes champs que furniture.json. Les tuiles sont des ids UltiCa improvises (voir docs/MISSING_SPRITE.md) : un id absent donne un carre de la couleur de repli.",
+ "furniture": {
+  "f_hospital_bed": {"name": "Lit d'hôpital", "tile": "f_hospital_bed", "walkable": false, "opaque": false, "color": "#c8d8e0"},
+  "f_gurney": {"name": "Brancard", "tile": "f_gurney", "walkable": false, "opaque": false, "color": "#b0b8c0"},
+  "f_surgery_table": {"name": "Table d'opération", "tile": "f_surgery_table", "walkable": false, "opaque": false, "color": "#9ab0b8"},
+  "f_morgue_drawer": {"name": "Tiroir de morgue", "tile": "f_morgue_drawer", "walkable": false, "opaque": false, "color": "#8a9298"}
+ }
+}

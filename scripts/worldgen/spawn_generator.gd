@@ -2,31 +2,38 @@ class_name SpawnGenerator
 extends RefCounted
 ## Monstres initiaux d'un chunk (docs/MONSTER_SPAWN.md §4). FONCTION PURE de (seed, clé de chunk, terrain, mobilier, réglages) :
 ## aucune lecture d'un chunk voisin, aucun tirage global, même résultat quel que soit l'ordre d'exploration.
-## Jalon 6a : couche AMBIANTE seulement (data/worldgen/ecology.json + spawn_groups.json). Les lieux spéciaux n'ont pas encore de
-## population (jalon 6b) et les plans de bâtiments ne reçoivent rien : seules les cases hors bâtiment comptent (rues, routes, jardins, nature).
 ##
-## Contexte du chunk (type de cellule macro, comme ChunkGenerator) :
-##   rue de ville -> « street » (cases asphalte / trottoir / béton) ; route entre villes -> « road » (idem) ;
-##   parcelle ou jardin -> « yard » (cases de terrain naturel) ; lieu spécial -> rien ;
-##   sinon -> la nature de case de la cellule (« kinds » d'ecology.json ; l'eau n'a pas de monstre en 6a) (cases de terrain naturel).
-## Déroulement : nombre attendu = densité x cases candidates / 100 x population (partie entière + tirage sur le reste), plafonné ;
-## pour chaque monstre : tirage dans le groupe pondéré, case candidate tirée (espacement minimal), budget de menace respecté.
+## Deux couches, dans cet ordre (elles partagent le plafond du chunk, les cases prises et le budget de menace) :
+##  1. LIEU (jalon 6b) : les règles de data/worldgen/place_spawns.json pour l'id du plan posé sur le chunk (maison, commerce, hôpital,
+##     lieu spécial, lieu sur la route...). Modes : floor / paved / nature / any (densité par 100 cases candidates) et affinity (un monstre
+##     par exemplaire d'un meuble ou d'un terrain, avec une probabilité : le dormeur dans son lit, le fidèle sur son banc).
+##  2. AMBIANTE (jalon 6a) : ecology.json selon le contexte (rue, route, jardin, nature selon la nature de case ; l'eau est vide).
+## Chaque monstre reçoit un ÉTAT (sleep / idle / guard : part « dormant » de la règle, ou état par défaut du monstre) et 0 à 2 AFFIXES
+## (règle `affix`, affixes de climat d'ecology.json pour les cases extérieures, « alpha » dans un groupe de 4 et plus).
 ## Aucune apparition : à moins de `safe_radius` cases d'un point sûr (départ du joueur), sur une porte ou devant une porte.
+## Étages (z != 0) : aucun monstre pour l'instant (les règles `min_depth` des lieux à étages viendront avec le jalon 8).
 
-const GROUPS_PATH: String = "res://data/worldgen/spawn_groups.json"
+const GROUPS_PATHS: Array[String] = ["res://data/worldgen/spawn_groups.json", "res://data/worldgen/spawn_groups_places.json"]
+const PLACES_PATH: String = "res://data/worldgen/place_spawns.json"
 const ECOLOGY_PATH: String = "res://data/worldgen/ecology.json"
 const MAX_GROUP_DEPTH: int = 3
 const SPACING_ATTEMPTS: int = 6
+const ALPHA_MIN_GROUP: int = 4      # un groupe d'au moins N monstres (une règle) peut avoir un alpha
+const ALPHA_CHANCE: float = 0.08
+const MODES: Array[String] = ["floor", "paved", "nature", "any", "affinity"]
 const RING: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
 
 static var _loaded: bool = false
 static var _groups: Dictionary = {}
+static var _places: Dictionary = {}      # id de plan -> Array de règles
 static var _ambient: Dictionary = {}
 static var _limits: Dictionary = {}
+static var _climate_affixes: Array = []
 static var _errors: Array[String] = []
-static var _paved: Dictionary = {}    # index de terrain -> true (asphalte, trottoir, béton)
-static var _indoor: Dictionary = {}   # index de terrain -> true (plancher, porte)
+static var _paved: Dictionary = {}       # index de terrain -> true (asphalte, trottoir, béton)
+static var _indoor: Dictionary = {}      # index de terrain -> true (plancher, porte)
 static var _t_door: int = -1
+static var _t_floor: int = -1
 
 
 static func _read(path: String) -> Dictionary:
@@ -49,10 +56,28 @@ static func _ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	_groups = _read(GROUPS_PATH).get("groups", {})
+	for path: String in GROUPS_PATHS:
+		var groups: Dictionary = _read(path).get("groups", {})
+		for id: String in groups:
+			if _groups.has(id):
+				_fail("%s : groupe « %s » défini deux fois." % [path, id])
+			_groups[id] = groups[id]
+	var raw_places: Dictionary = _read(PLACES_PATH).get("plans", {})
+	for plan_id: String in raw_places:
+		_places[plan_id] = raw_places[plan_id]
+	for plan_id: String in _places.keys():   # {"copy": autre plan} : mêmes règles
+		var value: Variant = _places[plan_id]
+		if typeof(value) == TYPE_DICTIONARY:
+			var source: String = String((value as Dictionary).get("copy", ""))
+			if not raw_places.has(source) or typeof(raw_places[source]) != TYPE_ARRAY:
+				_fail("place_spawns.json %s : copy « %s » introuvable (ou copie d'une copie)." % [plan_id, source])
+				_places[plan_id] = []
+			else:
+				_places[plan_id] = raw_places[source]
 	var ecology: Dictionary = _read(ECOLOGY_PATH)
 	_ambient = ecology.get("ambient", {})
 	_limits = ecology.get("limits", {})
+	_climate_affixes = ecology.get("climate_affixes", [])
 	for id: String in ["t_pavement", "t_pavement_y", "t_sidewalk", "t_concrete"]:
 		if TerrainDB.has_id(id):
 			_paved[TerrainDB.index_of(id)] = true
@@ -61,10 +86,12 @@ static func _ensure_loaded() -> void:
 			_indoor[TerrainDB.index_of(id)] = true
 	if TerrainDB.has_id("t_door"):
 		_t_door = TerrainDB.index_of("t_door")
+	if TerrainDB.has_id("t_floor"):
+		_t_floor = TerrainDB.index_of("t_floor")
 	_validate()
 
 
-## Vérifie les données : monstres et groupes cités, cycles, contextes d'écologie, natures de case.
+## Vérifie les données : monstres et groupes cités, cycles, contextes d'écologie, plans et règles des lieux, affixes de climat.
 static func _validate() -> void:
 	for group_id: String in _groups:
 		var entries: Array = (_groups[group_id] as Dictionary).get("entries", [])
@@ -90,6 +117,44 @@ static func _validate() -> void:
 		if not RouteMap.KIND_IDS.has(kind_id):
 			_fail("ecology.json : nature de case inconnue « %s »." % kind_id)
 		_validate_context("kinds/" + kind_id, kinds[kind_id])
+	for plan_id: String in _places:
+		if MapgenDB.plan_by_id(plan_id) < 0:
+			_fail("place_spawns.json : plan « %s » inconnu." % plan_id)
+		for rule: Dictionary in _places[plan_id]:
+			_validate_rule(plan_id, rule)
+	for ca: Dictionary in _climate_affixes:
+		if not MonsterDB.affix_ids().has(String(ca.get("affix", ""))):
+			_fail("ecology.json climate_affixes : affixe inconnu « %s »." % ca.get("affix", ""))
+		if ca.has("climate") and not WorldMap.CLIMATE_IDS.has(String(ca["climate"])):
+			_fail("ecology.json climate_affixes : climat inconnu « %s »." % ca["climate"])
+		for kind_id: Variant in ca.get("kinds", []):
+			if not RouteMap.KIND_IDS.has(String(kind_id)):
+				_fail("ecology.json climate_affixes : nature de case inconnue « %s »." % kind_id)
+
+
+static func _validate_rule(plan_id: String, rule: Dictionary) -> void:
+	var label: String = "place_spawns.json %s" % plan_id
+	if not _groups.has(String(rule.get("group", ""))):
+		_fail("%s : groupe inconnu « %s »." % [label, rule.get("group", "")])
+	var mode: String = String(rule.get("mode", ""))
+	if not MODES.has(mode):
+		_fail("%s : mode inconnu « %s »." % [label, mode])
+	if mode == "affinity":
+		var has_furniture: bool = rule.has("furniture") and FurnitureDB.has_id(String(rule["furniture"]))
+		var has_terrain: bool = rule.has("terrain") and TerrainDB.has_id(String(rule["terrain"]))
+		if not has_furniture and not has_terrain:
+			_fail("%s : affinité sans meuble ni terrain connu." % label)
+		if float(rule.get("chance", 0.0)) <= 0.0:
+			_fail("%s : affinité sans chance." % label)
+	elif float(rule.get("density", -1.0)) < 0.0:
+		_fail("%s : densité manquante ou négative." % label)
+	for field: String in ["dormant", "rare"]:
+		var value: float = float(rule.get(field, 0.0))
+		if value < 0.0 or value > 1.0:
+			_fail("%s : %s hors de [0, 1]." % [label, field])
+	var affix: Dictionary = rule.get("affix", {})
+	if not affix.is_empty() and not MonsterDB.affix_ids().has(String(affix.get("id", ""))):
+		_fail("%s : affixe inconnu « %s »." % [label, affix.get("id", "")])
 
 
 static func _validate_context(label: String, entry: Dictionary) -> void:
@@ -126,6 +191,38 @@ static func group_ids() -> Array[String]:
 	return out
 
 
+## Ids des plans qui ont une population (place_spawns.json).
+static func place_plan_ids() -> Array[String]:
+	_ensure_loaded()
+	var out: Array[String] = []
+	for id: String in _places:
+		out.append(id)
+	return out
+
+
+static func place_rules(plan_id: String) -> Array:
+	_ensure_loaded()
+	return _places.get(plan_id, [])
+
+
+## Tous les monstres que peut donner un groupe (groupes inclus compris), sans doublon.
+static func group_monsters(group_id: String) -> Array[String]:
+	_ensure_loaded()
+	var out: Array[String] = []
+	_collect_monsters(group_id, out, 0)
+	return out
+
+
+static func _collect_monsters(group_id: String, out: Array[String], depth: int) -> void:
+	if depth > MAX_GROUP_DEPTH:
+		return
+	for entry: Dictionary in (_groups.get(group_id, {}) as Dictionary).get("entries", []):
+		if entry.has("group"):
+			_collect_monsters(String(entry["group"]), out, depth + 1)
+		elif not out.has(String(entry.get("monster", ""))):
+			out.append(String(entry.get("monster", "")))
+
+
 static func limit(name: String, fallback: int) -> int:
 	_ensure_loaded()
 	return int(_limits.get(name, fallback))
@@ -133,56 +230,45 @@ static func limit(name: String, fallback: int) -> int:
 
 # --- Génération ---
 
-## Monstres initiaux du chunk : [{monster: id, cell: Vector2i, facing: Vector2i}], dans l'ordre de tirage.
-## `population` multiplie les densités (0 : aucun monstre) ; `safe_centers` : cases (en plus du départ par défaut de la seed)
-## autour desquelles aucun monstre n'apparaît.
+## Monstres initiaux du chunk : [{monster, cell, facing, state, affixes}], dans l'ordre de tirage.
+## `population` multiplie les densités et les chances (0 : aucun monstre) ; `safe_centers` : cases (en plus du départ par défaut de la
+## seed) autour desquelles aucun monstre n'apparaît ; `plan_override` (tests) : id d'un plan dont on applique les règles à ce terrain,
+## sans couche ambiante.
 static func generate(world_seed: int, key: Vector3i, terrain: PackedByteArray, furniture: PackedByteArray,
-		population: float = 1.0, safe_centers: Array[Vector2i] = []) -> Array[Dictionary]:
+		population: float = 1.0, safe_centers: Array[Vector2i] = [], plan_override: String = "") -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if key.z != 0 or population <= 0.0 or terrain.size() != Chunk.CELLS:
 		return out
 	_ensure_loaded()
 	var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
-	var context: Dictionary = _context(world_seed, settlement, Vector2i(key.x, key.y))
-	if context.is_empty():
+	var world_map: WorldMap = WorldMap.for_seed(world_seed)
+	var coord := Vector2i(key.x, key.y)
+	var plan_id: String = plan_override
+	var ambient: Dictionary = {}
+	if plan_override == "":
+		var info: Dictionary = settlement.cell_plan(coord)
+		if not info.is_empty():
+			plan_id = MapgenDB.plan_id(int(info["plan"]))
+		ambient = _ambient_context(world_map, settlement, coord)
+	var rules: Array = _places.get(plan_id, []) if plan_id != "" else []
+	if rules.is_empty() and ambient.is_empty():
 		return out
+	var ctx: Dictionary = {"kind": world_map.cell_kind(coord), "climate": world_map.cell_climate(coord)}
 	var safes: Array[Vector2i] = []
 	safes.append_array(safe_centers)
 	safes.append(settlement.spawn_cell())
-	var candidates: PackedInt32Array = _candidates(key, terrain, furniture, bool(context["paved"]), safes)
-	var expected: float = float(context["density"]) * float(candidates.size()) / 100.0 * population
+	var ok: PackedByteArray = _base_cells(key, terrain, furniture, safes)
+	var is_place: bool = not rules.is_empty()
+	var st: Dictionary = {
+		"taken": {}, "threat": 0, "count": 0,
+		"cap": limit("place_max_per_chunk", 20) if is_place else limit("max_per_chunk", 12),
+		"budget": limit("place_threat_budget", 60) if is_place else limit("threat_budget", 30),
+	}
 	var rng: RandomNumberGenerator = WorldRng.rng_for(world_seed, WorldRng.LAYER_SPAWN, key.x, key.y, key.z)
-	var count: int = floori(expected)
-	if rng.randf() < expected - float(count):
-		count += 1
-	count = mini(count, limit("max_per_chunk", 12))
-	var budget: int = limit("threat_budget", 30)
-	var spacing: int = limit("min_spacing", 2)
-	var group: String = context["group"]
-	var placed: Array[Vector2i] = []
-	var threat_total: int = 0
-	for n in count:
-		if candidates.is_empty():
-			break
-		var monster_id: String = _pick_monster(group, rng, 0)
-		if monster_id == "":
-			continue
-		var threat: int = MonsterDB.threat_of(monster_id)
-		if threat_total + threat > budget:
-			continue
-		var slot: int = -1
-		for attempt in SPACING_ATTEMPTS:
-			var k: int = rng.randi_range(0, candidates.size() - 1)
-			if _spaced(_cell_of(key, candidates[k]), placed, spacing):
-				slot = k
-				break
-		if slot < 0:
-			continue
-		var cell: Vector2i = _cell_of(key, candidates[slot])
-		candidates.remove_at(slot)
-		placed.append(cell)
-		threat_total += threat
-		out.append({"monster": monster_id, "cell": cell, "facing": RING[rng.randi_range(0, RING.size() - 1)]})
+	for rule: Dictionary in rules:
+		_apply_rule(rule, key, terrain, furniture, ok, rng, ctx, st, population, out)
+	if not ambient.is_empty():
+		_apply_rule(ambient, key, terrain, furniture, ok, rng, ctx, st, population, out)
 	return out
 
 
@@ -198,40 +284,45 @@ static func fingerprint(world_seed: int, key: Vector3i, population: float = 1.0)
 		h = (h ^ cell.x) * 1099511628211
 		h = (h ^ cell.y) * 1099511628211
 		h = (h ^ (facing.x + 2 * facing.y + 3)) * 1099511628211
+		h = (h ^ String(entry["state"]).hash()) * 1099511628211
+		h = (h ^ ",".join(PackedStringArray(entry["affixes"])).hash()) * 1099511628211
 	return h
 
 
-# --- Contexte et candidats ---
+# --- Contexte ambiant ---
 
-## {group, density, paved} du chunk, ou {} s'il ne reçoit aucun monstre.
-static func _context(world_seed: int, settlement: SettlementMap, coord: Vector2i) -> Dictionary:
+## Règle ambiante du chunk (même forme qu'une règle de lieu : group, mode, density, dormant) ou {} s'il n'en a pas.
+static func _ambient_context(world_map: WorldMap, settlement: SettlementMap, coord: Vector2i) -> Dictionary:
 	match settlement.cell_type(coord):
 		SettlementMap.CellType.ROAD:
-			return _ambient_entry("road" if settlement.is_wild_road(coord) else "street", true)
+			return _ambient_entry("road" if settlement.is_wild_road(coord) else "street", "paved")
 		SettlementMap.CellType.LOT, SettlementMap.CellType.YARD:
-			return _ambient_entry("yard", false)
+			return _ambient_entry("yard", "nature")
 		SettlementMap.CellType.SPECIAL:
-			return {}   # lieux spéciaux : jalon 6b
-	var kind: int = WorldMap.for_seed(world_seed).cell_kind(coord)
+			return {}   # lieux spéciaux : leur population vient de place_spawns.json
 	var kinds: Dictionary = _ambient.get("kinds", {})
-	var entry: Dictionary = kinds.get(RouteMap.KIND_IDS[kind], {})
+	var entry: Dictionary = kinds.get(RouteMap.KIND_IDS[world_map.cell_kind(coord)], {})
+	return _entry_rule(entry, "nature")
+
+
+static func _ambient_entry(name: String, mode: String) -> Dictionary:
+	return _entry_rule(_ambient.get(name, {}), mode)
+
+
+static func _entry_rule(entry: Dictionary, mode: String) -> Dictionary:
 	if entry.is_empty() or float(entry.get("density", 0.0)) <= 0.0:
 		return {}
-	return {"group": String(entry["group"]), "density": float(entry["density"]), "paved": false}
+	var rule: Dictionary = entry.duplicate()
+	rule["mode"] = mode
+	return rule
 
 
-static func _ambient_entry(name: String, paved: bool) -> Dictionary:
-	var entry: Dictionary = _ambient.get(name, {})
-	if entry.is_empty() or float(entry.get("density", 0.0)) <= 0.0:
-		return {}
-	return {"group": String(entry["group"]), "density": float(entry["density"]), "paved": paved}
+# --- Cases candidates ---
 
-
-## Indices locaux des cases où un monstre peut apparaître : praticables à pied, hors eau, sans meuble bloquant, du bon type
-## (chaussée si `paved`, terrain naturel sinon : ni plancher ni porte), hors zone sûre, ni sur ni devant une porte.
-static func _candidates(key: Vector3i, terrain: PackedByteArray, furniture: PackedByteArray, paved: bool,
-		safes: Array[Vector2i]) -> PackedInt32Array:
-	var out := PackedInt32Array()
+## 1 si un monstre peut se tenir sur la case : praticable à pied, hors eau, sans meuble bloquant, ni sur ni devant une porte, hors zone sûre.
+static func _base_cells(key: Vector3i, terrain: PackedByteArray, furniture: PackedByteArray, safes: Array[Vector2i]) -> PackedByteArray:
+	var ok := PackedByteArray()
+	ok.resize(Chunk.CELLS)
 	var safe_radius: float = float(limit("safe_radius", 12))
 	var has_furniture: bool = furniture.size() == Chunk.CELLS
 	for i in Chunk.CELLS:
@@ -239,10 +330,6 @@ static func _candidates(key: Vector3i, terrain: PackedByteArray, furniture: Pack
 		if not TerrainDB.is_walkable(t) or TerrainDB.swim_depth(t) != TerrainDB.SWIM_NONE:
 			continue
 		if has_furniture and furniture[i] != 0 and not FurnitureDB.is_walkable(furniture[i]):
-			continue
-		if _paved.has(t) != paved:
-			continue
-		if not paved and _indoor.has(t):
 			continue
 		if _near_door(terrain, i):
 			continue
@@ -252,9 +339,32 @@ static func _candidates(key: Vector3i, terrain: PackedByteArray, furniture: Pack
 			if Vector2(cell).distance_to(Vector2(center)) <= safe_radius:
 				safe = true
 				break
-		if safe:
+		if not safe:
+			ok[i] = 1
+	return ok
+
+
+## Indices libres (non pris) qui conviennent au mode : floor (t_floor), paved (chaussée), nature (ni chaussée, ni plancher, ni porte), any.
+## Les cases avec un meuble sont exclues (sauf par le mode affinity, qui les traite à part).
+static func _mode_cells(mode: String, terrain: PackedByteArray, furniture: PackedByteArray, ok: PackedByteArray, taken: Dictionary) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	var has_furniture: bool = furniture.size() == Chunk.CELLS
+	for i in Chunk.CELLS:
+		if ok[i] == 0 or taken.has(i) or (has_furniture and furniture[i] != 0):
 			continue
-		out.append(i)
+		var t: int = terrain[i]
+		var fits: bool = false
+		match mode:
+			"floor":
+				fits = t == _t_floor
+			"paved":
+				fits = _paved.has(t)
+			"nature":
+				fits = not _paved.has(t) and not _indoor.has(t)
+			"any":
+				fits = true
+		if fits:
+			out.append(i)
 	return out
 
 
@@ -284,6 +394,149 @@ static func _spaced(cell: Vector2i, placed: Array[Vector2i], spacing: int) -> bo
 	for other: Vector2i in placed:
 		if maxi(absi(cell.x - other.x), absi(cell.y - other.y)) < spacing:
 			return false
+	return true
+
+
+# --- Règles ---
+
+static func _apply_rule(rule: Dictionary, key: Vector3i, terrain: PackedByteArray, furniture: PackedByteArray, ok: PackedByteArray,
+		rng: RandomNumberGenerator, ctx: Dictionary, st: Dictionary, population: float, out: Array[Dictionary]) -> void:
+	var rare: float = float(rule.get("rare", 0.0))
+	if rare > 0.0 and rng.randf() >= rare:
+		return
+	var mode: String = String(rule.get("mode", "nature"))
+	if mode == "affinity":
+		_apply_affinity(rule, key, terrain, furniture, ok, rng, ctx, st, population, out)
+		return
+	var taken: Dictionary = st["taken"]
+	var candidates: PackedInt32Array = _mode_cells(mode, terrain, furniture, ok, taken)
+	var expected: float = float(rule.get("density", 0.0)) * float(candidates.size()) / 100.0 * population
+	var count: int = floori(expected)
+	if rng.randf() < expected - float(count):
+		count += 1
+	var group: String = String(rule["group"])
+	var spacing: int = limit("min_spacing", 2)
+	var outdoor: bool = mode == "paved" or mode == "nature"
+	var placed: Array[Vector2i] = []
+	var made: Array[Dictionary] = []
+	for n in count:
+		if candidates.is_empty() or int(st["count"]) >= int(st["cap"]):
+			break
+		var monster_id: String = _pick_monster(group, rng, 0)
+		if monster_id == "":
+			continue
+		var threat: int = MonsterDB.threat_of(monster_id)
+		if int(st["threat"]) + threat > int(st["budget"]):
+			continue
+		var slot: int = -1
+		for attempt in SPACING_ATTEMPTS:
+			var k: int = rng.randi_range(0, candidates.size() - 1)
+			if _spaced(_cell_of(key, candidates[k]), placed, spacing):
+				slot = k
+				break
+		if slot < 0:
+			continue
+		var index: int = candidates[slot]
+		candidates.remove_at(slot)
+		var cell: Vector2i = _cell_of(key, index)
+		placed.append(cell)
+		taken[index] = true
+		st["threat"] = int(st["threat"]) + threat
+		st["count"] = int(st["count"]) + 1
+		var entry: Dictionary = _make_entry(monster_id, cell, rng, rule, ctx, outdoor)
+		out.append(entry)
+		made.append(entry)
+	if made.size() >= ALPHA_MIN_GROUP and rng.randf() < ALPHA_CHANCE:
+		var affixes: Array = made[0]["affixes"]
+		if affixes.size() < 2 and not affixes.has("alpha") and MonsterDB.affix_ok(String(made[0]["monster"]), "alpha"):
+			affixes.append("alpha")
+
+
+## Affinité : chaque meuble (ou terrain) correspondant tire sa chance ; le monstre prend la case du meuble s'il est praticable (chaise,
+## banc), sinon la première case voisine libre (lit, comptoir, tombe...).
+static func _apply_affinity(rule: Dictionary, key: Vector3i, terrain: PackedByteArray, furniture: PackedByteArray, ok: PackedByteArray,
+		rng: RandomNumberGenerator, ctx: Dictionary, st: Dictionary, population: float, out: Array[Dictionary]) -> void:
+	var furniture_index: int = 0
+	if rule.has("furniture") and FurnitureDB.has_id(String(rule["furniture"])):
+		furniture_index = FurnitureDB.index_of(String(rule["furniture"]))
+	var terrain_index: int = -1
+	if rule.has("terrain") and TerrainDB.has_id(String(rule["terrain"])):
+		terrain_index = TerrainDB.index_of(String(rule["terrain"]))
+	var chance: float = float(rule.get("chance", 0.5)) * population
+	var group: String = String(rule["group"])
+	var taken: Dictionary = st["taken"]
+	var has_furniture: bool = furniture.size() == Chunk.CELLS
+	for i in Chunk.CELLS:
+		var matches: bool = (furniture_index > 0 and has_furniture and furniture[i] == furniture_index) \
+			or (terrain_index >= 0 and terrain[i] == terrain_index)
+		if not matches or rng.randf() >= chance:
+			continue
+		if int(st["count"]) >= int(st["cap"]):
+			break
+		var target: int = _affinity_cell(i, ok, taken)
+		if target < 0:
+			continue
+		var monster_id: String = _pick_monster(group, rng, 0)
+		if monster_id == "":
+			continue
+		var threat: int = MonsterDB.threat_of(monster_id)
+		if int(st["threat"]) + threat > int(st["budget"]):
+			continue
+		taken[target] = true
+		st["threat"] = int(st["threat"]) + threat
+		st["count"] = int(st["count"]) + 1
+		out.append(_make_entry(monster_id, _cell_of(key, target), rng, rule, ctx, false))
+
+
+## Case où se tient le monstre d'un meuble : le meuble lui-même s'il est praticable, sinon la première voisine libre (dans l'ordre de RING). -1 si aucune.
+static func _affinity_cell(index: int, ok: PackedByteArray, taken: Dictionary) -> int:
+	if ok[index] != 0 and not taken.has(index):
+		return index
+	var lx: int = index % Chunk.SIZE
+	var ly: int = floori(float(index) / Chunk.SIZE)
+	for dir: Vector2i in RING:
+		var nx: int = lx + dir.x
+		var ny: int = ly + dir.y
+		if nx < 0 or ny < 0 or nx >= Chunk.SIZE or ny >= Chunk.SIZE:
+			continue
+		var neighbor: int = ny * Chunk.SIZE + nx
+		if ok[neighbor] != 0 and not taken.has(neighbor):
+			return neighbor
+	return -1
+
+
+## Entrée finale : orientation, affixes (règle, puis climat pour les cases extérieures) et état de départ.
+static func _make_entry(monster_id: String, cell: Vector2i, rng: RandomNumberGenerator, rule: Dictionary, ctx: Dictionary, outdoor: bool) -> Dictionary:
+	var facing: Vector2i = RING[rng.randi_range(0, RING.size() - 1)]
+	var affixes: Array[String] = []
+	var rule_affix: Dictionary = rule.get("affix", {})
+	if not rule_affix.is_empty():
+		var affix_id: String = String(rule_affix.get("id", ""))
+		if MonsterDB.affix_ok(monster_id, affix_id) and rng.randf() < float(rule_affix.get("chance", 0.1)):
+			affixes.append(affix_id)
+	if outdoor:
+		for ca: Dictionary in _climate_affixes:
+			var affix_id: String = String(ca.get("affix", ""))
+			if affixes.size() >= 2 or affixes.has(affix_id) or not _climate_match(ca, ctx, monster_id) or not MonsterDB.affix_ok(monster_id, affix_id):
+				continue
+			if rng.randf() < float(ca.get("chance", 0.1)):
+				affixes.append(affix_id)
+	var state: String = MonsterDB.default_state_of(monster_id)
+	var dormant: float = float(rule.get("dormant", 0.0))
+	if dormant > 0.0 and rng.randf() < dormant and state != "guard":
+		state = "sleep"
+	if state == "sleep" and affixes.has("feral"):
+		state = "idle"
+	return {"monster": monster_id, "cell": cell, "facing": facing, "state": state, "affixes": affixes}
+
+
+static func _climate_match(ca: Dictionary, ctx: Dictionary, monster_id: String) -> bool:
+	if ca.has("climate") and WorldMap.CLIMATE_IDS.find(String(ca["climate"])) != int(ctx["climate"]):
+		return false
+	if ca.has("kinds") and not (ca["kinds"] as Array).has(RouteMap.KIND_IDS[int(ctx["kind"])]):
+		return false
+	if ca.has("tag") and not MonsterDB.tags_of(monster_id).has(String(ca["tag"])):
+		return false
 	return true
 
 

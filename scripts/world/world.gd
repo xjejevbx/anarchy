@@ -5,6 +5,9 @@ extends Node2D
 ## (voir docs/WORLD_GEN.md). Le terrain n'est jamais stocké ici : on interroge le ChunkManager.
 ## Jalon 6a : les monstres initiaux d'un chunk sont créés par ChunkManager (SpawnGenerator) à son premier chargement ;
 ## un chunk déchargé met ses monstres en réserve, un chunk rechargé les restaure (voir docs/MONSTER_SPAWN.md).
+## Jalon 6b : monstres endormis (bruit : make_noise), affixes. Axe vertical : le monde ne simule qu'UN étage à la fois (`get_level()`,
+## ChunkManager.level) ; toutes les requêtes par case (Vector2i) portent sur cet étage, les objets au sol sont rangés par étage, les monstres
+## des autres étages sont en réserve. change_level() prépare les escaliers (jalon 8).
 ##
 ## Rendu en couches (de bas en haut) :
 ##   1. `_terrain_layer` : les chunks (sol : herbe, murs)
@@ -22,6 +25,10 @@ const ALERT_REARM_POINTS: float = 5.0    # secondes hors de vue (dans le brouill
 const VIEW_RADIUS: int = 20              # portée de vue en cases (plein jour pour l'instant)
 const MAX_MONSTERS: int = 300            # plafond global de monstres chargés (au-delà, un chunk neuf n'est pas peuplé)
 
+# --- Bruit (jalon 6b) : rayon (cases) dans lequel les dormeurs se réveillent ---
+const NOISE_SPRINT: int = 8              # le joueur court
+const NOISE_COMBAT: int = 10             # le joueur frappe
+
 # --- Case ciblée (déplacement automatique) ---
 const TARGET_COLOR_IDLE: Color = Color(1, 1, 1, 0.95)          # case choisie, déplacement pas lancé
 const TARGET_COLOR_TRAVEL: Color = Color(0.3, 1.0, 0.35, 0.95)  # déplacement automatique en cours
@@ -38,7 +45,9 @@ var monsters: Array[Monster] = []
 var entities: Node2D
 var fx: Node2D                      # calque des effets visuels (particules), au-dessus des entités, sous le brouillard
 var fog: FogLayer
-var ground_items: Dictionary = {}   # Vector2i -> Array (d'Item posés au sol)
+var ground_items: Dictionary:       # Vector2i -> Array (d'Item posés au sol) : ceux de l'ÉTAGE ACTIF
+	get:
+		return _ground_dict()
 var pick_labels: Dictionary = {}    # Vector2i -> touche affichée (choix de la case où ramasser)
 var visible_cells: Dictionary = {}  # cases actuellement visibles
 
@@ -52,6 +61,7 @@ var _items_layer: Node2D
 var _pick_overlay: Node2D
 var _target_overlay: Node2D
 var _hovered: Monster = null
+var _ground_by_level: Dictionary = {}   # étage (int) -> Dictionary Vector2i -> Array d'Item
 
 
 func _ready() -> void:
@@ -82,6 +92,28 @@ func _ready() -> void:
 	chunks = ChunkManager.new()
 	chunks.setup(world_seed, use_arena, _terrain_layer, entities, self)
 	EventBus.time_advanced.connect(_on_time_advanced)
+	EventBus.action_performed.connect(_on_player_action)
+
+
+## Étage actif (0 = surface, négatif = sous-sol, positif = étages).
+func get_level() -> int:
+	return chunks.level if chunks != null else 0
+
+
+## Change d'étage (le joueur garde ses coordonnées x, y) : décharge l'ancien étage (monstres en réserve), charge le nouveau, recalcule la vue.
+func change_level(new_level: int) -> void:
+	if new_level == get_level():
+		return
+	chunks.set_level(new_level)
+	_items_layer.queue_redraw()
+	update_fov()
+
+
+func _ground_dict() -> Dictionary:
+	var level: int = get_level()
+	if not _ground_by_level.has(level):
+		_ground_by_level[level] = {}
+	return _ground_by_level[level]
 
 
 func add_entity(node: Node2D) -> void:
@@ -141,11 +173,12 @@ func _draw_target_overlay() -> void:
 
 
 func get_ground_items(pos: Vector2i) -> Array:
-	return ground_items.get(pos, [])
+	return _ground_dict().get(pos, [])
 
 
 func add_ground_item(pos: Vector2i, item: Item) -> void:
-	var list: Array = ground_items.get(pos, [])
+	var ground: Dictionary = _ground_dict()
+	var list: Array = ground.get(pos, [])
 	var merged: bool = false
 	for it: Item in list:
 		if it.can_merge(item):
@@ -154,15 +187,16 @@ func add_ground_item(pos: Vector2i, item: Item) -> void:
 			break
 	if not merged:
 		list.append(item)
-	ground_items[pos] = list
+	ground[pos] = list
 	refresh_items()
 
 
 func remove_ground_item(pos: Vector2i, item: Item) -> void:
-	var list: Array = ground_items.get(pos, [])
+	var ground: Dictionary = _ground_dict()
+	var list: Array = ground.get(pos, [])
 	list.erase(item)
 	if list.is_empty():
-		ground_items.erase(pos)
+		ground.erase(pos)
 	refresh_items()
 
 
@@ -293,6 +327,8 @@ func _create_monster(data: MonsterData, cell: Vector2i) -> Monster:
 	m.world = self
 	m.hp = data.max_hp
 	m.grid_pos = cell
+	m.home_cell = cell
+	m.z = get_level()
 	m.next_action_time = GameClock.elapsed_points
 	m.hidden_since = GameClock.elapsed_points
 	m.visible = false  # update_fov() décidera
@@ -307,26 +343,54 @@ func spawn_monster(data: MonsterData, near: Vector2i) -> Monster:
 	return m
 
 
-## Monstre initial d'un chunk (SpawnGenerator : {monster, cell, facing}). Null si la case n'est plus libre.
+## Monstre initial d'un chunk (SpawnGenerator : {monster, cell, facing, state, affixes}). Null si la case n'est plus libre.
 ## Pas de recalcul de la visibilité ici : update_fov() (ou le prochain déplacement du joueur) s'en charge.
 func spawn_monster_at(entry: Dictionary) -> Monster:
 	var cell: Vector2i = entry["cell"]
 	if not is_walkable(cell) or is_occupied(cell):
 		return null
-	var m: Monster = _create_monster(MonsterDB.create(String(entry["monster"])), cell)
+	var m: Monster = _create_monster(MonsterDB.create(String(entry["monster"]), entry.get("affixes", [])), cell)
 	m.facing = entry.get("facing", m.facing)
+	m.state = _valid_state(String(entry.get("state", "idle")), m.data)
 	return m
+
+
+## « sleep » est refusé pour un monstre qui ne dort jamais (garde, enragé).
+func _valid_state(state: String, data: MonsterData) -> String:
+	if state == "sleep" and (data.never_sleeps or data.abilities.has("GUARD")):
+		return "idle"
+	return state
 
 
 ## Rend vie à un monstre mis en réserve par Monster.to_dict() quand son chunk est rechargé.
 func restore_monster(entry: Dictionary) -> Monster:
-	var data: MonsterData = MonsterDB.create(String(entry["id"]))
+	var data: MonsterData = MonsterDB.create(String(entry["id"]), entry.get("affixes", []))
 	var m: Monster = _create_monster(data, entry["cell"])
+	m.home_cell = entry.get("home", m.grid_pos)
+	m.state = String(entry.get("state", "idle"))
 	m.hp = float(entry.get("hp", data.max_hp))
 	m.stamina = float(entry.get("stamina", Player.STAMINA_MAX))
 	m.facing = entry.get("facing", m.facing)
 	m.spotted = bool(entry.get("spotted", false))
 	return m
+
+
+## Réveille les dormeurs (sauf les embuscades, qui n'écoutent que de près) à moins de `radius` cases de `origin`.
+func make_noise(origin: Vector2i, radius: int) -> void:
+	for m: Monster in monsters:
+		if m.state == "sleep" and not m.data.abilities.has("AMBUSH") \
+				and maxi(absi(m.grid_pos.x - origin.x), absi(m.grid_pos.y - origin.y)) <= radius:
+			m.wake()
+
+
+## Le joueur fait du bruit quand il frappe ou qu'il court (le signal d'action ne dit rien de plus : player.gd reste inchangé).
+func _on_player_action(action_name: String, _cost: float, _stamina_delta: float) -> void:
+	if player == null:
+		return
+	if action_name == "Attaque":
+		make_noise(player.grid_pos, NOISE_COMBAT)
+	elif action_name == "Déplacement" and player.posture == Player.Posture.SPRINT:
+		make_noise(player.grid_pos, NOISE_SPRINT)
 
 
 func remove_monster(m: Monster) -> void:
@@ -371,8 +435,9 @@ func _process(_delta: float) -> void:
 
 ## Objets au sol : sprite du dernier objet posé ; petit repère blanc s'il y en a plusieurs.
 func _draw_ground_items() -> void:
-	for pos: Vector2i in ground_items:
-		var list: Array = ground_items[pos]
+	var ground: Dictionary = _ground_dict()
+	for pos: Vector2i in ground:
+		var list: Array = ground[pos]
 		if list.is_empty():
 			continue
 		var origin := Vector2(pos * TILE_SIZE)

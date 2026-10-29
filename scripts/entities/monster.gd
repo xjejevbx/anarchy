@@ -21,6 +21,11 @@ extends Node2D
 ## poursuite au-delà de TERRITORY_LEASH (sanglier, ours).
 ## ARMURE : `data.armor` (capacité ARMOR(n)) retire n PV à chaque coup reçu, 1 PV au minimum.
 ##
+## ÉTATS (jalon 6b, `state`) : « idle » (debout sur place, comportement d'avant) ; « sleep » : immobile, ne détecte rien, se réveille quand le
+## joueur s'approche (wake_range x posture, visible, WAKE_CHANCE par tour), à un bruit (sprint, combat : voir World.make_noise), quand il est
+## frappé ou quand un voisin se réveille ; AMBUSH : ne se réveille que si le joueur est à AMBUSH_RANGE cases (alors il surgit) ; « guard » :
+## ne dort jamais, tient son poste (`home_cell`) et y revient (GUARD_LEASH). ERRATIC : ERRATIC_CHANCE des pas de poursuite au hasard.
+##
 ## Stamina : les monstres ont la même stamina que le joueur (Player.STAMINA_MAX) et les mêmes règles de ralentissement :
 ## chaque tranche de 30 % perdue ajoute +10 % à la durée de leurs actions (max +30 %). Se déplacer à terre regagne de la stamina,
 ## nager (eau peu profonde ; ils ne vont pas en eau profonde) en coûte, attendre régénère, attaquer fatigue.
@@ -34,6 +39,13 @@ const ATTACK_STAMINA_PER_SECOND: float = 1.0  # fatigue d'une attaque ou d'un ti
 const TERRITORY_RADIUS: float = 5.0   # territorial : portée de détection maximale (cases)
 const TERRITORY_LEASH: int = 10       # territorial : au-delà de cette distance, il abandonne la poursuite
 const FLEE_RANGE: float = 8.0         # passif : distance à laquelle il commence à fuir
+
+# --- États (jalon 6b) ---
+const WAKE_CHANCE: float = 0.15       # dormeur : probabilité de réveil par tour (5 s) quand le joueur est à portée et visible
+const AMBUSH_RANGE: float = 2.0       # embuscade : distance à laquelle le monstre surgit
+const GUARD_LEASH: int = 8            # garde : au-delà de cette distance de son poste, il abandonne la poursuite
+const ERRATIC_CHANCE: float = 0.3     # ERRATIC : part des pas de poursuite faits au hasard
+const WAKE_NEIGHBOR_RADIUS: int = 4   # un réveil réveille aussi les dormeurs à moins de N cases (ou pack_radius)
 
 # --- Orientation ---
 const TURN_STEPS_PER_ACTION: int = 1   # quarts de tour (90°) par pivotement (1 = un quart par action ; 2 = demi-tour en une action)
@@ -60,6 +72,9 @@ var target_cell: Vector2i = Vector2i.ZERO
 var spotted: bool = false               # déjà signalé au joueur (message « Vous apercevez... »)
 var hidden_since: float = 0.0           # moment (points d'action) où il est sorti du champ de vision
 var facing: Vector2i = Vector2i(0, 1)   # direction du regard (une des 4 de RING)
+var state: String = "idle"              # "idle", "sleep" ou "guard" (voir en-tête)
+var home_cell: Vector2i = Vector2i.ZERO # poste d'un garde (case d'apparition)
+var z: int = 0                          # étage où se trouve le monstre (le monde ne simule que l'étage actif : voir ChunkManager.level)
 
 var _rng := RandomNumberGenerator.new()
 var _fg_sprite: String = ""
@@ -101,13 +116,18 @@ func _process(delta: float) -> void:
 
 ## État à sauvegarder quand le chunk est déchargé (voir ChunkManager) : World.restore_monster() le relit.
 func to_dict() -> Dictionary:
-	return {"id": data.id, "cell": grid_pos, "hp": hp, "stamina": stamina, "facing": facing, "spotted": spotted}
+	return {"id": data.id, "cell": grid_pos, "hp": hp, "stamina": stamina, "facing": facing, "spotted": spotted,
+		"state": state, "home": home_cell, "affixes": data.affixes.duplicate(), "z": z}
 
 
 func take_turn() -> float:
 	var player: Player = world.player
 	var delta: Vector2i = player.grid_pos - grid_pos
 	var distance: int = maxi(absi(delta.x), absi(delta.y))  # distance en cases (diagonales incluses)
+	if state == "sleep":
+		return _sleep_turn(player, distance)
+	if state == "guard" and has_target and maxi(absi(grid_pos.x - home_cell.x), absi(grid_pos.y - home_cell.y)) > GUARD_LEASH:
+		has_target = false  # trop loin de son poste : il y retourne
 	if data.behavior == "passive":
 		return _passive_turn(player, delta, distance)
 	# Le joueur et le monstre se voient mutuellement : on s'appuie sur le champ de vision du
@@ -135,7 +155,39 @@ func take_turn() -> float:
 				has_target = false  # arrivé là où on a vu le joueur pour la dernière fois : plus personne
 				return _rest(IDLE_COST)
 			return _move_toward(target_cell)
+	if state == "guard" and grid_pos != home_cell:
+		return _move_toward(home_cell)   # retour au poste
 	return _rest(IDLE_COST)
+
+
+# --- Sommeil et réveil (jalon 6b) ---
+
+## Tour d'un dormeur : se réveille si le joueur est à portée et visible (embuscade : seulement à AMBUSH_RANGE, et il surgit aussitôt).
+func _sleep_turn(player: Player, distance: int) -> float:
+	var ambush: bool = data.abilities.has("AMBUSH")
+	var reach: float = float(data.wake_range) * player.get_detect_factor()
+	if ambush:
+		reach = minf(reach, AMBUSH_RANGE)
+	if float(distance) <= reach and world.is_visible_cell(grid_pos) and (ambush or _rng.randf() < WAKE_CHANCE):
+		if ambush:
+			EventBus.message_logged.emit("%s surgit !" % data.display_name)
+		alert(player.grid_pos)   # se réveille et se met en chasse
+		return _finish(0.5, 0.0)
+	return _rest(IDLE_COST)
+
+
+## Réveille le monstre (et les dormeurs voisins, qui restent sans cible). Sans effet s'il ne dort pas.
+func wake() -> void:
+	if state != "sleep":
+		return
+	state = "idle"
+	queue_redraw()
+	var radius: int = data.pack_radius if data.pack_radius > 0 else WAKE_NEIGHBOR_RADIUS
+	for other: Monster in world.monsters:
+		if other.state == "sleep" and not other.data.abilities.has("AMBUSH") \
+				and maxi(absi(other.grid_pos.x - grid_pos.x), absi(other.grid_pos.y - grid_pos.y)) <= radius:
+			other.state = "idle"
+			other.queue_redraw()
 
 
 # --- Comportement passif (cerf, renard) ---
@@ -295,6 +347,7 @@ func _rest(cost: float) -> float:
 
 ## Le monstre sait où chercher (il a vu le joueur, ou s'est fait frapper). Les membres d'une meute proche le savent aussi.
 func alert(cell: Vector2i) -> void:
+	wake()
 	has_target = true
 	target_cell = cell
 	if data.pack_radius <= 0:
@@ -363,6 +416,10 @@ func _scream() -> float:
 	return _finish(data.scream_cost, 0.0)
 
 func _move_toward(cell: Vector2i) -> float:
+	if data.abilities.has("ERRATIC") and _rng.randf() < ERRATIC_CHANCE:
+		var wander: float = _wander_step()
+		if wander >= 0.0:
+			return wander
 	var path: Array[Vector2i] = world.find_path(grid_pos, cell)
 	if path.size() < 2:
 		has_target = false
@@ -378,12 +435,29 @@ func _move_toward(cell: Vector2i) -> float:
 	return _finish(data.move_cost * steps, _move_stamina_delta() * steps)
 
 
+## Un pas dans une direction libre tirée au hasard (ERRATIC). Renvoie le coût, ou -1.0 si aucune case n'est libre.
+func _wander_step() -> float:
+	var options: Array[Vector2i] = []
+	for dir: Vector2i in RING:
+		var candidate: Vector2i = grid_pos + dir
+		if world.is_walkable(candidate) and not world.is_occupied(candidate) and world.swim_depth(candidate) == TerrainDB.SWIM_NONE:
+			options.append(candidate)
+	if options.is_empty():
+		return -1.0
+	var next_cell: Vector2i = options[_rng.randi() % options.size()]
+	face(next_cell - grid_pos)
+	grid_pos = next_cell
+	position = Vector2(grid_pos * World.TILE_SIZE)
+	return _finish(data.move_cost, _move_stamina_delta())
+
+
 ## Renvoie true si le monstre meurt. L'armure (data.armor) retire des PV à chaque coup, 1 PV au minimum.
 func take_damage(amount: float) -> bool:
 	var dealt: float = amount
 	if data.armor > 0:
 		dealt = maxf(amount - float(data.armor), 1.0)
 	hp = maxf(hp - dealt, 0.0)
+	wake()  # un dormeur frappé se réveille
 	queue_redraw()
 	return hp <= 0.0
 
@@ -394,6 +468,10 @@ func get_tooltip_lines() -> Array[String]:
 	lines.append("%s   PV %d/%d" % [data.display_name, ceili(hp), int(data.max_hp)])
 	if time_penalty() > 0.0:
 		lines.append("Essoufflé : actions +%d %% de durée" % roundi(time_penalty() * 100.0))
+	if state == "sleep":
+		lines.append("Endormi" + (" (embuscade : surgit à %d cases)" % roundi(AMBUSH_RANGE) if data.abilities.has("AMBUSH") else " : se réveille au bruit ou si l'on approche"))
+	elif state == "guard":
+		lines.append("En garde : tient son poste")
 	if data.armor > 0:
 		lines.append("Armure : -%d PV par coup reçu" % data.armor)
 	if data.behavior == "passive":
@@ -445,6 +523,8 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if SHOW_FACING_ARROW:
 		_draw_facing_arrow()
+	if state == "sleep":
+		draw_string(ThemeDB.fallback_font, Vector2(36, -82), "Zzz", HORIZONTAL_ALIGNMENT_LEFT, -1, 44, Color(0.8, 0.9, 1.0))
 	# Barre de vie au-dessus de la tête (le sprite dépasse de 64 px au-dessus de la case).
 	var ratio: float = hp / data.max_hp
 	draw_rect(Rect2(8, -72, (World.TILE_SIZE - 16.0) * ratio, 12), Color.RED)

@@ -42,7 +42,9 @@ const ZONE_TABLES: Dictionary = {
 @export var wake_range: int = 6              # réservé (jalon 6b)
 @export var threat: int = 1                  # 1 à 10 : budget de menace par chunk
 @export var armor: int = 0                   # PV retirés à chaque coup reçu (minimum 1 PV de dégâts)
-@export var abilities: Array[String] = []    # capacités (MonsterDB.ABILITIES) ; seule ARMOR agit en 6a
+@export var abilities: Array[String] = []    # capacités (MonsterDB.ABILITIES) ; en 6b : ARMOR, DORMANT, GUARD, AMBUSH, ERRATIC agissent
+@export var affixes: Array[String] = []      # modificateurs appliqués (monster_affixes.json), 0 à 2
+@export var never_sleeps: bool = false       # affixe « enragé » : ne dort jamais
 @export var max_hp: float = 20.0
 @export var detect_range: int = 15
 

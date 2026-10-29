@@ -4,6 +4,9 @@ extends RefCounted
 ## de génération, aucun état global (docs/WORLD_GEN.md §3). Monde normal : biomes, lacs et rivières (WorldMap), puis villes
 ## et rues par-dessus (SettlementMap). Maisons, routes entre villes, lieux spéciaux et pistes (jalon 10) se posent par-dessus le terrain naturel.
 ## Jalon 12 : un lieu « sur la route » (péage, barrage...) se pose PAR-DESSUS la chaussée de sa cellule (ses '.' gardent la route).
+## Jalon 6b (axe vertical) : un chunk à z != 0 n'est PLUS la copie de la surface. Étage z < 0 : roche pleine (t_rock). Étage z > 0 : vide (t_air).
+## Un lieu définit ses étages avec des plans nommés "<id du plan de surface>@<z>" (ex. "urban_hospital@-1") : le plan (même rotation que
+## celui de la surface) se superpose à la roche ou au vide ; ses '.' gardent la roche / le vide. Terrain ET mobilier suivent la même règle.
 
 # --- Arène de test (ancienne carte fermée 60 x 40, option debug USE_TEST_ARENA) ---
 const ARENA_WIDTH: int = 60
@@ -20,13 +23,16 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 	if arena:
 		_fill_arena(world_seed, key, data)
 		return data
+	if key.z != 0:
+		_fill_level(world_seed, key, data)
+		return data
 	var world_map: WorldMap = WorldMap.for_seed(world_seed)
 	var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
 	var cell_coord := Vector2i(key.x, key.y)  # une cellule macro = un chunk
-	var cell_type: int = settlement.cell_type(cell_coord) if key.z == 0 else SettlementMap.CellType.NONE
+	var cell_type: int = settlement.cell_type(cell_coord)
 	var mask: int = settlement.road_mask(cell_coord) if cell_type == SettlementMap.CellType.ROAD else 0
 	var wild_road: bool = cell_type == SettlementMap.CellType.ROAD and settlement.is_wild_road(cell_coord)
-	var track_mask: int = settlement.track_mask(cell_coord) if cell_type == SettlementMap.CellType.NONE and key.z == 0 else -1
+	var track_mask: int = settlement.track_mask(cell_coord) if cell_type == SettlementMap.CellType.NONE else -1
 	var spawn: Vector2i = settlement.spawn_cell()
 	var house: Dictionary = settlement.cell_plan(cell_coord) \
 			if cell_type == SettlementMap.CellType.LOT or cell_type == SettlementMap.CellType.SPECIAL \
@@ -73,6 +79,35 @@ static func _fill_arena(world_seed: int, key: Vector3i, data: PackedByteArray) -
 			data[ly * Chunk.SIZE + lx] = index
 
 
+# --- Étages (axe vertical) ---
+
+## {plan: indice MapgenDB, rot} du plan d'étage « <id du plan de surface>@<z> » de ce chunk, {} s'il n'y en a pas.
+static func level_plan(world_seed: int, key: Vector3i) -> Dictionary:
+	var info: Dictionary = SettlementMap.for_seed(world_seed).cell_plan(Vector2i(key.x, key.y))
+	if info.is_empty():
+		return {}
+	var plan: int = MapgenDB.plan_by_id("%s@%d" % [MapgenDB.plan_id(int(info["plan"])), key.z])
+	if plan < 0:
+		return {}
+	return {"plan": plan, "rot": int(info["rot"])}
+
+
+## Étage z != 0 : roche pleine sous la surface, vide au-dessus, plus le plan d'étage du lieu s'il en a un.
+static func _fill_level(world_seed: int, key: Vector3i, data: PackedByteArray) -> void:
+	var base: int = TerrainDB.index_of("t_rock" if key.z < 0 else "t_air")
+	data.fill(base)
+	var info: Dictionary = level_plan(world_seed, key)
+	if info.is_empty():
+		return
+	var plan: int = info["plan"]
+	var rot: int = info["rot"]
+	for ly in Chunk.SIZE:
+		for lx in Chunk.SIZE:
+			var t: int = MapgenDB.terrain_at(plan, MapgenDB.plan_index(lx, ly, rot))
+			if t != MapgenDB.NATURE:
+				data[ly * Chunk.SIZE + lx] = t
+
+
 ## Empreinte (FNV-1a 64 bits) du contenu d'un chunk : sert au test de déterminisme.
 static func fingerprint(world_seed: int, key: Vector3i, arena: bool = false) -> int:
 	var h: int = -3750763034362895579
@@ -84,17 +119,27 @@ static func fingerprint(world_seed: int, key: Vector3i, arena: bool = false) -> 
 
 
 ## Mobilier d'un chunk (un octet par case : 0 = rien, sinon index FurnitureDB). FONCTION PURE comme generate().
+## À z != 0 : seulement celui du plan d'étage du lieu (voir level_plan).
 static func generate_furniture(world_seed: int, key: Vector3i, arena: bool = false) -> PackedByteArray:
 	var data := PackedByteArray()
 	data.resize(Chunk.CELLS)
-	if arena or key.z != 0:
+	if arena:
 		return data
-	var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
-	var house: Dictionary = settlement.cell_plan(Vector2i(key.x, key.y))
-	if house.is_empty():
-		return data
-	var plan: int = house["plan"]
-	var rot: int = house["rot"]
+	var plan: int
+	var rot: int
+	if key.z != 0:
+		var level: Dictionary = level_plan(world_seed, key)
+		if level.is_empty():
+			return data
+		plan = level["plan"]
+		rot = level["rot"]
+	else:
+		var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
+		var house: Dictionary = settlement.cell_plan(Vector2i(key.x, key.y))
+		if house.is_empty():
+			return data
+		plan = house["plan"]
+		rot = house["rot"]
 	for ly in Chunk.SIZE:
 		for lx in Chunk.SIZE:
 			data[ly * Chunk.SIZE + lx] = MapgenDB.furniture_at(plan, MapgenDB.plan_index(lx, ly, rot))
