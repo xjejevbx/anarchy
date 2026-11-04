@@ -1,18 +1,25 @@
 class_name StatusEffects
 extends RefCounted
-## Effets d'état infligés au joueur par les monstres (saignement, poison, acide) + drain de stamina.
+## Effets d'état infligés au joueur par les monstres (saignement, poison, acide, irradiation, brûlure, engelure) + drain de stamina.
 ## Ne modifie pas Player : le suivi se branche sur EventBus.time_advanced (chaque action qui fait passer le temps).
 ## Un effet = dégâts par seconde sur une partie du corps pendant une durée ; le temps compté est celui des actions
 ## (1 point d'action = 1 seconde). Les dégâts s'accumulent en fractions et sont appliqués par PV entiers (`carry`).
-## Définition d'un effet (dictionnaire, voir MonsterData.effect) : {id, chance, duration, dps, stamina, part}.
+## Définition d'un effet (dictionnaire, voir MonsterData.effect) : {id, chance, duration, dps, stamina, part}, plus (optionnel) `text` : message
+## du drain de stamina (« %d » = la quantité). Jalon 6c : radiation (aura radioactive), burn (aura de feu, explosions), frostbite (aura de froid).
 
-const LABELS: Dictionary = {"bleed": "Saignement", "poison": "Poison", "acid": "Brûlure acide"}  # effets avec dégâts par seconde
+const LABELS: Dictionary = {
+	"bleed": "Saignement", "poison": "Poison", "acid": "Brûlure acide",
+	"radiation": "Irradiation", "burn": "Brûlure", "frostbite": "Engelure",
+}  # effets avec dégâts par seconde
 const START_TEXT: Dictionary = {
 	"bleed": "Vous saignez !", "poison": "Vous êtes empoisonné !", "acid": "L'acide vous ronge !",
+	"radiation": "Vous êtes irradié !", "burn": "Vous brûlez !", "frostbite": "Le froid vous mord !",
 }
 const END_TEXT: Dictionary = {
 	"bleed": "Le saignement s'arrête.", "poison": "Le poison cesse d'agir.", "acid": "La brûlure d'acide s'estompe.",
+	"radiation": "Les radiations se dissipent.", "burn": "Les flammes s'éteignent sur vous.", "frostbite": "L'engelure s'estompe.",
 }
+const DEFAULT_DRAIN_TEXT: String = "Une décharge vous vide de %d de stamina."
 
 static var _current: StatusEffects = null
 
@@ -53,7 +60,7 @@ static func apply(target: Player, effect: Dictionary, hit_part: String) -> void:
 	var manager: StatusEffects = of(target)
 	var drain: float = float(effect.get("stamina", 0.0))
 	if drain > 0.0:
-		manager._drain(drain)
+		manager._drain(drain, String(effect.get("text", DEFAULT_DRAIN_TEXT)))
 	var id: String = String(effect.get("id", ""))
 	if id == "":
 		return
@@ -74,10 +81,10 @@ static func merge(old: Dictionary, duration: float, dps: float, part: String) ->
 	return old
 
 
-func _drain(amount: float) -> void:
+func _drain(amount: float, text: String) -> void:
 	player.stamina = maxf(player.stamina - amount, 0.0)
 	EventBus.stamina_changed.emit(player.stamina, Player.STAMINA_MAX, player.get_time_penalty())
-	EventBus.message_logged.emit("Une décharge vous vide de %d de stamina." % roundi(amount))
+	EventBus.message_logged.emit(text % roundi(amount))
 
 
 func _on_time(points: float) -> void:

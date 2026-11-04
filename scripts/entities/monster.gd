@@ -26,6 +26,12 @@ extends Node2D
 ## frappé ou quand un voisin se réveille ; AMBUSH : ne se réveille que si le joueur est à AMBUSH_RANGE cases (alors il surgit) ; « guard » :
 ## ne dort jamais, tient son poste (`home_cell`) et y revient (GUARD_LEASH). ERRATIC : ERRATIC_CHANCE des pas de poursuite au hasard.
 ##
+## CAPACITÉS (jalon 6c) : AURA_RAD / FIRE_AURA / COLD_AURA (effet d'état sur le joueur proche, AURA_EFFECTS), REGEN(x) (x PV par seconde après
+## REGEN_DELAY s sans dégât), LEAP (bond de 2-3 cases, en ligne) et CHARGE (course de 4 à 8 cases en ligne droite, premier coup x1.5) : voir
+## _try_rush, GRAB / CONSTRICT (le coup draine la stamina ; l'immobilisation viendra avec le combat), SPLIT (chaque coup détache un petit monstre :
+## World.spawn_split), EXPLODE(type) à la mort (World.explode), THROW(type) (le tir lance une explosion de rayon 1 sur le joueur),
+## BURST (le tir fait BURST_SHOTS coups à dégâts réduits).
+##
 ## Stamina : les monstres ont la même stamina que le joueur (Player.STAMINA_MAX) et les mêmes règles de ralentissement :
 ## chaque tranche de 30 % perdue ajoute +10 % à la durée de leurs actions (max +30 %). Se déplacer à terre regagne de la stamina,
 ## nager (eau peu profonde ; ils ne vont pas en eau profonde) en coûte, attendre régénère, attaquer fatigue.
@@ -46,6 +52,36 @@ const AMBUSH_RANGE: float = 2.0       # embuscade : distance à laquelle le mons
 const GUARD_LEASH: int = 8            # garde : au-delà de cette distance de son poste, il abandonne la poursuite
 const ERRATIC_CHANCE: float = 0.3     # ERRATIC : part des pas de poursuite faits au hasard
 const WAKE_NEIGHBOR_RADIUS: int = 4   # un réveil réveille aussi les dormeurs à moins de N cases (ou pack_radius)
+
+# --- Capacités (jalon 6c) ---
+# Aura : effet d'état infligé (une fois par tour du monstre) au joueur à moins de `radius` cases.
+const AURA_EFFECTS: Dictionary = {
+	"AURA_RAD": {"id": "radiation", "chance": 1.0, "duration": 30.0, "dps": 0.15, "stamina": 0.0, "part": "torso", "radius": 2},
+	"FIRE_AURA": {"id": "burn", "chance": 1.0, "duration": 4.0, "dps": 1.0, "stamina": 0.0, "part": "torso", "radius": 1},
+	"COLD_AURA": {"id": "frostbite", "chance": 1.0, "duration": 8.0, "dps": 0.3, "stamina": 0.0, "part": "arm_l", "radius": 1},
+}
+const REGEN_DELAY: float = 5.0        # secondes sans dégât avant que REGEN agisse
+const REGEN_MAX_STEP: float = 60.0    # plafond du temps compté en une fois (monstre resté longtemps hors du temps)
+const LEAP_MIN: int = 2
+const LEAP_MAX: int = 3
+const LEAP_COOLDOWN: float = 8.0
+const CHARGE_MIN: int = 4
+const CHARGE_MAX: int = 8
+const CHARGE_COOLDOWN: float = 10.0
+const CHARGE_DAMAGE_FACTOR: float = 1.5
+const THROW_RADIUS: int = 1           # THROW : explosion de rayon 1 sur le joueur
+const BURST_SHOTS: int = 3
+const BURST_DAMAGE_FACTOR: float = 0.5
+const GRAB_STAMINA_DRAIN: float = 20.0
+const GRAB_TEXT: String = "L'étreinte vous épuise : -%d de stamina."
+const SPLIT_MIN_HP: float = 12.0      # un blob plus fragile ne se divise plus
+const SPLIT_MAX_GENERATION: int = 3
+const ABILITY_TEXT: Dictionary = {
+	"AURA_RAD": "Aura radioactive (rayon 2) : irradie", "FIRE_AURA": "Aura de feu (rayon 1) : brûle", "COLD_AURA": "Aura de froid (rayon 1) : engelure",
+	"REGEN": "Régénère", "LEAP": "Bondit sur sa cible (2 à 3 cases)", "CHARGE": "Charge en ligne droite (coup x1.5)",
+	"GRAB": "Agrippe : draine la stamina", "CONSTRICT": "Étreint : draine la stamina", "SPLIT": "Se divise quand on le frappe",
+	"SWARM": "Attaque en essaim", "THROW": "Lance des projectiles explosifs", "BURST": "Tire en rafale", "EXPLODE": "Explose à sa mort",
+}
 
 # --- Orientation ---
 const TURN_STEPS_PER_ACTION: int = 1   # quarts de tour (90°) par pivotement (1 = un quart par action ; 2 = demi-tour en une action)
@@ -86,6 +122,12 @@ var _anim_phase: float = 0.0            # déphase la respiration d'un monstre �
 var _hop: float = 0.0
 var _breath: float = 0.0
 var _threat: bool = false               # le joueur est dans sa zone d'attaque (flèche vive)
+var generation: int = 0                 # SPLIT : 0 pour l'original, +1 par division
+var _last_hurt: float = -1000.0         # moment (points d'action) du dernier dégât reçu (REGEN)
+var _regen_clock: float = 0.0           # dernier moment compté par REGEN
+var _rush_ready_at: float = 0.0         # moment où LEAP / CHARGE sont de nouveau possibles
+var _attack_bonus: float = 1.0          # multiplicateur du prochain coup (charge)
+var _dead: bool = false                 # a déjà subi le coup fatal (EXPLODE ne se déclenche qu'une fois)
 
 
 func _ready() -> void:
@@ -117,13 +159,15 @@ func _process(delta: float) -> void:
 ## État à sauvegarder quand le chunk est déchargé (voir ChunkManager) : World.restore_monster() le relit.
 func to_dict() -> Dictionary:
 	return {"id": data.id, "cell": grid_pos, "hp": hp, "stamina": stamina, "facing": facing, "spotted": spotted,
-		"state": state, "home": home_cell, "affixes": data.affixes.duplicate(), "z": z}
+		"state": state, "home": home_cell, "affixes": data.affixes.duplicate(), "z": z, "generation": generation}
 
 
 func take_turn() -> float:
 	var player: Player = world.player
 	var delta: Vector2i = player.grid_pos - grid_pos
 	var distance: int = maxi(absi(delta.x), absi(delta.y))  # distance en cases (diagonales incluses)
+	_regen_tick()
+	_apply_auras(player, distance)
 	if state == "sleep":
 		return _sleep_turn(player, distance)
 	if state == "guard" and has_target and maxi(absi(grid_pos.x - home_cell.x), absi(grid_pos.y - home_cell.y)) > GUARD_LEASH:
@@ -147,6 +191,9 @@ func take_turn() -> float:
 			if in_front_arc(facing, _direction_to(player.grid_pos)):
 				return _attack_player()
 			return _turn_toward(player.grid_pos)   # à portée mais dans son dos / son flanc : il doit d'abord pivoter
+		var rush: float = _try_rush(player, delta, distance)
+		if rush >= 0.0:
+			return rush
 		if has_target:
 			if sees and _can_shoot(delta):
 				face(_direction_to(player.grid_pos))   # il se tourne vers sa cible pour tirer (gratuit)
@@ -158,6 +205,78 @@ func take_turn() -> float:
 	if state == "guard" and grid_pos != home_cell:
 		return _move_toward(home_cell)   # retour au poste
 	return _rest(IDLE_COST)
+
+
+# --- Capacités (jalon 6c) ---
+
+## REGEN(x) : x PV par seconde de jeu écoulée, tant que le monstre n'a pas été touché depuis REGEN_DELAY secondes.
+func _regen_tick() -> void:
+	var now: float = GameClock.elapsed_points
+	var elapsed: float = minf(now - _regen_clock, REGEN_MAX_STEP)
+	_regen_clock = now
+	if elapsed <= 0.0 or hp >= data.max_hp or hp <= 0.0 or not data.has_ability("REGEN"):
+		return
+	if now - _last_hurt < REGEN_DELAY:
+		return
+	hp = minf(data.max_hp, hp + data.ability_value("REGEN", 0.2) * elapsed)
+	queue_redraw()
+
+
+## Auras : le joueur à portée subit l'effet d'état de chaque aura du monstre (l'effet se fusionne : il ne s'empile pas).
+func _apply_auras(player: Player, distance: int) -> void:
+	if player.dead:
+		return
+	for base: String in AURA_EFFECTS:
+		var aura: Dictionary = AURA_EFFECTS[base]
+		if data.has_ability(base) and distance <= int(aura["radius"]):
+			StatusEffects.apply(player, aura, String(aura["part"]))
+
+
+## LEAP (bond de 2-3 cases) et CHARGE (course de 4-8 cases en ligne droite) : le monstre se jette sur la case voisine du joueur, la ligne doit être
+## libre. Renvoie le coût de l'action, ou -1.0 si rien n'a eu lieu. La charge double le premier coup qui suit.
+func _try_rush(player: Player, delta: Vector2i, distance: int) -> float:
+	if GameClock.elapsed_points < _rush_ready_at or distance < LEAP_MIN:
+		return -1.0
+	var aligned: bool = delta.x == 0 or delta.y == 0 or absi(delta.x) == absi(delta.y)
+	if not aligned:
+		return -1.0
+	var dir := Vector2i(signi(delta.x), signi(delta.y))
+	var is_leap: bool = data.has_ability("LEAP") and distance <= LEAP_MAX
+	var is_charge: bool = data.has_ability("CHARGE") and (delta.x == 0 or delta.y == 0) and distance >= CHARGE_MIN and distance <= CHARGE_MAX
+	if not is_leap and not is_charge:
+		return -1.0
+	for k in range(1, distance):   # cases entre le monstre et le joueur : libres et praticables
+		var between: Vector2i = grid_pos + dir * k
+		if not world.is_walkable(between) or world.is_occupied(between):
+			return -1.0
+	face(dir)
+	grid_pos = player.grid_pos - dir
+	position = Vector2(grid_pos * World.TILE_SIZE)
+	if is_leap:
+		_rush_ready_at = GameClock.elapsed_points + LEAP_COOLDOWN
+		EventBus.message_logged.emit("%s bondit sur vous !" % data.display_name)
+		return _finish(data.attack_cost, -data.attack_cost * ATTACK_STAMINA_PER_SECOND * 0.5)
+	_rush_ready_at = GameClock.elapsed_points + CHARGE_COOLDOWN
+	_attack_bonus = CHARGE_DAMAGE_FACTOR
+	EventBus.message_logged.emit("%s charge !" % data.display_name)
+	var run_cost: float = data.move_cost * minf(float(distance - 1), 3.0)
+	return _finish(run_cost, -run_cost * ATTACK_STAMINA_PER_SECOND * 0.5)
+
+
+## SPLIT : le coup reçu détache un petit monstre (la moitié des PV restants) sur une case voisine.
+func _try_split() -> void:
+	if not data.has_ability("SPLIT") or generation >= SPLIT_MAX_GENERATION or hp < SPLIT_MIN_HP:
+		return
+	var half: float = floorf(hp / 2.0)
+	if world.spawn_split(self, half):
+		hp -= half
+
+
+## Coup fatal : EXPLODE(type) déclenche une explosion centrée sur le monstre.
+func _on_death() -> void:
+	var kind: String = data.ability_arg("EXPLODE")
+	if kind != "":
+		world.explode(grid_pos, -1, kind, self)
 
 
 # --- Sommeil et réveil (jalon 6b) ---
@@ -364,7 +483,8 @@ func alert(cell: Vector2i) -> void:
 func _attack_player() -> float:
 	var use_special: bool = data.special_cost > 0.0 and _rng.randf() < data.special_chance
 	var attack_label: String = data.special_name if use_special else data.attack_name
-	var damage: float = data.special_damage if use_special else data.attack_damage
+	var damage: float = (data.special_damage if use_special else data.attack_damage) * _attack_bonus
+	_attack_bonus = 1.0   # la charge ne vaut que pour le premier coup
 	var cost: float = data.special_cost if use_special else data.attack_cost
 	var zones: Dictionary = data.special_zones if use_special else data.attack_zones
 	var effect: Dictionary = data.special_effect if use_special else data.attack_effect
@@ -375,6 +495,8 @@ func _attack_player() -> float:
 	var infection_chance: float = data.special_infection if use_special else data.attack_infection
 	if infection_chance > 0.0 and not world.player.dead and _rng.randf() < infection_chance:
 		Infection.infect(world.player)
+	if (data.has_ability("GRAB") or data.has_ability("CONSTRICT")) and not world.player.dead:
+		StatusEffects.apply(world.player, {"id": "", "chance": 1.0, "duration": 0.0, "dps": 0.0, "stamina": GRAB_STAMINA_DRAIN, "text": GRAB_TEXT}, part)
 	return _finish(cost, -cost * ATTACK_STAMINA_PER_SECOND)
 
 ## Tire l'effet d'état d'un coup (chance) et l'inflige au joueur s'il est encore en vie.
@@ -392,6 +514,23 @@ func _can_shoot(delta: Vector2i) -> bool:
 
 func _shoot() -> float:
 	_ranged_ready_at = GameClock.elapsed_points + data.ranged_cooldown
+	if data.has_ability("THROW"):   # projectile explosif : zone de rayon 1 autour du joueur
+		EventBus.message_logged.emit("%s lance %s !" % [data.display_name, data.ranged_name.to_lower()])
+		world.explode(world.player.grid_pos, THROW_RADIUS, data.ability_arg("THROW"), self)
+		return _finish(data.ranged_cost, -data.ranged_cost * ATTACK_STAMINA_PER_SECOND)
+	if data.has_ability("BURST"):   # rafale : plusieurs coups à dégâts réduits, chacun sur sa partie du corps
+		var hit_names: Array[String] = []
+		var total: float = 0.0
+		for shot in BURST_SHOTS:
+			if world.player.dead:
+				break
+			var shot_part: String = BodyPartDB.pick(data.ranged_zones, _rng.randf())
+			var shot_damage: float = data.ranged_damage * BURST_DAMAGE_FACTOR
+			hit_names.append(BodyPartDB.short_of(shot_part))
+			total += shot_damage
+			world.player.take_damage(shot_damage, shot_part)
+		EventBus.message_logged.emit("%s tire une rafale (%s) : -%d PV." % [data.display_name, ", ".join(hit_names), int(total)])
+		return _finish(data.ranged_cost, -data.ranged_cost * ATTACK_STAMINA_PER_SECOND)
 	var part: String = BodyPartDB.pick(data.ranged_zones, _rng.randf())
 	EventBus.message_logged.emit("%s utilise %s (%s) : -%d PV." % [data.display_name, data.ranged_name, BodyPartDB.name_of(part), int(data.ranged_damage)])
 	world.player.take_damage(data.ranged_damage, part)
@@ -457,9 +596,16 @@ func take_damage(amount: float) -> bool:
 	if data.armor > 0:
 		dealt = maxf(amount - float(data.armor), 1.0)
 	hp = maxf(hp - dealt, 0.0)
+	_last_hurt = GameClock.elapsed_points
 	wake()  # un dormeur frappé se réveille
 	queue_redraw()
-	return hp <= 0.0
+	if hp <= 0.0:
+		if not _dead:
+			_dead = true
+			_on_death()
+		return true
+	_try_split()
+	return false
 
 
 ## Lignes d'information (survol, mode regard) : PV, coûts, dégâts, PROBABILITÉS de toucher chaque partie du corps et compétences.
@@ -507,6 +653,13 @@ func get_tooltip_lines() -> Array[String]:
 		lines.append("%s : alerte les monstres à %d cases (recharge %d s)" % [data.scream_name, data.scream_radius, roundi(data.scream_cooldown)])
 	if data.pack_radius > 0:
 		lines.append("Chasse en meute (rayon %d)" % data.pack_radius)
+	for ability: String in data.abilities:
+		var base: String = ability.substr(0, ability.find("(")) if ability.contains("(") else ability
+		if ABILITY_TEXT.has(base):
+			var arg: String = data.ability_arg(base)
+			lines.append(String(ABILITY_TEXT[base]) + ((" (%s)" % arg) if arg != "" and base != "AURA_RAD" else ""))
+	if not data.affixes.is_empty():
+		lines.append("Modificateurs : " + ", ".join(PackedStringArray(data.affixes)))
 	return lines
 
 func get_tooltip_text() -> String:

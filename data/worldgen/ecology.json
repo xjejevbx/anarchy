@@ -1,5 +1,5 @@
 {
- "_doc": "Ecologie ambiante (jalon 6a, docs/MONSTER_SPAWN.md section 12). ambient : pour chaque contexte, le groupe tire (spawn_groups.json) et la densite = nombre de monstres attendus pour 100 cases candidates (avant le reglage de population). street = rues de ville (cases asphalte, trottoir, beton) ; yard = parcelles et jardins de ville (cases de terrain naturel, hors batiment) ; road = routes entre villes (cases asphalte) ; kinds = chunk hors ville, selon la nature de case de la cellule macro (ids de biomes.json). Une nature absente de kinds (eau, lacs, ocean) n'a aucun monstre en 6a (les aquatiques arrivent en 6d). Les lieux speciaux n'ont pas de population ambiante : leur population vient de place_spawns.json (jalon 6b). limits : max_per_chunk = plafond de monstres par chunk, threat_budget = somme maximale de la menace (monstre.threat) par chunk, safe_radius = rayon (cases) sans monstre autour du depart du joueur, min_spacing = ecart minimal (Tchebychev) entre deux monstres d'un meme chunk. Jalon 6b : dormant = part de monstres ambiants crees endormis ; limits.place_max_per_chunk et place_threat_budget = plafonds d'un chunk qui porte un plan (lieu ou batiment) ; climate_affixes = affixes (monster_affixes.json) tires pour les monstres des cases EXTERIEURES (rues, routes, nature) : affix, chance, tag (le monstre doit l'avoir), climate (temperate / hot / cold) et/ou kinds (natures de case de biomes.json) du chunk.",
+ "_doc": "Ecologie ambiante (jalon 6a, docs/MONSTER_SPAWN.md section 12). ambient : pour chaque contexte, le groupe tire (spawn_groups.json) et la densite = nombre de monstres attendus pour 100 cases candidates (avant le reglage de population). street = rues de ville (cases asphalte, trottoir, beton) ; yard = parcelles et jardins de ville (cases de terrain naturel, hors batiment) ; road = routes entre villes (cases asphalte) ; kinds = chunk hors ville, selon la nature de case de la cellule macro (ids de biomes.json). Une nature absente de kinds (eau, lacs, ocean) n'a aucun monstre en 6a (les aquatiques arrivent en 6d). Les lieux speciaux n'ont pas de population ambiante : leur population vient de place_spawns.json (jalon 6b). limits : max_per_chunk = plafond de monstres par chunk, threat_budget = somme maximale de la menace (monstre.threat) par chunk, safe_radius = rayon (cases) sans monstre autour du depart du joueur, min_spacing = ecart minimal (Tchebychev) entre deux monstres d'un meme chunk. Jalon 6b : dormant = part de monstres ambiants crees endormis ; limits.place_max_per_chunk et place_threat_budget = plafonds d'un chunk qui porte un plan (lieu ou batiment) ; climate_affixes = affixes (monster_affixes.json) tires pour les monstres des cases EXTERIEURES (rues, routes, nature) : affix, chance, tag (le monstre doit l'avoir), climate (temperate / hot / cold) et/ou kinds (natures de case de biomes.json) du chunk. Jalon 6c : contamination = sources, rayon et substitutions (docs/MONSTER_SPAWN.md section 5). sources : id de LIEU SPECIAL (specials.json) -> force (0 a 1, niveau au coeur), radius (cellules macro = chunks), type (radiation, toxic, experiment, fire, cursed, oil). Niveau d'un chunk = max sur les sources de force x (1 - distance / rayon) ^ falloff, distance a la cellule la plus proche de l'empreinte du lieu. substitute_chance : un monstre tire est remplace par sa variante selon niveau x substitute_chance ; substitutions : monstre -> {type: monstre mutant, ou \"affix:<id>\" pour lui donner un affixe}. ambient_switch_level : au-dessus, la couche ambiante tire dans eco_contaminated_<type>. Une regle de lieu avec contaminate = false ignore la substitution.",
  "limits": {
   "max_per_chunk": 12,
   "threat_budget": 30,
@@ -103,5 +103,118 @@
    "tag": "zombie",
    "chance": 0.15
   }
- ]
+ ],
+ "contamination": {
+  "falloff": 1.0,
+  "substitute_chance": 0.8,
+  "ambient_switch_level": 0.6,
+  "sources": {
+   "nuclear_plant": {
+    "force": 1.0,
+    "radius": 14,
+    "type": "radiation"
+   },
+   "research_lab": {
+    "force": 0.9,
+    "radius": 10,
+    "type": "experiment"
+   },
+   "missile_silo": {
+    "force": 0.7,
+    "radius": 8,
+    "type": "radiation"
+   },
+   "bunker": {
+    "force": 0.4,
+    "radius": 5,
+    "type": "experiment"
+   },
+   "bunker_entrance": {
+    "force": 0.4,
+    "radius": 5,
+    "type": "experiment"
+   },
+   "factory": {
+    "force": 0.5,
+    "radius": 6,
+    "type": "toxic"
+   },
+   "sewage_plant": {
+    "force": 0.6,
+    "radius": 6,
+    "type": "toxic"
+   },
+   "oil_platform": {
+    "force": 0.5,
+    "radius": 6,
+    "type": "oil"
+   },
+   "volcano_site": {
+    "force": 0.8,
+    "radius": 9,
+    "type": "fire"
+   },
+   "research_station": {
+    "force": 0.6,
+    "radius": 6,
+    "type": "experiment"
+   },
+   "ancient_ruins": {
+    "force": 0.4,
+    "radius": 5,
+    "type": "cursed"
+   }
+  },
+  "substitutions": {
+   "wolf": {
+    "radiation": "wolf_mutant",
+    "toxic": "wolf_mutant",
+    "experiment": "experiment_acid_hound",
+    "fire": "fire_hound",
+    "cursed": "skeleton_brute"
+   },
+   "bear": {
+    "radiation": "bear_mutant",
+    "toxic": "bear_mutant",
+    "experiment": "experiment_chimera",
+    "fire": "fire_hound"
+   },
+   "deer": {
+    "radiation": "deer_mutant",
+    "toxic": "deer_mutant"
+   },
+   "boar": {
+    "radiation": "boar_mutant",
+    "toxic": "boar_mutant"
+   },
+   "crow": {
+    "radiation": "crow_mutant",
+    "toxic": "crow_mutant",
+    "experiment": "experiment_swarm"
+   },
+   "rat_giant": {
+    "radiation": "rat_irradiated",
+    "toxic": "experiment_slime",
+    "experiment": "experiment_homunculus"
+   },
+   "zombie_civilian": {
+    "radiation": "zombie_irradiated",
+    "toxic": "zombie_gasbag",
+    "experiment": "zombie_lab_subject",
+    "fire": "zombie_charred",
+    "cursed": "skeleton"
+   },
+   "zombie_worker": {
+    "radiation": "zombie_irradiated",
+    "toxic": "affix:toxic",
+    "experiment": "zombie_lab_subject",
+    "fire": "zombie_charred"
+   },
+   "zombie": {
+    "radiation": "affix:irradiated",
+    "toxic": "affix:toxic",
+    "fire": "affix:charred"
+   }
+  }
+ }
 }

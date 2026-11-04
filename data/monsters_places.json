@@ -27,7 +27,8 @@
    "special": {"name": "Morsure", "cost": 3.0, "damage": 8, "chance": 0.3, "zones": "bite", "infection": 0.7}},
   "zombie_hazmat": {"name": "Zombie en combinaison NBC", "hp": 70, "move_cost": 1.5, "abilities": ["ARMOR(2)"], "tags": ["zombie", "science", "dressed"], "attack": {"damage": 6}},
 
-  "zombie_swat": {"name": "Zombie d'intervention", "hp": 75, "move_cost": 1.2, "abilities": ["ARMOR(3)", "BURST"], "tags": ["zombie", "police", "dressed"], "attack": {"damage": 8}},
+  "zombie_swat": {"name": "Zombie d'intervention", "hp": 75, "move_cost": 1.2, "abilities": ["ARMOR(3)", "BURST"], "tags": ["zombie", "police", "dressed"], "attack": {"damage": 8},
+   "ranged": {"name": "Rafale", "range": 7, "cost": 2.0, "damage": 8, "cooldown": 10}},
   "zombie_prisoner": {"name": "Détenu zombie", "hp": 35, "move_cost": 1.1, "tags": ["zombie", "civil"], "attack": {"damage": 6}},
   "zombie_fireman": {"name": "Pompier zombie", "hp": 70, "move_cost": 1.4, "abilities": ["ARMOR(2)"], "tags": ["zombie", "dressed"], "attack": {"name": "Coup de hache", "damage": 9, "zones": "heavy"}},
 

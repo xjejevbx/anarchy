@@ -5,10 +5,12 @@ extends RefCounted
 ## create(id) fabrique un MonsterData neuf. Les erreurs de données sont listées par errors() (un monstre invalide est tout de même
 ## chargé : le jeu continue, le test tests/test_spawn.gd les signale).
 
-const PATHS: Array[String] = ["res://data/monsters.json", "res://data/monsters_places.json"]
+const PATHS: Array[String] = ["res://data/monsters.json", "res://data/monsters_places.json", "res://data/monsters_mutants.json"]
 const AFFIX_PATH: String = "res://data/monster_affixes.json"
 
-## Capacités connues (MONSTER_SPAWN.md section 7). En 6a, seule ARMOR(n) agit ; les autres sont lues et ignorées.
+## Capacités connues (MONSTER_SPAWN.md section 7). Agissent : ARMOR, DORMANT, GUARD, AMBUSH, ERRATIC (6b) ; EXPLODE, AURA_RAD, COLD_AURA,
+## FIRE_AURA, REGEN, LEAP, CHARGE, GRAB, CONSTRICT, SPLIT, SWARM, THROW, BURST (6c). Les autres (SUMMON, RAISE, STEALTH, BLIND_HEARING, SWIM,
+## AQUATIC, FLY, SPORE, LOOT_CARRIER) sont lues et ignorées jusqu'à leur jalon.
 const ABILITIES: Array[String] = ["ARMOR", "DORMANT", "GUARD", "AMBUSH", "ERRATIC", "EXPLODE", "AURA_RAD", "COLD_AURA", "FIRE_AURA",
 	"REGEN", "LEAP", "CHARGE", "GRAB", "CONSTRICT", "SPLIT", "SWARM", "THROW", "BURST", "SUMMON", "RAISE", "STEALTH", "BLIND_HEARING",
 	"SWIM", "AQUATIC", "FLY", "SPORE", "LOOT_CARRIER"]
@@ -136,6 +138,14 @@ static func tags_of(id: String) -> Array:
 	return def_of(id).get("tags", [])
 
 
+## Le monstre a-t-il cette capacité (nom sans argument : "EXPLODE" pour "EXPLODE(gas)") ?
+static func has_ability(id: String, base: String) -> bool:
+	for ability: Variant in def_of(id).get("abilities", []):
+		if _ability_base(String(ability)) == base:
+			return true
+	return false
+
+
 ## Menace (1 à 10) : champ "threat", sinon PV / 25 arrondi.
 static func threat_of(id: String) -> int:
 	var def: Dictionary = def_of(id)
@@ -230,6 +240,11 @@ static func _apply_affixes(m: MonsterData, affix_ids: Array) -> void:
 		m.special_damage *= dmg
 		m.ranged_damage *= dmg
 		m.armor += int(a.get("armor", 0))
+		for ability: Variant in a.get("abilities", []):
+			if not m.abilities.has(String(ability)):
+				m.abilities.append(String(ability))
+		if m.attack_effect.is_empty() and not (a.get("effect", {}) as Dictionary).is_empty():
+			m.attack_effect = _effect(a["effect"])
 		m.threat = clampi(m.threat + int(a.get("threat", 0)), 1, MAX_THREAT)
 		if bool(a.get("never_sleeps", false)):
 			m.never_sleeps = true

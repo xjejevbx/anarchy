@@ -8,6 +8,7 @@ extends Node2D
 ## Jalon 6b : monstres endormis (bruit : make_noise), affixes. Axe vertical : le monde ne simule qu'UN étage à la fois (`get_level()`,
 ## ChunkManager.level) ; toutes les requêtes par case (Vector2i) portent sur cet étage, les objets au sol sont rangés par étage, les monstres
 ## des autres étages sont en réserve. change_level() prépare les escaliers (jalon 8).
+## Jalon 6c : explosions (explode : à la mort d'un monstre EXPLODE, grenade THROW) et division des blobs (spawn_split).
 ##
 ## Rendu en couches (de bas en haut) :
 ##   1. `_terrain_layer` : les chunks (sol : herbe, murs)
@@ -24,6 +25,16 @@ const TILE_SIZE: int = 128
 const ALERT_REARM_POINTS: float = 5.0    # secondes hors de vue (dans le brouillard) avant qu'un monstre puisse être signalé à nouveau ; 0 = dès qu'il sort de vue
 const VIEW_RADIUS: int = 20              # portée de vue en cases (plein jour pour l'instant)
 const MAX_MONSTERS: int = 300            # plafond global de monstres chargés (au-delà, un chunk neuf n'est pas peuplé)
+
+# --- Explosions (jalon 6c) : rayon (cases), dégâts aux cibles, effet d'état sur le joueur. `gas` ne blesse pas : il empoisonne seulement ---
+const EXPLOSIONS: Dictionary = {
+	"acid": {"radius": 2, "damage": 6.0, "effect": {"id": "acid", "chance": 1.0, "duration": 5.0, "dps": 0.8, "stamina": 0.0}},
+	"gas": {"radius": 2, "damage": 0.0, "effect": {"id": "poison", "chance": 1.0, "duration": 10.0, "dps": 0.4, "stamina": 0.0}},
+	"fire": {"radius": 2, "damage": 8.0, "effect": {"id": "burn", "chance": 1.0, "duration": 4.0, "dps": 1.0, "stamina": 0.0}},
+	"frag": {"radius": 3, "damage": 14.0, "effect": {}},
+	"electric": {"radius": 2, "damage": 6.0, "effect": {"id": "", "chance": 1.0, "duration": 0.0, "dps": 0.0, "stamina": 25.0}},
+}
+const SPLIT_MAX_MONSTERS: int = 280      # au-delà, un blob ne se divise plus (marge sous MAX_MONSTERS)
 
 # --- Bruit (jalon 6b) : rayon (cases) dans lequel les dormeurs se réveillent ---
 const NOISE_SPRINT: int = 8              # le joueur court
@@ -372,7 +383,55 @@ func restore_monster(entry: Dictionary) -> Monster:
 	m.stamina = float(entry.get("stamina", Player.STAMINA_MAX))
 	m.facing = entry.get("facing", m.facing)
 	m.spotted = bool(entry.get("spotted", false))
+	m.generation = int(entry.get("generation", 0))
 	return m
+
+
+## Explosion de type `kind` (clé d'EXPLOSIONS) en `origin`. `radius` < 0 : le rayon du type. Blesse le joueur et les monstres dans le rayon
+## (sauf `source`, qui explose : c'est à l'appelant de le retirer) ; un monstre tué est retiré (il peut exploser à son tour).
+func explode(origin: Vector2i, radius: int, kind: String, source: Monster) -> void:
+	var def: Dictionary = EXPLOSIONS.get(kind, {})
+	if def.is_empty():
+		return
+	var reach: int = int(def["radius"]) if radius < 0 else radius
+	var damage: float = float(def["damage"])
+	if source != null and radius < 0:
+		EventBus.message_logged.emit("%s explose !" % source.data.display_name)
+	if player != null and not player.dead and maxi(absi(player.grid_pos.x - origin.x), absi(player.grid_pos.y - origin.y)) <= reach:
+		var part: String = BodyPartDB.pick(MonsterData.ZONES_HUMANOID, randf())
+		if damage > 0.0:
+			EventBus.message_logged.emit("L'explosion vous touche (%s) : -%d PV." % [BodyPartDB.name_of(part), int(damage)])
+			player.take_damage(damage, part)
+		var effect: Dictionary = def["effect"]
+		if not effect.is_empty() and not player.dead:
+			StatusEffects.apply(player, effect, part)
+	if damage <= 0.0:
+		return
+	for m: Monster in monsters.duplicate():
+		if m != source and maxi(absi(m.grid_pos.x - origin.x), absi(m.grid_pos.y - origin.y)) <= reach:
+			if m.take_damage(damage):
+				remove_monster(m)
+
+
+## Un blob qui se divise : crée un monstre du même type (mêmes affixes) sur une case voisine libre, avec `hp_value` PV. Faux s'il n'y a pas de place.
+func spawn_split(parent: Monster, hp_value: float) -> bool:
+	if monsters.size() >= SPLIT_MAX_MONSTERS:
+		return false
+	var offsets: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0),
+		Vector2i(1, -1), Vector2i(1, 1), Vector2i(-1, 1), Vector2i(-1, -1)]
+	for offset: Vector2i in offsets:
+		var cell: Vector2i = parent.grid_pos + offset
+		if not is_walkable(cell) or is_occupied(cell) or swim_depth(cell) != TerrainDB.SWIM_NONE:
+			continue
+		var child: Monster = _create_monster(MonsterDB.create(parent.data.id, parent.data.affixes), cell)
+		child.hp = minf(hp_value, child.data.max_hp)
+		child.generation = parent.generation + 1
+		child.facing = parent.facing
+		child.has_target = parent.has_target
+		child.target_cell = parent.target_cell
+		_refresh_monster_visibility()
+		return true
+	return false
 
 
 ## Réveille les dormeurs (sauf les embuscades, qui n'écoutent que de près) à moins de `radius` cases de `origin`.

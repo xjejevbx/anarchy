@@ -1,14 +1,178 @@
 {
- "_doc": "Affixes (jalon 6b, docs/MONSTER_SPAWN.md section 9) : modificateurs appliques a un monstre de base par MonsterDB.create(id, affixes). adj_m / adj_f : adjectif accorde au genre du monstre (« Policier zombie gele »). hp, speed (multiplie move_cost : > 1 = plus lent), dmg : multiplicateurs ; armor : ARMOR ajoute ; threat : menace ajoutee ; never_sleeps : le monstre ne dort jamais. allowed_tags : le monstre doit avoir AU MOINS un de ces tags ; forbidden_tags : aucun. Un monstre a 0 a 2 affixes. Effets speciaux (aura de froid, spores...) : jalon 6c.",
+ "_doc": "Affixes (jalon 6b, docs/MONSTER_SPAWN.md section 9) : modificateurs appliques a un monstre de base par MonsterDB.create(id, affixes). adj_m / adj_f : adjectif accorde au genre du monstre (« Policier zombie gele »). hp, speed (multiplie move_cost : > 1 = plus lent), dmg : multiplicateurs ; armor : ARMOR ajoute ; threat : menace ajoutee ; never_sleeps : le monstre ne dort jamais. allowed_tags : le monstre doit avoir AU MOINS un de ces tags ; forbidden_tags : aucun. Un monstre a 0 a 2 affixes. Effets speciaux (aura de froid, spores...) : jalon 6c. Jalon 6c : abilities = capacites ajoutees au monstre (AURA_RAD, COLD_AURA, FIRE_AURA, EXPLODE(gas)...) ; effect = effet d'etat de son attaque (s'il n'en a pas deja un).",
  "affixes": {
-  "frozen": {"adj_m": "gelé", "adj_f": "gelée", "hp": 1.3, "speed": 1.3, "allowed_tags": ["zombie", "animal"], "threat": 1},
-  "mummified": {"adj_m": "momifié", "adj_f": "momifiée", "hp": 1.1, "speed": 1.2, "allowed_tags": ["zombie"]},
-  "overgrown": {"adj_m": "envahi", "adj_f": "envahie", "hp": 1.2, "speed": 1.3, "allowed_tags": ["zombie", "animal"]},
-  "rotten": {"adj_m": "putréfié", "adj_f": "putréfiée", "hp": 0.8, "speed": 1.4, "allowed_tags": ["zombie", "animal"]},
-  "armored": {"adj_m": "blindé", "adj_f": "blindée", "hp": 1.5, "speed": 1.2, "armor": 2, "threat": 2, "allowed_tags": ["military", "police"]},
-  "feral": {"adj_m": "enragé", "adj_f": "enragée", "hp": 0.9, "speed": 0.7, "dmg": 1.2, "never_sleeps": true, "allowed_tags": ["zombie", "animal"]},
-  "veteran": {"adj_m": "vétéran", "adj_f": "vétérane", "hp": 1.3, "dmg": 1.2, "armor": 1, "threat": 1, "allowed_tags": ["zombie"], "forbidden_tags": ["animal"]},
-  "infested": {"adj_m": "grouillant", "adj_f": "grouillante", "allowed_tags": ["zombie"]},
-  "alpha": {"adj_m": "alpha", "adj_f": "alpha", "hp": 1.8, "speed": 0.9, "dmg": 1.3, "threat": 2, "allowed_tags": ["zombie", "animal"]}
+  "frozen": {
+   "adj_m": "gelé",
+   "adj_f": "gelée",
+   "hp": 1.3,
+   "speed": 1.3,
+   "allowed_tags": [
+    "zombie",
+    "animal"
+   ],
+   "threat": 1,
+   "abilities": [
+    "COLD_AURA"
+   ]
+  },
+  "mummified": {
+   "adj_m": "momifié",
+   "adj_f": "momifiée",
+   "hp": 1.1,
+   "speed": 1.2,
+   "allowed_tags": [
+    "zombie"
+   ]
+  },
+  "overgrown": {
+   "adj_m": "envahi",
+   "adj_f": "envahie",
+   "hp": 1.2,
+   "speed": 1.3,
+   "allowed_tags": [
+    "zombie",
+    "animal"
+   ]
+  },
+  "rotten": {
+   "adj_m": "putréfié",
+   "adj_f": "putréfiée",
+   "hp": 0.8,
+   "speed": 1.4,
+   "allowed_tags": [
+    "zombie",
+    "animal"
+   ]
+  },
+  "armored": {
+   "adj_m": "blindé",
+   "adj_f": "blindée",
+   "hp": 1.5,
+   "speed": 1.2,
+   "armor": 2,
+   "threat": 2,
+   "allowed_tags": [
+    "military",
+    "police"
+   ]
+  },
+  "feral": {
+   "adj_m": "enragé",
+   "adj_f": "enragée",
+   "hp": 0.9,
+   "speed": 0.7,
+   "dmg": 1.2,
+   "never_sleeps": true,
+   "allowed_tags": [
+    "zombie",
+    "animal"
+   ]
+  },
+  "veteran": {
+   "adj_m": "vétéran",
+   "adj_f": "vétérane",
+   "hp": 1.3,
+   "dmg": 1.2,
+   "armor": 1,
+   "threat": 1,
+   "allowed_tags": [
+    "zombie"
+   ],
+   "forbidden_tags": [
+    "animal"
+   ]
+  },
+  "infested": {
+   "adj_m": "grouillant",
+   "adj_f": "grouillante",
+   "allowed_tags": [
+    "zombie"
+   ]
+  },
+  "alpha": {
+   "adj_m": "alpha",
+   "adj_f": "alpha",
+   "hp": 1.8,
+   "speed": 0.9,
+   "dmg": 1.3,
+   "threat": 2,
+   "allowed_tags": [
+    "zombie",
+    "animal"
+   ]
+  },
+  "irradiated": {
+   "adj_m": "irradié",
+   "adj_f": "irradiée",
+   "hp": 1.3,
+   "abilities": [
+    "AURA_RAD"
+   ],
+   "allowed_tags": [
+    "zombie",
+    "animal"
+   ],
+   "forbidden_tags": [
+    "mutant"
+   ],
+   "threat": 1
+  },
+  "toxic": {
+   "adj_m": "toxique",
+   "adj_f": "toxique",
+   "hp": 1.1,
+   "allowed_tags": [
+    "zombie",
+    "animal"
+   ],
+   "effect": {
+    "id": "poison",
+    "chance": 0.3,
+    "duration": 10,
+    "dps": 0.4
+   }
+  },
+  "charred": {
+   "adj_m": "calciné",
+   "adj_f": "calcinée",
+   "hp": 1.1,
+   "dmg": 1.1,
+   "abilities": [
+    "FIRE_AURA"
+   ],
+   "allowed_tags": [
+    "zombie",
+    "animal"
+   ],
+   "forbidden_tags": [
+    "mutant"
+   ]
+  },
+  "electrified": {
+   "adj_m": "électrifié",
+   "adj_f": "électrifiée",
+   "hp": 1.2,
+   "allowed_tags": [
+    "zombie",
+    "animal"
+   ],
+   "effect": {
+    "stamina": 20,
+    "chance": 0.3
+   }
+  },
+  "bloated": {
+   "adj_m": "gonflé",
+   "adj_f": "gonflée",
+   "hp": 1.5,
+   "speed": 1.6,
+   "dmg": 0.6,
+   "abilities": [
+    "EXPLODE(gas)"
+   ],
+   "allowed_tags": [
+    "zombie"
+   ]
+  }
  }
 }

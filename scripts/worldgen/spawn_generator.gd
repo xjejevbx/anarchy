@@ -8,12 +8,19 @@ extends RefCounted
 ##     lieu spécial, lieu sur la route...). Modes : floor / paved / nature / any (densité par 100 cases candidates) et affinity (un monstre
 ##     par exemplaire d'un meuble ou d'un terrain, avec une probabilité : le dormeur dans son lit, le fidèle sur son banc).
 ##  2. AMBIANTE (jalon 6a) : ecology.json selon le contexte (rue, route, jardin, nature selon la nature de case ; l'eau est vide).
+## Jalon 6c : CONTAMINATION (ContaminationMap : niveau et type du chunk). Chaque monstre tiré est remplacé par sa variante mutante avec la
+## probabilité niveau x substitute_chance (ecology.json, substitutions ; règle `contaminate: false` : jamais) ; au-delà de ambient_switch_level,
+## la couche ambiante tire dans eco_contaminated_<type>. Les monstres SWARM apparaissent en essaim (2 à 4 voisins de plus).
 ## Chaque monstre reçoit un ÉTAT (sleep / idle / guard : part « dormant » de la règle, ou état par défaut du monstre) et 0 à 2 AFFIXES
 ## (règle `affix`, affixes de climat d'ecology.json pour les cases extérieures, « alpha » dans un groupe de 4 et plus).
 ## Aucune apparition : à moins de `safe_radius` cases d'un point sûr (départ du joueur), sur une porte ou devant une porte.
 ## Étages (z != 0) : aucun monstre pour l'instant (les règles `min_depth` des lieux à étages viendront avec le jalon 8).
 
-const GROUPS_PATHS: Array[String] = ["res://data/worldgen/spawn_groups.json", "res://data/worldgen/spawn_groups_places.json"]
+const GROUPS_PATHS: Array[String] = ["res://data/worldgen/spawn_groups.json", "res://data/worldgen/spawn_groups_places.json",
+	"res://data/worldgen/spawn_groups_contamination.json"]
+const CONTAMINATION_TYPES: Array[String] = ["radiation", "toxic", "experiment", "fire", "cursed", "oil"]
+const SWARM_EXTRA_MIN: int = 2
+const SWARM_EXTRA_MAX: int = 4
 const PLACES_PATH: String = "res://data/worldgen/place_spawns.json"
 const ECOLOGY_PATH: String = "res://data/worldgen/ecology.json"
 const MAX_GROUP_DEPTH: int = 3
@@ -29,6 +36,9 @@ static var _places: Dictionary = {}      # id de plan -> Array de règles
 static var _ambient: Dictionary = {}
 static var _limits: Dictionary = {}
 static var _climate_affixes: Array = []
+static var _substitutions: Dictionary = {}   # monstre -> {type de contamination: monstre mutant ou "affix:<id>"}
+static var _substitute_chance: float = 0.8
+static var _switch_level: float = 0.6
 static var _errors: Array[String] = []
 static var _paved: Dictionary = {}       # index de terrain -> true (asphalte, trottoir, béton)
 static var _indoor: Dictionary = {}      # index de terrain -> true (plancher, porte)
@@ -78,6 +88,10 @@ static func _ensure_loaded() -> void:
 	_ambient = ecology.get("ambient", {})
 	_limits = ecology.get("limits", {})
 	_climate_affixes = ecology.get("climate_affixes", [])
+	var contamination: Dictionary = ecology.get("contamination", {})
+	_substitutions = contamination.get("substitutions", {})
+	_substitute_chance = float(contamination.get("substitute_chance", 0.8))
+	_switch_level = float(contamination.get("ambient_switch_level", 0.6))
 	for id: String in ["t_pavement", "t_pavement_y", "t_sidewalk", "t_concrete"]:
 		if TerrainDB.has_id(id):
 			_paved[TerrainDB.index_of(id)] = true
@@ -122,6 +136,7 @@ static func _validate() -> void:
 			_fail("place_spawns.json : plan « %s » inconnu." % plan_id)
 		for rule: Dictionary in _places[plan_id]:
 			_validate_rule(plan_id, rule)
+	_validate_contamination()
 	for ca: Dictionary in _climate_affixes:
 		if not MonsterDB.affix_ids().has(String(ca.get("affix", ""))):
 			_fail("ecology.json climate_affixes : affixe inconnu « %s »." % ca.get("affix", ""))
@@ -130,6 +145,29 @@ static func _validate() -> void:
 		for kind_id: Variant in ca.get("kinds", []):
 			if not RouteMap.KIND_IDS.has(String(kind_id)):
 				_fail("ecology.json climate_affixes : nature de case inconnue « %s »." % kind_id)
+
+
+## Substitutions de contamination : monstres connus, types connus, affixes connus.
+static func _validate_contamination() -> void:
+	for base_id: String in _substitutions:
+		if not MonsterDB.has_id(base_id):
+			_fail("ecology.json substitutions : monstre inconnu « %s »." % base_id)
+		var table: Dictionary = _substitutions[base_id]
+		for type_id: String in table:
+			if not CONTAMINATION_TYPES.has(type_id):
+				_fail("ecology.json substitutions %s : type de contamination inconnu « %s »." % [base_id, type_id])
+			var target: String = String(table[type_id])
+			if target.begins_with("affix:"):
+				if not MonsterDB.affix_ids().has(target.substr(6)):
+					_fail("ecology.json substitutions %s : affixe inconnu « %s »." % [base_id, target])
+			elif not MonsterDB.has_id(target):
+				_fail("ecology.json substitutions %s : monstre inconnu « %s »." % [base_id, target])
+	for type_id: String in CONTAMINATION_TYPES:
+		if _groups.has("eco_contaminated_" + type_id) and (_groups["eco_contaminated_" + type_id] as Dictionary).get("entries", []).is_empty():
+			_fail("groupe eco_contaminated_%s vide." % type_id)
+	for source_id: String in ContaminationMap.source_ids():
+		if not CONTAMINATION_TYPES.has(String(ContaminationMap.source_def(source_id)["type"])):
+			_fail("ecology.json contamination.sources %s : type inconnu." % source_id)
 
 
 static func _validate_rule(plan_id: String, rule: Dictionary) -> void:
@@ -223,6 +261,15 @@ static func _collect_monsters(group_id: String, out: Array[String], depth: int) 
 			out.append(String(entry.get("monster", "")))
 
 
+## Groupe ambiant d'un chunk contaminé : eco_contaminated_<type> si le niveau dépasse ambient_switch_level (et que le groupe existe), sinon `base_group`.
+static func contaminated_group(base_group: String, contamination: Dictionary) -> String:
+	_ensure_loaded()
+	var group_id: String = "eco_contaminated_" + String(contamination.get("type", ""))
+	if float(contamination.get("level", 0.0)) > _switch_level and _groups.has(group_id):
+		return group_id
+	return base_group
+
+
 static func limit(name: String, fallback: int) -> int:
 	_ensure_loaded()
 	return int(_limits.get(name, fallback))
@@ -233,9 +280,10 @@ static func limit(name: String, fallback: int) -> int:
 ## Monstres initiaux du chunk : [{monster, cell, facing, state, affixes}], dans l'ordre de tirage.
 ## `population` multiplie les densités et les chances (0 : aucun monstre) ; `safe_centers` : cases (en plus du départ par défaut de la
 ## seed) autour desquelles aucun monstre n'apparaît ; `plan_override` (tests) : id d'un plan dont on applique les règles à ce terrain,
-## sans couche ambiante.
+## sans couche ambiante ; `contamination_override` (tests) : {level, type} imposé au lieu de ContaminationMap.
 static func generate(world_seed: int, key: Vector3i, terrain: PackedByteArray, furniture: PackedByteArray,
-		population: float = 1.0, safe_centers: Array[Vector2i] = [], plan_override: String = "") -> Array[Dictionary]:
+		population: float = 1.0, safe_centers: Array[Vector2i] = [], plan_override: String = "",
+		contamination_override: Dictionary = {}) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if key.z != 0 or population <= 0.0 or terrain.size() != Chunk.CELLS:
 		return out
@@ -245,15 +293,20 @@ static func generate(world_seed: int, key: Vector3i, terrain: PackedByteArray, f
 	var coord := Vector2i(key.x, key.y)
 	var plan_id: String = plan_override
 	var ambient: Dictionary = {}
+	var contamination: Dictionary = contamination_override
+	if contamination.is_empty():
+		contamination = ContaminationMap.sample_with(settlement, coord) if plan_override == "" else ContaminationMap.NONE
 	if plan_override == "":
 		var info: Dictionary = settlement.cell_plan(coord)
 		if not info.is_empty():
 			plan_id = MapgenDB.plan_id(int(info["plan"]))
 		ambient = _ambient_context(world_map, settlement, coord)
+		if not ambient.is_empty():
+			ambient["group"] = contaminated_group(String(ambient["group"]), contamination)
 	var rules: Array = _places.get(plan_id, []) if plan_id != "" else []
 	if rules.is_empty() and ambient.is_empty():
 		return out
-	var ctx: Dictionary = {"kind": world_map.cell_kind(coord), "climate": world_map.cell_climate(coord)}
+	var ctx: Dictionary = {"kind": world_map.cell_kind(coord), "climate": world_map.cell_climate(coord), "contamination": contamination}
 	var safes: Array[Vector2i] = []
 	safes.append_array(safe_centers)
 	safes.append(settlement.spawn_cell())
@@ -425,6 +478,10 @@ static func _apply_rule(rule: Dictionary, key: Vector3i, terrain: PackedByteArra
 		var monster_id: String = _pick_monster(group, rng, 0)
 		if monster_id == "":
 			continue
+		var forced_affix: String = ""
+		var substitute: Array = _substitute(monster_id, rule, ctx, rng)
+		monster_id = String(substitute[0])
+		forced_affix = String(substitute[1])
 		var threat: int = MonsterDB.threat_of(monster_id)
 		if int(st["threat"]) + threat > int(st["budget"]):
 			continue
@@ -443,9 +500,11 @@ static func _apply_rule(rule: Dictionary, key: Vector3i, terrain: PackedByteArra
 		taken[index] = true
 		st["threat"] = int(st["threat"]) + threat
 		st["count"] = int(st["count"]) + 1
-		var entry: Dictionary = _make_entry(monster_id, cell, rng, rule, ctx, outdoor)
+		var entry: Dictionary = _make_entry(monster_id, cell, rng, rule, ctx, outdoor, forced_affix)
 		out.append(entry)
 		made.append(entry)
+		if MonsterDB.has_ability(monster_id, "SWARM"):
+			_add_swarm(monster_id, index, key, ok, rng, rule, ctx, outdoor, st, out)
 	if made.size() >= ALPHA_MIN_GROUP and rng.randf() < ALPHA_CHANCE:
 		var affixes: Array = made[0]["affixes"]
 		if affixes.size() < 2 and not affixes.has("alpha") and MonsterDB.affix_ok(String(made[0]["monster"]), "alpha"):
@@ -479,13 +538,17 @@ static func _apply_affinity(rule: Dictionary, key: Vector3i, terrain: PackedByte
 		var monster_id: String = _pick_monster(group, rng, 0)
 		if monster_id == "":
 			continue
+		var substitute: Array = _substitute(monster_id, rule, ctx, rng)
+		monster_id = String(substitute[0])
 		var threat: int = MonsterDB.threat_of(monster_id)
 		if int(st["threat"]) + threat > int(st["budget"]):
 			continue
 		taken[target] = true
 		st["threat"] = int(st["threat"]) + threat
 		st["count"] = int(st["count"]) + 1
-		out.append(_make_entry(monster_id, _cell_of(key, target), rng, rule, ctx, false))
+		out.append(_make_entry(monster_id, _cell_of(key, target), rng, rule, ctx, false, String(substitute[1])))
+		if MonsterDB.has_ability(monster_id, "SWARM"):
+			_add_swarm(monster_id, target, key, ok, rng, rule, ctx, false, st, out)
 
 
 ## Case où se tient le monstre d'un meuble : le meuble lui-même s'il est praticable, sinon la première voisine libre (dans l'ordre de RING). -1 si aucune.
@@ -506,9 +569,12 @@ static func _affinity_cell(index: int, ok: PackedByteArray, taken: Dictionary) -
 
 
 ## Entrée finale : orientation, affixes (règle, puis climat pour les cases extérieures) et état de départ.
-static func _make_entry(monster_id: String, cell: Vector2i, rng: RandomNumberGenerator, rule: Dictionary, ctx: Dictionary, outdoor: bool) -> Dictionary:
+static func _make_entry(monster_id: String, cell: Vector2i, rng: RandomNumberGenerator, rule: Dictionary, ctx: Dictionary, outdoor: bool,
+		forced_affix: String = "") -> Dictionary:
 	var facing: Vector2i = RING[rng.randi_range(0, RING.size() - 1)]
 	var affixes: Array[String] = []
+	if forced_affix != "" and MonsterDB.affix_ok(monster_id, forced_affix):
+		affixes.append(forced_affix)
 	var rule_affix: Dictionary = rule.get("affix", {})
 	if not rule_affix.is_empty():
 		var affix_id: String = String(rule_affix.get("id", ""))
@@ -528,6 +594,54 @@ static func _make_entry(monster_id: String, cell: Vector2i, rng: RandomNumberGen
 	if state == "sleep" and affixes.has("feral"):
 		state = "idle"
 	return {"monster": monster_id, "cell": cell, "facing": facing, "state": state, "affixes": affixes}
+
+
+## Substitution de contamination : [monstre, affixe imposé ("" si aucun)]. Un tirage seulement quand le monstre a une variante pour ce type.
+static func _substitute(monster_id: String, rule: Dictionary, ctx: Dictionary, rng: RandomNumberGenerator) -> Array:
+	var same: Array = [monster_id, ""]
+	if not bool(rule.get("contaminate", true)):
+		return same
+	var contamination: Dictionary = ctx["contamination"]
+	var level: float = float(contamination.get("level", 0.0))
+	if level <= 0.0 or not _substitutions.has(monster_id):
+		return same
+	var target: String = String((_substitutions[monster_id] as Dictionary).get(String(contamination.get("type", "")), ""))
+	if target == "" or rng.randf() >= level * _substitute_chance:
+		return same
+	if target.begins_with("affix:"):
+		return [monster_id, target.substr(6)]
+	return [target, ""]
+
+
+## Essaim : SWARM_EXTRA_MIN à SWARM_EXTRA_MAX monstres du même type sur les cases libres voisines (rayon 2), dans la limite du plafond et du budget.
+static func _add_swarm(monster_id: String, origin_index: int, key: Vector3i, ok: PackedByteArray, rng: RandomNumberGenerator,
+		rule: Dictionary, ctx: Dictionary, outdoor: bool, st: Dictionary, out: Array[Dictionary]) -> void:
+	var wanted: int = rng.randi_range(SWARM_EXTRA_MIN, SWARM_EXTRA_MAX)
+	var taken: Dictionary = st["taken"]
+	var threat: int = MonsterDB.threat_of(monster_id)
+	var ox: int = origin_index % Chunk.SIZE
+	var oy: int = floori(float(origin_index) / Chunk.SIZE)
+	for radius in range(1, 3):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				if wanted <= 0:
+					return
+				if maxi(absi(dx), absi(dy)) != radius:
+					continue
+				var nx: int = ox + dx
+				var ny: int = oy + dy
+				if nx < 0 or ny < 0 or nx >= Chunk.SIZE or ny >= Chunk.SIZE:
+					continue
+				var index: int = ny * Chunk.SIZE + nx
+				if ok[index] == 0 or taken.has(index):
+					continue
+				if int(st["count"]) >= int(st["cap"]) or int(st["threat"]) + threat > int(st["budget"]):
+					return
+				taken[index] = true
+				st["threat"] = int(st["threat"]) + threat
+				st["count"] = int(st["count"]) + 1
+				out.append(_make_entry(monster_id, _cell_of(key, index), rng, rule, ctx, outdoor))
+				wanted -= 1
 
 
 static func _climate_match(ca: Dictionary, ctx: Dictionary, monster_id: String) -> bool:

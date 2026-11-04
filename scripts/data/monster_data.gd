@@ -87,6 +87,28 @@ const ZONE_TABLES: Dictionary = {
 @export var pack_radius: int = 0
 
 
+## Le monstre a-t-il la capacité `base` (« EXPLODE » pour « EXPLODE(gas) ») ?
+func has_ability(base: String) -> bool:
+	for ability: String in abilities:
+		if ability == base or ability.begins_with(base + "("):
+			return true
+	return false
+
+
+## Argument d'une capacité : « gas » pour « EXPLODE(gas) », "" s'il n'y en a pas (ou si le monstre n'a pas la capacité).
+func ability_arg(base: String) -> String:
+	for ability: String in abilities:
+		if ability.begins_with(base + "("):
+			return ability.substr(base.length() + 1, ability.length() - base.length() - 2)
+	return ""
+
+
+## Argument numérique d'une capacité (« 0.3 » pour « REGEN(0.3) »), `fallback` s'il n'y en a pas.
+func ability_value(base: String, fallback: float) -> float:
+	var text: String = ability_arg(base)
+	return text.to_float() if text != "" else fallback
+
+
 ## Fabrique un monstre depuis data/monsters.json (id inconnu : erreur et zombie).
 static func create(monster_id: String) -> MonsterData:
 	return MonsterDB.create(monster_id)

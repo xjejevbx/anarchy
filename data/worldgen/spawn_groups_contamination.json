@@ -1,0 +1,10 @@
+{
+ "_doc": "Groupes AMBIANTS des zones contaminees (jalon 6c, docs/MONSTER_SPAWN.md section 12) : la couche ambiante d'un chunk dont le niveau de contamination depasse contamination.ambient_switch_level (ecology.json) tire dans eco_contaminated_<type> au lieu de la faune normale.",
+ "groups": {
+  "eco_contaminated_radiation": {"entries": [{"monster": "wolf_mutant", "weight": 3}, {"monster": "deer_mutant", "weight": 2}, {"monster": "boar_mutant", "weight": 2}, {"monster": "bear_mutant", "weight": 1}, {"monster": "rat_irradiated", "weight": 3}, {"monster": "crow_mutant", "weight": 2}, {"monster": "zombie_irradiated", "weight": 2}]},
+  "eco_contaminated_toxic": {"entries": [{"monster": "experiment_slime", "weight": 2}, {"monster": "rat_giant", "weight": 3}, {"monster": "zombie_gasbag", "weight": 2}, {"monster": "zombie_acidic", "weight": 2}, {"monster": "wolf_mutant", "weight": 1}]},
+  "eco_contaminated_experiment": {"entries": [{"monster": "experiment_stalker", "weight": 1}, {"monster": "experiment_crawler", "weight": 2}, {"monster": "experiment_acid_hound", "weight": 2}, {"monster": "experiment_homunculus", "weight": 2}, {"monster": "zombie_lab_subject", "weight": 2}]},
+  "eco_contaminated_fire": {"entries": [{"monster": "fire_hound", "weight": 3}, {"monster": "zombie_charred", "weight": 3}, {"monster": "magma_crawler", "weight": 1}]},
+  "eco_contaminated_cursed": {"entries": [{"monster": "skeleton", "weight": 4}, {"monster": "mummy", "weight": 2}, {"monster": "skeleton_brute", "weight": 1}]}
+ }
+}
