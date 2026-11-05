@@ -49,6 +49,34 @@ static func pick_sprite(tile_id: String, layer: String, variant_seed: int) -> St
 	return variants[0]["sprite"]
 
 
+## Diagnostic d'un sprite (par NOM) : "" s'il est chargeable, sinon la raison (absent de tiles.json, fichier png introuvable).
+## Sans effet de bord (aucun avertissement, aucun chargement de texture) : sert à l'audit SpriteAudit.
+static func problem_with_sprite(sprite_name: String) -> String:
+	_ensure_loaded()
+	var info: Dictionary = _sprites.get(sprite_name, {})
+	if info.is_empty():
+		return "sprite absent de tiles.json"
+	var file: String = String(info.get("file", ""))
+	if file == "" or not ResourceLoader.exists(PACK_DIR + file):
+		return "fichier introuvable : %s" % file
+	return ""
+
+
+## Diagnostic d'une TUILE (par id) : "" si sa couche "fg" est chargeable (tous ses sprites), sinon la raison.
+static func problem_with_tile(tile_id: String) -> String:
+	_ensure_loaded()
+	if not _tiles.has(tile_id):
+		return "tuile absente de tiles.json"
+	var variants: Array = (_tiles[tile_id] as Dictionary).get("fg", [])
+	if variants.is_empty():
+		return "tuile sans couche fg"
+	for v: Dictionary in variants:
+		var problem: String = problem_with_sprite(String(v["sprite"]))
+		if problem != "":
+			return "sprite « %s » : %s" % [v["sprite"], problem]
+	return ""
+
+
 static func get_texture(sprite_name: String) -> Texture2D:
 	_ensure_loaded()
 	if _textures.has(sprite_name):

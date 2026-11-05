@@ -32,6 +32,15 @@ static func _ensure_loaded() -> void:
 	_items = parsed.get("items", {})
 
 
+## Ids de tous les objets définis (dans l'ordre du fichier). Sert à l'audit des sprites (SpriteAudit).
+static func ids() -> Array[String]:
+	_ensure_loaded()
+	var out: Array[String] = []
+	for id: String in _items:
+		out.append(id)
+	return out
+
+
 static func get_def(item_id: String) -> Dictionary:
 	_ensure_loaded()
 	if not _items.has(item_id):

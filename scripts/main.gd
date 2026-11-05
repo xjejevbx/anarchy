@@ -11,6 +11,9 @@ const POPULATION: float = 1.0
 #   "default" : en lisière de la ville la plus proche de l'origine (sinon pleine nature)
 #   "island"  : perdu sur une petite île (SettlementMap.island_spawn_cell ; repli sur "default" s'il n'y en a pas près de l'origine)
 const START_SCENARIO: String = "default"
+# true : au lancement, un écran liste les sprites demandés par les données mais absents de assets/tiles.json (MissingSpritesUI, SpriteAudit).
+# Rien ne s'affiche si tout est chargé. Mettre false pour ne plus l'afficher.
+const SHOW_MISSING_SPRITES: bool = true
 
 # Monstres de test : [id MonsterData, décalage par rapport au départ]. Tous dans les ~30 cases (chunks proches chargés au démarrage).
 # BASE_MONSTERS : seulement dans l'arène de test (le monde normal a sa propre population, voir SpawnGenerator).
@@ -82,6 +85,14 @@ func _ready() -> void:
 	var hud := CanvasLayer.new()
 	hud.set_script(load("res://scripts/ui/hud.gd"))
 	add_child(hud)
+
+	# Contrôle des sprites au lancement : ajouté APRÈS les autres interfaces pour recevoir les touches en premier (il bloque le joueur
+	# tant qu'il est ouvert) et après le HUD (le message du journal est alors affiché).
+	if SHOW_MISSING_SPRITES:
+		var sprite_report := MissingSpritesUI.new()
+		sprite_report.player = player
+		add_child(sprite_report)
+		sprite_report.show_report()
 
 	var spawn_town: Dictionary = {}
 	if not USE_TEST_ARENA:
