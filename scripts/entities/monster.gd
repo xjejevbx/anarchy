@@ -156,10 +156,20 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
-## État à sauvegarder quand le chunk est déchargé (voir ChunkManager) : World.restore_monster() le relit.
+## État à sauvegarder quand le chunk est déchargé ou lors d'une sauvegarde (voir ChunkManager) :
+## World.restore_monster() le relit. Les Vector2i sont écrits en tableaux pour rester sûrs en JSON.
 func to_dict() -> Dictionary:
-	return {"id": data.id, "cell": grid_pos, "hp": hp, "stamina": stamina, "facing": facing, "spotted": spotted,
-		"state": state, "home": home_cell, "affixes": data.affixes.duplicate(), "z": z, "generation": generation}
+	return {
+		"id": data.id, "cell": [grid_pos.x, grid_pos.y], "hp": hp, "stamina": stamina,
+		"facing": [facing.x, facing.y], "spotted": spotted, "state": state,
+		"home": [home_cell.x, home_cell.y], "affixes": data.affixes.duplicate(), "z": z,
+		"generation": generation, "next_action_time": next_action_time,
+		"has_target": has_target, "target_cell": [target_cell.x, target_cell.y],
+		"hidden_since": hidden_since, "ranged_ready_at": _ranged_ready_at,
+		"scream_ready_at": _scream_ready_at, "last_hurt": _last_hurt,
+		"regen_clock": _regen_clock, "rush_ready_at": _rush_ready_at,
+		"attack_bonus": _attack_bonus,
+	}
 
 
 func take_turn() -> float:

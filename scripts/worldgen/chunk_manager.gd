@@ -27,6 +27,10 @@ var _seen_store: Dictionary = {}  # Vector3i -> PackedByteArray (cases vues des 
 var _populated: Dictionary = {}   # Vector3i -> true : chunks déjà peuplés (ne le sont plus jamais)
 var _monster_store: Dictionary = {}  # Vector3i -> Array[Dictionary] (Monster.to_dict) des chunks déchargés
 var _queue: Array[Vector3i] = []
+# --- Deltas de sauvegarde (jalon 7) ---
+var _modified: Dictionary = {}          # Vector3i -> true : chunk à écrire dans la sauvegarde
+var _terrain_deltas: Dictionary = {}    # Vector3i -> Dictionary(index local -> index de terrain)
+var _furniture_deltas: Dictionary = {}  # Vector3i -> Dictionary(index local -> index de mobilier)
 
 
 func setup(seed_value: int, use_arena: bool, root: Node2D, entities: Node2D, owner_world: World = null) -> void:
@@ -95,6 +99,7 @@ func _load(key: Vector3i) -> void:
 	var chunk := Chunk.new()
 	chunk.setup(key, ChunkGenerator.generate(world_seed, key, arena), seen, self, _entities)
 	chunk.furniture = ChunkGenerator.generate_furniture(world_seed, key, arena)
+	_apply_deltas(key, chunk)
 	_root.add_child(chunk)
 	chunks[key] = chunk
 	if chunk.has_autotile:  # les murs des chunks voisins doivent se raccorder
@@ -104,6 +109,16 @@ func _load(key: Vector3i) -> void:
 				if other != null and other != chunk and other.has_autotile:
 					other.queue_redraw()
 	_populate(key, chunk)
+
+
+## Applique les modifications de terrain / mobilier sauvegardées APRÈS la génération du chunk.
+func _apply_deltas(key: Vector3i, chunk: Chunk) -> void:
+	var terrain_data: Dictionary = _terrain_deltas.get(key, {})
+	for index: int in terrain_data:
+		chunk.set_terrain(index, int(terrain_data[index]))
+	var furniture_data: Dictionary = _furniture_deltas.get(key, {})
+	for index: int in furniture_data:
+		chunk.set_furniture(index, int(furniture_data[index]))
 
 
 func _unload(key: Vector3i) -> void:
@@ -125,10 +140,12 @@ func _populate(key: Vector3i, chunk: Chunk) -> void:
 		_monster_store.erase(key)
 		for entry: Dictionary in saved:
 			world.restore_monster(entry)
+		_modified[key] = true
 		return
 	if _populated.has(key) or world.monsters.size() >= World.MAX_MONSTERS:
 		return  # déjà peuplé (monstres tués compris) ; ou plafond global atteint : on retentera au prochain chargement
 	_populated[key] = true
+	_modified[key] = true  # même sans monstre, le chunk doit être sauvegardé (population figée)
 	var entries: Array[Dictionary] = SpawnGenerator.generate(world_seed, key, chunk.terrain, chunk.furniture, world.population, world.safe_centers)
 	for entry: Dictionary in entries:
 		world.spawn_monster_at(entry)
@@ -145,6 +162,217 @@ func _store_monsters(key: Vector3i) -> void:
 			world.remove_monster(m)
 	if not saved.is_empty():
 		_monster_store[key] = saved
+	_modified[key] = true
+
+
+## Réinitialise tout l'état du gestionnaire (chargement d'une sauvegarde dans un monde neuf).
+func reset_state() -> void:
+	for key: Vector3i in chunks.keys():
+		(chunks[key] as Chunk).release()
+	chunks.clear()
+	_queue.clear()
+	_seen_store.clear()
+	_populated.clear()
+	_monster_store.clear()
+	reset_deltas()
+	level = 0
+
+
+# --- Deltas de sauvegarde (jalon 7) ---
+
+## Marque le chunk de `cell` (étage z) comme modifié : il sera écrit dans la sauvegarde.
+func mark_modified_at(cell: Vector2i, z: int = 0) -> void:
+	_modified[key_of(cell, z)] = true
+
+
+## Modifie le terrain d'une case (delta) : la valeur de base est régénérée au chargement.
+func set_terrain(cell: Vector2i, value: int) -> void:
+	var key: Vector3i = key_of(cell, level)
+	var index: int = index_of(cell)
+	if not _terrain_deltas.has(key):
+		_terrain_deltas[key] = {}
+	(_terrain_deltas[key] as Dictionary)[index] = value
+	_modified[key] = true
+	var chunk := chunks.get(key) as Chunk
+	if chunk != null:
+		chunk.set_terrain(index, value)
+		_redraw_wall_neighbors(key)
+
+
+## Modifie le mobilier d'une case (delta).
+func set_furniture(cell: Vector2i, value: int) -> void:
+	var key: Vector3i = key_of(cell, level)
+	var index: int = index_of(cell)
+	if not _furniture_deltas.has(key):
+		_furniture_deltas[key] = {}
+	(_furniture_deltas[key] as Dictionary)[index] = value
+	_modified[key] = true
+	var chunk := chunks.get(key) as Chunk
+	if chunk != null:
+		chunk.set_furniture(index, value)
+		if FurnitureDB.is_opaque(value):
+			_redraw_wall_neighbors(key)
+
+
+func _redraw_wall_neighbors(key: Vector3i) -> void:
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var other := chunks.get(Vector3i(key.x + dx, key.y + dy, key.z)) as Chunk
+			if other != null and other.has_autotile:
+				other.queue_redraw()
+
+
+## Clés des chunks à sauvegarder (explorés, peuplés ou modifiés depuis la création).
+func modified_keys() -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
+	for key: Vector3i in _modified:
+		out.append(key)
+	out.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		if a.z != b.z:
+			return a.z < b.z
+		if a.y != b.y:
+			return a.y < b.y
+		return a.x < b.x)
+	return out
+
+
+func is_populated_key(key: Vector3i) -> bool:
+	return _populated.has(key)
+
+
+func terrain_delta(key: Vector3i) -> Dictionary:
+	return _terrain_deltas.get(key, {})
+
+
+func furniture_delta(key: Vector3i) -> Dictionary:
+	return _furniture_deltas.get(key, {})
+
+
+## Cases vues d'un chunk (chargé ou en réserve), toujours de la taille d'un chunk.
+func seen_of(key: Vector3i) -> PackedByteArray:
+	var seen := PackedByteArray()
+	var chunk := chunks.get(key) as Chunk
+	if chunk != null:
+		seen = chunk.seen
+	elif _seen_store.has(key):
+		seen = _seen_store[key]
+	if seen.size() != Chunk.CELLS:
+		seen = PackedByteArray()
+		seen.resize(Chunk.CELLS)
+	return seen
+
+
+## Contenu d'un chunk pour un fichier de sauvegarde (terrain régénérable non inclus).
+func snapshot_saved_chunk(key: Vector3i) -> Dictionary:
+	var chunk := chunks.get(key) as Chunk
+	var monsters: Array = []
+	if world != null:
+		if chunk != null:
+			for m: Monster in world.monsters:
+				if m.z == key.z and key_of(m.grid_pos, key.z) == key:
+					monsters.append(m.to_dict())
+		elif _monster_store.has(key):
+			monsters = (_monster_store[key] as Array).duplicate(true)
+	var items: Array = []
+	if world != null:
+		var ground: Dictionary = world.ground_items_of_level(key.z)
+		for cell: Vector2i in ground:
+			if key_of(cell, key.z) != key:
+				continue
+			var list: Array = ground[cell]
+			if list.is_empty():
+				continue
+			var encoded: Array = []
+			for item: Item in list:
+				encoded.append(item.to_dict())
+			items.append([index_of(cell), encoded])
+	items.sort_custom(func(a: Array, b: Array) -> bool: return int(a[0]) < int(b[0]))
+	var terrain_source: Dictionary = _terrain_deltas.get(key, {})
+	var furniture_source: Dictionary = _furniture_deltas.get(key, {})
+	var terrain_data: Array = []
+	for index: int in _delta_indexes(terrain_source):
+		terrain_data.append([index, int(terrain_source[index])])
+	var furniture_data: Array = []
+	for index: int in _delta_indexes(furniture_source):
+		furniture_data.append([index, int(furniture_source[index])])
+	return {
+		"key": [key.x, key.y, key.z],
+		"populated": _populated.has(key),
+		"seen": Marshalls.raw_to_base64(seen_of(key)),
+		"terrain": terrain_data,
+		"furniture": furniture_data,
+		"items": items,
+		"monsters": monsters,
+	}
+
+
+func _delta_indexes(data: Dictionary) -> Array:
+	var indexes: Array = data.keys()
+	indexes.sort()
+	return indexes
+
+
+## Recharge un chunk sauvegardé : mémoire des cases vues, population, deltas et objets au sol.
+## À appeler AVANT qu'un joueur ne charge les chunks (sinon le chunk déjà chargé garde son état régénéré).
+func restore_saved_chunk(data: Dictionary) -> bool:
+	var raw_key: Variant = data.get("key", [])
+	if not (raw_key is Array):
+		return false
+	var key_array: Array = raw_key
+	if key_array.size() < 3:
+		return false
+	var key := Vector3i(int(key_array[0]), int(key_array[1]), int(key_array[2]))
+	var seen: PackedByteArray = Marshalls.base64_to_raw(String(data.get("seen", "")))
+	if seen.size() != Chunk.CELLS:
+		seen = PackedByteArray()
+		seen.resize(Chunk.CELLS)
+	_seen_store[key] = seen
+	if bool(data.get("populated", false)):
+		_populated[key] = true
+	else:
+		_populated.erase(key)
+	for pair: Variant in data.get("terrain", []):
+		if pair is Array:
+			var pair_array: Array = pair
+			if pair_array.size() >= 2:
+				if not _terrain_deltas.has(key):
+					_terrain_deltas[key] = {}
+				(_terrain_deltas[key] as Dictionary)[int(pair_array[0])] = int(pair_array[1])
+	for pair: Variant in data.get("furniture", []):
+		if pair is Array:
+			var pair_array: Array = pair
+			if pair_array.size() >= 2:
+				if not _furniture_deltas.has(key):
+					_furniture_deltas[key] = {}
+				(_furniture_deltas[key] as Dictionary)[int(pair_array[0])] = int(pair_array[1])
+	var saved_monsters: Array = data.get("monsters", [])
+	if _populated.has(key) or not saved_monsters.is_empty():
+		_monster_store[key] = saved_monsters
+	else:
+		_monster_store.erase(key)
+	if world != null:
+		for entry: Variant in data.get("items", []):
+			if not (entry is Array):
+				continue
+			var entry_array: Array = entry
+			if entry_array.size() < 2:
+				continue
+			var local: int = int(entry_array[0])
+			var cell := Vector2i(key.x * Chunk.SIZE + local % Chunk.SIZE, key.y * Chunk.SIZE + floori(float(local) / Chunk.SIZE))
+			var items: Array = []
+			for item_data: Variant in entry_array[1]:
+				if item_data is Dictionary:
+					items.append(Item.from_dict(item_data))
+			world.set_ground_items_at(key.z, cell, items)
+	_modified[key] = true
+	return true
+
+
+## Vide l'état de sauvegarde en mémoire (tests / nouvelle partie).
+func reset_deltas() -> void:
+	_modified.clear()
+	_terrain_deltas.clear()
+	_furniture_deltas.clear()
 
 
 ## Le chunk a-t-il déjà été peuplé ? (tests)
@@ -199,8 +427,8 @@ func is_seen(cell: Vector2i) -> bool:
 
 func mark_seen(cell: Vector2i) -> void:
 	var chunk: Chunk = chunk_at(cell)
-	if chunk != null:
-		chunk.mark_seen(index_of(cell))
+	if chunk != null and chunk.mark_seen(index_of(cell)):
+		_modified[chunk.key] = true
 
 
 # --- Murs : choix du sprite selon les murs voisins ---

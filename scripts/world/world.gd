@@ -47,6 +47,8 @@ const TARGET_BORDER: float = 8.0
 const TARGET_DOT_RADIUS: float = 12.0
 
 var world_seed: int = 4444                  # à fixer AVANT add_child()
+var seed_text: String = ""                  # seed telle que saisie (affichage / copie / sauvegarde)
+var scenario: String = "default"            # scénario de départ (sauvegardé ; utilisé à la création)
 var use_arena: bool = false              # true : ancienne carte fermée 60x40 (debug), à fixer AVANT add_child()
 var population: float = 1.0              # multiplicateur des densités de monstres (0 = aucun), à fixer AVANT le premier chargement
 var safe_centers: Array[Vector2i] = []   # cases autour desquelles aucun monstre n'apparaît (départ du joueur), voir SpawnGenerator
@@ -121,10 +123,7 @@ func change_level(new_level: int) -> void:
 
 
 func _ground_dict() -> Dictionary:
-	var level: int = get_level()
-	if not _ground_by_level.has(level):
-		_ground_by_level[level] = {}
-	return _ground_by_level[level]
+	return _ground_dict_of(get_level())
 
 
 func add_entity(node: Node2D) -> void:
@@ -188,7 +187,12 @@ func get_ground_items(pos: Vector2i) -> Array:
 
 
 func add_ground_item(pos: Vector2i, item: Item) -> void:
-	var ground: Dictionary = _ground_dict()
+	add_ground_item_at(get_level(), pos, item)
+
+
+## Pose un objet au sol pour un étage donné (chargement d'une sauvegarde, autre étage).
+func add_ground_item_at(level: int, pos: Vector2i, item: Item) -> void:
+	var ground: Dictionary = _ground_dict_of(level)
 	var list: Array = ground.get(pos, [])
 	var merged: bool = false
 	for it: Item in list:
@@ -199,15 +203,52 @@ func add_ground_item(pos: Vector2i, item: Item) -> void:
 	if not merged:
 		list.append(item)
 	ground[pos] = list
-	refresh_items()
+	if level == get_level():
+		refresh_items()
+	chunks.mark_modified_at(pos, level)
 
 
 func remove_ground_item(pos: Vector2i, item: Item) -> void:
-	var ground: Dictionary = _ground_dict()
+	var level: int = get_level()
+	var ground: Dictionary = _ground_dict_of(level)
 	var list: Array = ground.get(pos, [])
 	list.erase(item)
 	if list.is_empty():
 		ground.erase(pos)
+	refresh_items()
+	chunks.mark_modified_at(pos, level)
+
+
+## Objets au sol d'un étage (Vector2i -> Array[Item]) ; ne crée l'entrée que si nécessaire.
+func _ground_dict_of(level: int) -> Dictionary:
+	if not _ground_by_level.has(level):
+		_ground_by_level[level] = {}
+	return _ground_by_level[level]
+
+
+func get_ground_items_at(level: int, pos: Vector2i) -> Array:
+	return _ground_dict_of(level).get(pos, [])
+
+
+## Remplace le tas d'objets d'une case (chargement d'une sauvegarde).
+func set_ground_items_at(level: int, pos: Vector2i, items: Array) -> void:
+	var ground: Dictionary = _ground_dict_of(level)
+	if items.is_empty():
+		ground.erase(pos)
+	else:
+		ground[pos] = items
+	if level == get_level():
+		refresh_items()
+	chunks.mark_modified_at(pos, level)
+
+
+## Tous les objets au sol d'un étage (pour la sauvegarde).
+func ground_items_of_level(level: int) -> Dictionary:
+	return _ground_dict_of(level)
+
+
+func clear_ground_items() -> void:
+	_ground_by_level.clear()
 	refresh_items()
 
 
@@ -345,6 +386,7 @@ func _create_monster(data: MonsterData, cell: Vector2i) -> Monster:
 	m.visible = false  # update_fov() décidera
 	entities.add_child(m)
 	monsters.append(m)
+	chunks.mark_modified_at(cell, get_level())
 	return m
 
 
@@ -374,17 +416,42 @@ func _valid_state(state: String, data: MonsterData) -> String:
 
 
 ## Rend vie à un monstre mis en réserve par Monster.to_dict() quand son chunk est rechargé.
+## Les cases et directions sont relues en Vector2i (en mémoire) ou en tableaux (JSON).
 func restore_monster(entry: Dictionary) -> Monster:
 	var data: MonsterData = MonsterDB.create(String(entry["id"]), entry.get("affixes", []))
-	var m: Monster = _create_monster(data, entry["cell"])
-	m.home_cell = entry.get("home", m.grid_pos)
-	m.state = String(entry.get("state", "idle"))
+	var cell: Vector2i = cell_from_data(entry.get("cell", []))
+	var m: Monster = _create_monster(data, cell)
+	m.home_cell = cell_from_data(entry.get("home", cell), cell)
+	m.state = _valid_state(String(entry.get("state", "idle")), data)
 	m.hp = float(entry.get("hp", data.max_hp))
 	m.stamina = float(entry.get("stamina", Player.STAMINA_MAX))
-	m.facing = entry.get("facing", m.facing)
+	m.facing = cell_from_data(entry.get("facing", m.facing), m.facing)
+	if not Monster.RING.has(m.facing):
+		m.facing = Vector2i(0, 1)
 	m.spotted = bool(entry.get("spotted", false))
 	m.generation = int(entry.get("generation", 0))
+	m.next_action_time = float(entry.get("next_action_time", m.next_action_time))
+	m.has_target = bool(entry.get("has_target", false))
+	m.target_cell = cell_from_data(entry.get("target_cell", cell), cell)
+	m.hidden_since = float(entry.get("hidden_since", m.hidden_since))
+	m._ranged_ready_at = float(entry.get("ranged_ready_at", 0.0))
+	m._scream_ready_at = float(entry.get("scream_ready_at", 0.0))
+	m._last_hurt = float(entry.get("last_hurt", -1000.0))
+	m._regen_clock = float(entry.get("regen_clock", 0.0))
+	m._rush_ready_at = float(entry.get("rush_ready_at", 0.0))
+	m._attack_bonus = float(entry.get("attack_bonus", 1.0))
 	return m
+
+
+## Case ou direction relue depuis un Vector2i (réserve en mémoire) ou un tableau [x, y] (JSON).
+static func cell_from_data(value: Variant, fallback: Vector2i = Vector2i.ZERO) -> Vector2i:
+	if value is Vector2i:
+		return value
+	if value is Vector2:
+		return Vector2i(value)
+	if value is Array and value.size() >= 2:
+		return Vector2i(int(value[0]), int(value[1]))
+	return fallback
 
 
 ## Explosion de type `kind` (clé d'EXPLOSIONS) en `origin`. `radius` < 0 : le rayon du type. Blesse le joueur et les monstres dans le rayon
@@ -457,6 +524,7 @@ func remove_monster(m: Monster) -> void:
 	if _hovered == m:
 		_hovered = null
 		EventBus.monster_hovered.emit(null)
+	chunks.mark_modified_at(m.grid_pos, m.z)
 	m.queue_free()
 
 

@@ -12,6 +12,12 @@ func _initialize() -> void:
 	root.add_child(world)
 	world.chunks.update_around(Vector2i(5, 5))
 
+	# L'arène déterministe peut placer des arbres dans le coin testé : on force les cases du test à être libres.
+	# Les murs de l'arène en (0, 1) et (1, 0) restent des murs.
+	var grass: int = TerrainDB.index_of("t_grass")
+	for cell: Vector2i in [Vector2i(1, 1), Vector2i(1, 2), Vector2i(2, 1), Vector2i(2, 2)]:
+		world.chunks.set_terrain(cell, grass)
+
 	# Ligne droite en diagonale : 4 pas diagonaux (5 cases), pas un escalier de 8 pas.
 	var diagonal: Array[Vector2i] = PathFinder.find(world, Vector2i(3, 3), Vector2i(7, 7))
 	_check(diagonal.size() == 5, "(3,3) -> (7,7) : 5 cases avec des diagonales (%d)" % diagonal.size())

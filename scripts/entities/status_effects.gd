@@ -108,3 +108,44 @@ func _on_time(points: float) -> void:
 		if float(e["remaining"]) <= 0.0:
 			effects.erase(id)
 			EventBus.message_logged.emit(String(END_TEXT.get(id, "L'effet se dissipe.")))
+
+
+## Effets en cours, copiés pour la sauvegarde ({} si aucun gestionnaire).
+static func snapshot() -> Dictionary:
+	if _current == null:
+		return {}
+	var data: Dictionary = {}
+	for id: String in _current.effects:
+		var e: Dictionary = _current.effects[id]
+		data[id] = {
+			"remaining": float(e.get("remaining", 0.0)),
+			"dps": float(e.get("dps", 0.0)),
+			"part": String(e.get("part", "torso")),
+			"carry": float(e.get("carry", 0.0)),
+		}
+	return data
+
+
+## Détache le gestionnaire courant (nouvelle partie ou chargement).
+static func reset() -> void:
+	if _current != null and EventBus.time_advanced.is_connected(_current._on_time):
+		EventBus.time_advanced.disconnect(_current._on_time)
+	_current = null
+
+
+## Réapplique les effets sauvegardés au joueur donné.
+static func restore(target: Player, data: Dictionary) -> void:
+	reset()
+	if target == null or data.is_empty():
+		return
+	var manager: StatusEffects = of(target)
+	for id: Variant in data:
+		var e: Variant = data[id]
+		if not (e is Dictionary):
+			continue
+		manager.effects[String(id)] = {
+			"remaining": float(e.get("remaining", 0.0)),
+			"dps": float(e.get("dps", 0.0)),
+			"part": String(e.get("part", "torso")),
+			"carry": float(e.get("carry", 0.0)),
+		}

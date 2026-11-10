@@ -166,3 +166,29 @@ func store(item: Item, container: Item, qty: int = -1) -> String:
 ## Sort `qty` unités d'un conteneur : elles passent « sur soi ».
 func take_out(item: Item, qty: int = -1) -> void:
 	add_loose(detach(item, qty))
+
+
+## Sérialisation pour les sauvegardes (objets sur soi et équipés, contenu compris).
+func to_dict() -> Dictionary:
+	var loose_list: Array = []
+	for it: Item in loose:
+		loose_list.append(it.to_dict())
+	var equipment_data: Dictionary = {}
+	for slot: String in equipment:
+		equipment_data[slot] = (equipment[slot] as Item).to_dict()
+	return {"loose": loose_list, "equipment": equipment_data}
+
+
+## Remplace le contenu de l'inventaire par les données sauvegardées.
+func apply_dict(data: Dictionary) -> void:
+	loose.clear()
+	equipment.clear()
+	var loose_list: Array = data.get("loose", [])
+	for entry: Variant in loose_list:
+		if entry is Dictionary:
+			loose.append(Item.from_dict(entry))
+	var equipment_data: Dictionary = data.get("equipment", {})
+	for slot: Variant in equipment_data:
+		var entry: Variant = equipment_data[slot]
+		if entry is Dictionary:
+			equipment[String(slot)] = Item.from_dict(entry)

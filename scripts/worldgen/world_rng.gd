@@ -17,6 +17,10 @@ const LAYER_MAPGEN: int = 6
 const LAYER_LOOT: int = 7
 const LAYER_SPAWN: int = 8
 
+## Version du GÉNÉRATEUR (pas du format de sauvegarde) : à incrémenter quand une sauvegarde ne reproduit plus le même monde.
+## Jalon 7 : première version sauvegardée.
+const GENERATOR_VERSION: int = 1
+
 const _GOLDEN: int = -7046029254386353131    # 0x9E3779B97F4A7C15
 const _MUL_A: int = -4658895280553007687     # 0xBF58476D1CE4E5B9
 const _MUL_B: int = -7723592293110705685     # 0x94D049BB133111EB

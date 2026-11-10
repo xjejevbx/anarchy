@@ -199,7 +199,7 @@ Un unique existe au plus une fois par monde (par cellule de région) : tirage `m
 
 ## 15. Persistance, performance, évolutions
 
-- **Sauvegarde (jalon 7)** : par chunk, `populated` et la liste de monstres vivants (`to_dict` : id, cellule, PV, état, affixes, étage, génération...) ; un chunk peuplé non modifié ne stocke rien (il se régénère identique, uniques tués exceptés).
+- **Sauvegarde (jalon 7, fait)** : par chunk modifié, `populated` et la liste des monstres VIVANTS (`to_dict` : id, cellule, PV, état, affixes, étage, génération, cible, délais, capacités...). Un chunk peuplé est toujours écrit, même sans monstre : `populated` empêche tout repeuplement, donc les monstres absents sont morts (uniques compris). Un chunk ni peuplé ni modifié n'est pas écrit et se régénère à l'identique.
 - **Coût du tour des monstres** : borné par les chunks chargés ; les dormeurs coûtent un test de distance toutes les 5 s.
 - **Contamination** : lire les sources d'une région voisine force la génération de ses lieux (donc de ses routes) un peu avant l'arrivée du joueur ; le travail total ne change pas. `test_contamination.gd` affiche le coût à froid (25 chunks). Au-delà de 16 cellules de rayon, il faudrait étaler le calcul.
 - **Temps gelé hors des chunks chargés** : acceptable au départ. Évolution (6d) : rattrapage à la recharge (un chunk absent depuis plus d'une heure de jeu perd 30 % de ses ambiants et en gagne selon l'écologie).

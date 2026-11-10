@@ -131,3 +131,23 @@ func add_content(item: Item) -> void:
 			c.count += item.count
 			return
 	contents.append(item)
+
+
+## Sérialisation récursive (conteneurs inclus) pour les sauvegardes.
+func to_dict() -> Dictionary:
+	var data: Dictionary = {"id": id, "count": count}
+	if not contents.is_empty():
+		var list: Array = []
+		for c: Item in contents:
+			list.append(c.to_dict())
+		data["contents"] = list
+	return data
+
+
+static func from_dict(data: Dictionary) -> Item:
+	var item := Item.create(String(data.get("id", "")), int(data.get("count", 1)))
+	var list: Array = data.get("contents", [])
+	for entry: Variant in list:
+		if entry is Dictionary:
+			item.contents.append(Item.from_dict(entry))
+	return item

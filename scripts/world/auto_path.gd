@@ -6,8 +6,9 @@ extends RefCounted
 ##
 ## Deux modes :
 ##  - `prefer` nul (double-clic, touche * du mode regard) : recherche en 8 directions. Un pas diagonal compte pour DEUX pas
-##    orthogonaux (coût 2, comme 7 / 9 / 1 / 3) et n'est permis que si l'une des deux cases « de l'angle » est libre (même règle que
-##    Player._try_diagonal). Parmi tous les chemins de même coût, on prend celui qui reste le plus PROCHE de la ligne droite
+##    orthogonaux (coût 2, comme 7 / 9 / 1 / 3) et est permis si l'une des deux cases « de l'angle » est libre, ou si les
+##    deux sont connues et bloquées (passage direct entre deux obstacles, même règle que Player._try_diagonal). Parmi tous
+##    les chemins de même coût, on prend celui qui reste le plus PROCHE de la ligne droite
 ##    départ -> arrivée, les diagonales étant préférées à égalité. Méthode : coûts calculés depuis l'arrivée (Dijkstra à seaux),
 ##    puis descente depuis le départ en choisissant à chaque pas le voisin qui rapproche le plus de la ligne.
 ##  - `prefer` non nul (touche maintenue) : BFS 4 directions ; à longueur égale, les axes de la direction visée sont essayés en premier
@@ -44,13 +45,23 @@ static func _passable(world: World, cell: Vector2i, from: Vector2i) -> bool:
 
 
 ## Le pas `dir` depuis `a` est-il permis ? Case d'arrivée connue et praticable (le départ est toujours permis : le joueur peut nager) ;
-## en diagonale, au moins une des deux cases de l'angle doit être libre.
+## en diagonale, au moins une des deux cases de l'angle doit être libre, ou les deux doivent être connues et bloquées
+## (passage direct entre deux obstacles, voir Player._try_diagonal).
 static func _step_ok(world: World, a: Vector2i, dir: Vector2i, from: Vector2i) -> bool:
 	if not _passable(world, a + dir, from):
 		return false
 	if _is_diagonal(dir):
-		return _passable(world, a + Vector2i(dir.x, 0), from) or _passable(world, a + Vector2i(0, dir.y), from)
+		var first: Vector2i = a + Vector2i(dir.x, 0)
+		var second: Vector2i = a + Vector2i(0, dir.y)
+		if _passable(world, first, from) or _passable(world, second, from):
+			return true
+		return _known(world, first) and _known(world, second)
 	return true
+
+
+## Case connue du joueur (visible ou déjà vue) et chargée : sert au passage direct entre deux obstacles.
+static func _known(world: World, cell: Vector2i) -> bool:
+	return world.has_terrain(cell) and (world.is_visible_cell(cell) or world.is_seen(cell))
 
 
 ## Chemin de plus faible coût (diagonale = 2) le plus proche de la ligne droite from -> to.

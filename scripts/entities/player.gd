@@ -292,13 +292,14 @@ func _travel_step() -> void:
 	_try_move(step)
 
 
-## Une diagonale est permise si l'une des deux cases « de l'angle » est libre (même règle que _try_diagonal, pour les touches 7 9 1 3).
+## Une diagonale est permise si l'une des deux cases « de l'angle » est libre, ou si les deux sont
+## bloquées par le décor (passage direct entre deux obstacles, même règle que _try_diagonal).
 func _diagonal_passable(dir: Vector2i) -> bool:
 	for first: Vector2i in [Vector2i(0, dir.y), Vector2i(dir.x, 0)]:
 		var middle: Vector2i = grid_pos + first
 		if world.can_player_enter(middle) and world.get_monster_at(middle) == null:
 			return true
-	return false
+	return _diagonal_between_obstacles(dir)
 
 
 ## Déplacement diagonal direct (déplacement automatique) : le joueur arrive tout de suite sur la case en diagonale, puis le temps
@@ -722,14 +723,15 @@ func take_damage(amount: float, part_id: String = "torso") -> void:
 		else:
 			EventBus.message_logged.emit("%s : 0 PV (hors d'usage)." % BodyPartDB.name_of(part_id))
 
-## Une diagonale au clavier (7 9 1 3) n'est PAS un déplacement spécial : c'est « vertical + horizontal »
-## (ex. bas + gauche), deux pas orthogonaux avec chacun son temps, sa stamina, et pendant
-## lesquels les monstres peuvent agir. On passe par une case intermédiaire libre ; si la case
-## visée est occupée par un monstre, le second pas devient une attaque.
-## (Le déplacement automatique, lui, saute directement sur la case en diagonale : voir _move_diagonal_direct.)
+## Une diagonale au clavier (7 9 1 3) est normalement « vertical + horizontal » (ex. bas + gauche) : deux pas
+## orthogonaux avec chacun son temps, sa stamina, et pendant lesquels les monstres peuvent agir. On passe par une
+## case intermédiaire libre ; si la case visée est occupée par un monstre, le second pas devient une attaque.
+## Si les DEUX cases de l'angle sont bloquées (deux arbres, deux murs...), on se faufile directement en diagonale
+## entre les deux obstacles : ce pas compte pour DEUX actions (temps, stamina), comme le déplacement automatique.
 func _try_diagonal(dir: Vector2i) -> void:
 	var target: Vector2i = grid_pos + dir
-	if world.get_monster_at(target) == null and not world.can_player_enter(target):
+	var monster: Monster = world.get_monster_at(target)
+	if monster == null and not world.can_player_enter(target):
 		return
 	for first: Vector2i in [Vector2i(0, dir.y), Vector2i(dir.x, 0)]:  # vertical d'abord, puis horizontal
 		var middle: Vector2i = grid_pos + first
@@ -738,6 +740,18 @@ func _try_diagonal(dir: Vector2i) -> void:
 			if not dead:
 				_try_move(dir - first)
 			return
+	# Aucun passage orthogonal : les deux cases de l'angle sont bloquées, on passe directement en diagonale.
+	if monster == null and _diagonal_between_obstacles(dir):
+		_move_diagonal_direct(dir)
+
+
+## Vrai si les deux cases de l'angle (les deux pas orthogonaux possibles vers la diagonale) sont bloquées
+## par le décor : le joueur peut alors se faufiler directement entre les deux obstacles.
+func _diagonal_between_obstacles(dir: Vector2i) -> bool:
+	for first: Vector2i in [Vector2i(0, dir.y), Vector2i(dir.x, 0)]:
+		if world.can_player_enter(grid_pos + first):
+			return false
+	return true
 
 
 func _try_move(dir: Vector2i) -> void:
@@ -977,6 +991,13 @@ func _emit_load() -> void:
 
 func _emit_health() -> void:
 	EventBus.health_changed.emit(total_hp(), BodyPartDB.total_max_hp())
+
+## Émet l'état complet vers le HUD (après création ou chargement, une fois les interfaces branchées).
+func emit_status() -> void:
+	_emit_health()
+	_emit_stamina()
+	_emit_load()
+	EventBus.posture_changed.emit(posture_name())
 
 func _draw() -> void:
 	var tint: Color = Color.WHITE

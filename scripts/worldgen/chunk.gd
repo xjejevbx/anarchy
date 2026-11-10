@@ -17,6 +17,7 @@ var furniture: PackedByteArray = PackedByteArray()   # mobilier : 0 = rien, sino
 var has_autotile: bool = false   # contient des murs (leur sprite dépend des chunks voisins)
 
 var _manager: ChunkManager
+var _entities: Node2D
 var _tree_sprites: Dictionary = {}  # indice local -> Sprite2D
 
 
@@ -31,6 +32,7 @@ func setup(chunk_key: Vector3i, terrain_data: PackedByteArray, seen_data: Packed
 	terrain = terrain_data
 	seen = seen_data
 	_manager = manager
+	_entities = entities
 	position = Vector2(key.x * SIZE * World.TILE_SIZE, key.y * SIZE * World.TILE_SIZE)
 	for i in CELLS:
 		var t: int = terrain[i]
@@ -38,6 +40,29 @@ func setup(chunk_key: Vector3i, terrain_data: PackedByteArray, seen_data: Packed
 			has_autotile = true
 		if TerrainDB.has_entity_sprite(t):
 			_add_tree(i, entities)
+
+
+## Applique une modification de terrain (delta de sauvegarde) et met à jour l'arbre éventuel.
+func set_terrain(index: int, value: int) -> void:
+	var old: int = terrain[index]
+	if old == value:
+		return
+	terrain[index] = value
+	if TerrainDB.autotile_of(value) != "":
+		has_autotile = true
+	if TerrainDB.has_entity_sprite(old) or TerrainDB.has_entity_sprite(value):
+		_remove_tree(index)
+		if TerrainDB.has_entity_sprite(value):
+			_add_tree(index, _entities)
+	queue_redraw()
+
+
+## Applique une modification de mobilier (delta de sauvegarde).
+func set_furniture(index: int, value: int) -> void:
+	if furniture.size() != CELLS:
+		return
+	furniture[index] = value
+	queue_redraw()
 
 
 ## Case du monde correspondant à un indice local.
@@ -59,13 +84,21 @@ func _add_tree(index: int, entities: Node2D) -> void:
 	_tree_sprites[index] = sprite
 
 
-## Marque une case comme vue (et révèle son arbre s'il y en a un).
-func mark_seen(index: int) -> void:
+func _remove_tree(index: int) -> void:
+	var sprite := _tree_sprites.get(index) as Sprite2D
+	if sprite != null:
+		sprite.queue_free()
+	_tree_sprites.erase(index)
+
+
+## Marque une case comme vue (et révèle son arbre s'il y en a un). Renvoie true si la case était nouvelle.
+func mark_seen(index: int) -> bool:
 	if seen[index] != 0:
-		return
+		return false
 	seen[index] = 1
 	if _tree_sprites.has(index):
 		(_tree_sprites[index] as Sprite2D).visible = true
+	return true
 
 
 ## Libère le chunk et ses sprites (la mémoire des cases vues est gardée par le ChunkManager).

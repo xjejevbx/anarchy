@@ -15,7 +15,7 @@ Monde **infini**, généré au fil des déplacements, **identique pour une même
 - `WorldRng.mix(seed, couche, a, b, c, d)` : mélange 64 bits type splitmix64, écrit à la main (pas `hash()` de Godot). Couches constantes (`LAYER_TERRAIN`, `BIOME`, `TOWN`, `ROAD`, `SPECIAL`, `MAPGEN`, `LOOT`, `SPAWN`), jamais renumérotées : ajouter une couche ne change pas les autres. La 4e coordonnée `d` (0 = ignorée : les résultats existants ne changent pas) sépare des flux quand `c` est déjà pris par l'étage `z`.
 - Bruit continu : `FastNoiseLite` seedé par couche (1 à 5 existantes, 6 à 9 planète, 10 archipels : ne jamais renuméroter). Les décisions fines (arbres, placement) n'utilisent que des entiers.
 - On n'itère jamais un `Dictionary` pour décider quoi que ce soit ; aucune génération ne lit un chunk voisin déjà généré.
-- `generator_version` dans chaque sauvegarde (à incrémenter au jalon 7) ; pas de compatibilité ascendante promise en développement.
+- `generator_version` (`WorldRng.GENERATOR_VERSION`, 1 au jalon 7) dans chaque sauvegarde ; l'incrémenter dès qu'un changement du générateur invalide les deltas. Une sauvegarde d'une autre version est refusée (pas de migration promise en développement).
 - Test automatique : même zone générée dans plusieurs ordres = même empreinte (terrain, mobilier, routes, lieux, monstres).
 
 ## 3. Échelles
@@ -94,7 +94,7 @@ Les plans à piste ont leur porte de façade en colonne 11 et un chemin `=` jusq
 - Terrains ajoutés : `t_field`, `t_fence`, `t_gas_pump`, `t_concrete`, `t_grave`, `t_reactor` (aussi la lave du volcan), `t_helipad`, `t_pier`. Mobilier : `f_rack`, `f_console`, `f_machinery_light`, puis `f_desk`, `f_bench`, `f_locker`, `f_glass_fridge`, `f_safe`, `f_altar`, `f_crate`, `f_container`, `f_machinery_heavy` (jalon 11), puis le mobilier médical (jalon 6b). Tuile ou meuble sans sprite : carré de la `color` (repli) ; détournements dans `MISSING_SPRITE.md`.
 
 ### 4.6 Départ « perdu sur une île »
-`SettlementMap.island_spawn_cell()` : spirale de cellules depuis l'origine, première île d'au moins `spawn_min_cells` avec une case dégagée. `main.gd` : `START_SCENARIO = "island"` (repli default). Le futur menu de création reprendra ce choix.
+`SettlementMap.island_spawn_cell()` : spirale de cellules depuis l'origine, première île d'au moins `spawn_min_cells` avec une case dégagée. `SaveMenuUI` propose le scénario `default` (repli si aucune île) ou `island`.
 
 ### 4.7 Mapgen d'un chunk (`ChunkGenerator`)
 Terrain naturel → rue/route/parcelle (`road_terrain`, `lot_terrain`) → piste → plan de maison/lieu (y compris lieu sur la route, superposé à la chaussée) → départ dégagé ; mobilier via `generate_furniture`. À z ≠ 0 : roche pleine (z < 0) ou vide (z > 0) plus le plan d'étage s'il existe (§8).
@@ -123,8 +123,15 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 - `PathFinder` : A* borné à la demande (8 directions, diagonale = 2 pas, règle de l'angle), sans grille globale.
 - Objets au sol rangés par étage dans `World` ; monstres rattachés aux chunks (réserve par clé 3D).
 
-## 7. Sauvegarde (jalon 7)
-`user://saves/<slot>/meta.json` (version, `generator_version`, seed, joueur, horloge) + `chunks/<cx>_<cy>_<z>.json` pour les seuls chunks modifiés. Au chargement : régénérer, puis remplacer objets et monstres par le delta ; `populated` empêche de repeupler (stocker aussi les uniques tués). Monstres : `Monster.to_dict()` existe déjà. Seed vide à la création = aléatoire, affichée et copiable.
+## 7. Sauvegarde (jalon 7, fait)
+`user://saves/<slot>/meta.json` + `chunks/<cx>_<cy>_<z>.json`. Le terrain n'est **jamais** écrit : on sauvegarde la seed, la version du générateur et les **deltas** des chunks modifiés.
+
+- **`meta.json`** (écrit en dernier) : `version` (format, 1), `generator_version` (`WorldRng.GENERATOR_VERSION`, 1), `saved_at` / `saved_unix`, `seed` (chaîne décimale exacte : JSON perdrait les entiers 64 bits), `seed_text`, `scenario`, `use_arena`, `population`, `level`, `clock`, `clock_text`, `safe_centers`, `player`, `chunk_count`.
+- **Delta de chunk** : `key`, `populated`, `seen` (24 × 24 octets en base64), `terrain` / `furniture` (paires `[index local, valeur]`, seules les cases modifiées), `items` (`[index local, [objets]]`), `monsters` (état complet via `Monster.to_dict()` : case, PV, état, cible, délais, capacités...). Un monstre absent de `monsters` est mort ; un chunk `populated` sans monstre n'est **jamais** repeuplé, uniques tués compris.
+- **Chunks écrits** : tout chunk marqué modifié — exploration (mémoire des cases vues), population figée, terrain/mobilier modifiés, objets au sol ou monstres changés. À l'écrasement, les fichiers de l'ancienne sauvegarde du même emplacement sont effacés.
+- **Chargement** : `SaveGame.load_world()` (après `add_child(world)`, AVANT de créer le joueur) remet seed, horloge, étage et deltas ; les chunks régénérés appliquent terrain/mobilier, cases vues, objets et monstres. `SaveGame.apply_player()` restaure ensuite le joueur APRÈS son `_ready()` : case, corps, stamina, posture, zoom, stats, esquive du décor, inventaire (conteneurs imbriqués et objets à poser), effets d'état et infection.
+- **Compatibilité** : `version` et `generator_version` doivent correspondre ; sinon la sauvegarde est listée « INCOMPATIBLE » et refusée au chargement.
+- **Écran des sauvegardes** (`SaveMenuUI`) : menu principal au lancement (charger, supprimer, nouvelle partie avec seed + scénario, quitter) ; `F5` en jeu (sauvegarder, écraser avec confirmation, charger, supprimer, nouvelle partie, reprendre). Emplacements automatiques `partie-1`, `partie-2`... Seed vide = aléatoire, affichée dans le journal et copiable (`F2` en jeu, `C` dans le menu). L'écran ne s'ouvre pas si le joueur est mort.
 
 ## 8. Étages
 **Modèle retenu : UN seul étage simulé à la fois.** Toutes les requêtes par case (`Vector2i`) portent sur l'étage actif (`ChunkManager.level`, `World.get_level()`) ; les autres étages sont déchargés (cases vues et monstres gardés par clé 3D). Le joueur n'a pas de `z` propre.
@@ -142,7 +149,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 
 **Plans d'étage** : un plan `"<id du plan de surface>@<z>"` (ex. `urban_hospital@-1`), dans n'importe quel fichier de `mapgen/`, est l'étage de ce plan (`ChunkGenerator.level_plan`, même rotation que la surface) ; ses `.` gardent la roche / le vide. Escalier : `t_stairs_down` sur le plan de surface et `t_stairs_up` au même endroit sur `@-1`. Aucun plan d'étage n'existe encore.
 
-**Reste (jalon 8)** : utiliser un escalier (`z_link`) pour appeler `change_level` ; plans d'étage (sous-sols du bunker, silo, labo, hôpital) ; toits et vue des étages voisins ; `MiniMapUI` et `LookUI` lisent la surface ; sauvegarde (jalon 7).
+**Reste (jalon 8)** : utiliser un escalier (`z_link`) pour appeler `change_level` ; plans d'étage (sous-sols du bunker, silo, labo, hôpital) ; toits et vue des étages voisins ; `MiniMapUI` et `LookUI` lisent la surface. Les sauvegardes conservent déjà les deltas par clé 3D (jalon 7, fait).
 
 ## 9. Jalons
 | # | Jalon | État |
@@ -157,7 +164,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 | 6c | Contamination, mutants, expériences ratées, capacités qui agissent | fait |
 | 6d | `SUMMON`, `RAISE`, `STEALTH`, `BLIND_HEARING`, `SWIM`, `AQUATIC`, `FLY`, `SPORE`, pathfinding nautique, faune marine, uniques, rattrapage de la faune | à faire |
 | 6 (loot) | Tables de loot par lieu | à faire |
-| 7 | Sauvegarde / chargement (seed + deltas) | à faire |
+| 7 | Sauvegarde / chargement (seed + deltas) | fait |
 | 8 | Finitions : étages jouables, portes/fenêtres, toits, carte du joueur, tuiles complètes | à faire |
 | 9 / 9b | Monde planétaire sans relief ; nage et noyade | fait |
 | 10 | Climats, îles, `zone` / `access`, pistes, scénario île | fait |
@@ -173,7 +180,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 - Reporté : neige (saisons), ferries/ponts entre continents, routes limitées à un continent, bateaux, vêtements mouillés, sous-sols des lieux 13 à 15.
 
 ## 10. Tests
-`test_worldgen_determinism.gd` (ordres de génération, villes, routes + perf, maisons, lieux, biomes, planète, arène, RNG, structure de TOUS les plans : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations), `test_swimming.gd`, `test_jalon10.gd` (climats, îles, zones, accès, pistes), `test_jalon11.gd` (zonage, bâtiments, port, aéroport), `test_jalon12.gd` (lieux sur la route), `test_jalon13.gd`, `test_jalon14.gd`, `test_jalon15.gd`, `test_vertical.gd` (étages), `test_spawn.gd`, `test_contamination.gd` (voir `MONSTER_SPAWN.md`), `test_pathfinder.gd`.
+`test_worldgen_determinism.gd` (ordres de génération, villes, routes + perf, maisons, lieux, biomes, planète, arène, RNG, structure de TOUS les plans : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations), `test_swimming.gd`, `test_save.gd` (sérialisation objet/inventaire, aller-retour complet monde + joueur, deltas de chunks, monstres, effets/infection, compatibilité, suppression ; à lancer via la scène `tests/test_save.tscn`, car il utilise les autoloads : `godot --headless --path <projet> res://tests/test_save.tscn`), `test_jalon10.gd` (climats, îles, zones, accès, pistes), `test_jalon11.gd` (zonage, bâtiments, port, aéroport), `test_jalon12.gd` (lieux sur la route), `test_jalon13.gd`, `test_jalon14.gd`, `test_jalon15.gd`, `test_vertical.gd` (étages), `test_spawn.gd`, `test_contamination.gd` (voir `MONSTER_SPAWN.md`), `test_pathfinder.gd`.
 
 ## 11. Risques et limites
 - **Échelle** : un continent de 30 000 cases est énorme à pied (marche automatique indispensable) ; à valider à l'œil avec la mini-carte.
@@ -184,4 +191,5 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 - Villes séparées par un grand lac : peuvent rester sans route ; routes en escalier (pas de pénalité de virage).
 - **Lieux** : le port n'est pas orienté vers la mer ; pas d'unicité (plusieurs mairies possibles) ; le poste-frontière n'est qu'un poste au bout d'un pont de rivière ou de lac ; les barrières sont des `t_fence` et un carré de plancher apparaît sous les véhicules posés sur la route ; le porte-avions n'a pas de rambarde (on y monte à la nage) ; `hydro_dam` n'est pas orienté selon le courant ; `lighthouse_island` peut retirer un spot au scénario île ; le volcan est décoratif (lave infranchissable, sans dégâts) ; l'oasis n'a pas d'eau douce spécifique ; pas de neige (pistes de ski en mousse) ; grotte et temples sans intérieur souterrain avant le jalon 8 ; `bunker_entrance` (jalon 10) coexiste avec `bunker` (jalon 13).
 - **Affichage** : pistes absentes de la mini-carte de debug ; piste limitée à la région du lieu et 12 cellules ; île sans route ni ville ; la mini-carte et le mode regard n'affichent pas le type de bâtiment (`SettlementMap.lot_plan_id(cellule)` est prêt).
+- **Sauvegarde** : écrasement non atomique (une coupure pendant l'écriture peut laisser un dossier partiel) ; pas de sauvegarde automatique ni d'export/import de fichier ; une sauvegarde d'un autre `generator_version` est refusée sans migration ; les deltas ne couvrent que les chunks marqués modifiés (toute modification faite hors des API de `ChunkManager` doit être marquée).
 - Hors périmètre : météo, saisons, éclairage jour/nuit, hordes errantes, véhicules, rivières navigables, multijoueur, mods.

@@ -137,3 +137,34 @@ func _turn() -> void:
 	if player.dead and world != null:
 		world.spawn_monster(MonsterData.zombie(), cell)
 		EventBus.message_logged.emit("Un zombie se relève à l'endroit où vous êtes tombé.")
+
+
+## État de l'infection, copié pour la sauvegarde.
+static func snapshot() -> Dictionary:
+	if _current == null:
+		return {}
+	return {
+		"active": _current.active,
+		"progress": _current.progress,
+		"stage": _current.stage,
+		"carry": _current._carry,
+	}
+
+
+## Détache le gestionnaire courant (nouvelle partie ou chargement).
+static func reset() -> void:
+	if _current != null and EventBus.time_advanced.is_connected(_current._on_time):
+		EventBus.time_advanced.disconnect(_current._on_time)
+	_current = null
+
+
+## Réapplique l'infection sauvegardée au joueur donné.
+static func restore(target: Player, data: Dictionary) -> void:
+	reset()
+	if target == null or not bool(data.get("active", false)):
+		return
+	var inf: Infection = of(target)
+	inf.active = true
+	inf.progress = clampf(float(data.get("progress", 0.0)), 0.0, 1.0)
+	inf.stage = stage_for(inf.progress)
+	inf._carry = float(data.get("carry", 0.0))

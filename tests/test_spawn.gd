@@ -214,6 +214,9 @@ func _check_persistence(world_seed: int) -> void:
 		return
 	_check(world.chunks.is_populated(ChunkManager.key_of(spawn)), "le chunk du départ est marqué peuplé")
 
+	# Les chunks lointains ne doivent pas ajouter de monstres à la réserve : on les peuple à zéro.
+	# Les chunks du départ, déjà peuplés, ne sont pas affectés.
+	world.population = 0.0
 	world.chunks.update_around(far)  # tout le départ est déchargé
 	_check(world.chunks.stored_monster_count() == before.size() and not _signature(world).has(before[0]),
 		"déchargement : les %d monstres sont en réserve et quittent le monde" % before.size())
