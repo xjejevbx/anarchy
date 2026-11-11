@@ -207,6 +207,7 @@ static func player_to_dict(player: Player) -> Dictionary:
 		"avoid_scenery": player.avoid_scenery,
 		"inventory": player.inventory.to_dict(),
 		"pending_drops": pending,
+		"map_markers": _markers_to_arrays(player.map_markers),
 		"status_effects": StatusEffects.snapshot(),
 		"infection": Infection.snapshot(),
 	}
@@ -249,6 +250,12 @@ static func apply_player(player: Player, data: Dictionary) -> void:
 				"item": Item.from_dict(item_data),
 				"cell": World.cell_from_data(entry.get("cell", []), cell),
 			})
+	# Champ ajouté au jalon 8 : les anciennes sauvegardes n'en ont pas (liste vide).
+	player.map_markers.clear()
+	for entry: Variant in data.get("map_markers", []):
+		if entry is Array and (entry as Array).size() >= 3:
+			var marker: Array = entry
+			player.map_markers[Vector3i(int(marker[0]), int(marker[1]), int(marker[2]))] = true
 	StatusEffects.restore(player, data.get("status_effects", {}))
 	Infection.restore(player, data.get("infection", {}))
 	player.clear_target()
@@ -267,6 +274,20 @@ static func delete_slot(slot: String) -> bool:
 
 
 # --- Internes ---
+
+static func _markers_to_arrays(markers: Dictionary) -> Array:
+	var out: Array = []
+	var keys: Array = markers.keys()
+	keys.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		if a.z != b.z:
+			return a.z < b.z
+		if a.y != b.y:
+			return a.y < b.y
+		return a.x < b.x)
+	for key: Vector3i in keys:
+		out.append([key.x, key.y, key.z])
+	return out
+
 
 static func _cells_to_arrays(cells: Array[Vector2i]) -> Array:
 	var out: Array = []

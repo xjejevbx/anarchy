@@ -13,6 +13,7 @@ signal inventory_requested  # touche i
 signal ground_requested     # touche g : cases à portée contenant des objets
 signal ground_all_requested # G (Maj+g) : les 9 cases à portée dans une seule liste
 signal minimap_requested     # touche m : mini-carte de debug
+signal map_requested         # touche p : carte du joueur (cases explorées et repères)
 signal character_requested   # touche c : écran du personnage (onglets : stats, corps...)
 signal posture_requested     # touche | : menu de choix de la posture (marche / sprint / accroupi)
 signal posture_changed(posture_name: String)

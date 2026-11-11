@@ -93,6 +93,7 @@ var zoom_index: int = ZOOM_START_INDEX
 var posture: int = Posture.WALK
 var stats: Dictionary = {}              # id de stat (data/stats.json) -> valeur
 var avoid_scenery: bool = true          # option « esquive automatique du décor » (menu |)
+var map_markers: Dictionary = {}        # Vector3i (x, y, z) -> true : repères posés sur la carte du joueur
 
 var _fg_sprite: String = ""
 var _held_key: Key = KEY_NONE
@@ -196,6 +197,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_do_repeatable_action(key)
 	elif KeyUtil.is_letter(key_event, "m"):  # lettre tapée (en AZERTY, le M n'est pas à la même place physique)
 		EventBus.minimap_requested.emit()
+	elif KeyUtil.is_letter(key_event, "p"):  # carte du joueur : cases explorées et repères
+		EventBus.map_requested.emit()
 	elif KeyUtil.is_letter(key_event, "c"):
 		EventBus.character_requested.emit()
 	elif key_event.unicode == 124:  # « | » (AltGr + 6 en AZERTY) : détecté par le caractère tapé
@@ -805,6 +808,23 @@ func _try_move(dir: Vector2i) -> void:
 func _use_stairs(direction: int) -> void:
 	if world.use_stairs(grid_pos, direction):
 		_perform_action("Escalier", MOVE_BASE_COST, 0.0)
+
+
+## Carte du joueur (touche p) : pose ou retire un repère sur `cell` à l'étage actif.
+## Renvoie true si le repère vient d'être posé, false s'il vient d'être retiré.
+func toggle_map_marker(cell: Vector2i) -> bool:
+	var level: int = world.get_level() if world != null else 0
+	var key := Vector3i(cell.x, cell.y, level)
+	if map_markers.has(key):
+		map_markers.erase(key)
+		return false
+	map_markers[key] = true
+	return true
+
+
+## Un repère est-il posé sur cette case de cet étage ?
+func has_map_marker(cell: Vector2i, level: int) -> bool:
+	return map_markers.has(Vector3i(cell.x, cell.y, level))
 
 
 ## Touche o : ouvre ou ferme une porte / fenêtre adjacente. La case dans la direction du dernier déplacement

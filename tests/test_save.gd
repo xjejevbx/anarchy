@@ -4,7 +4,7 @@ extends Node
 ## (scène et non `--script` : le test a besoin des autoloads GameClock / EventBus). Code de sortie 0 = tout est bon.
 ## Vérifie : sérialisation récursive des objets / inventaire / monstre, méta (seed 64 bits en chaîne, versions),
 ## deltas de terrain et de mobilier, objets au sol, joueur complet (PV, stamina, posture, zoom, stats, inventaire,
-## objets à poser, effets d'état, infection), monstres vivants restaurés (PV, temps d'action, orientation) et
+## objets à poser, repères de carte, effets d'état, infection), monstres vivants restaurés (PV, temps d'action, orientation) et
 ## monstres tués absents (chunk `populated` non repeuplé), puis suppression d'un emplacement.
 
 var _failures: int = 0
@@ -77,6 +77,7 @@ func _check_round_trip() -> void:
 	player.inventory.equip(Item.create("jacket_light"))
 	player.pending_drops.append({"item": Item.create("pipe"), "cell": spawn + Vector2i(1, 1)})
 	player.refresh_inventory()
+	player.map_markers[Vector3i(spawn.x + 2, spawn.y - 3, 0)] = true
 
 	StatusEffects.apply(player, {"id": "bleed", "chance": 1.0, "duration": 30.0, "dps": 0.5, "stamina": 0.0, "part": "arm_l"}, "arm_l")
 	Infection.infect(player)
@@ -163,6 +164,8 @@ func _check_round_trip() -> void:
 		"inventaire : vêtement équipé restauré")
 	_check(loaded_player.pending_drops.size() == 1 and (loaded_player.pending_drops[0]["item"] as Item).id == "pipe",
 		"objets en attente d'être posés restaurés")
+	_check(loaded_player.map_markers.has(Vector3i(spawn.x + 2, spawn.y - 3, 0)),
+		"repères de la carte du joueur restaurés")
 	var effects: Dictionary = StatusEffects.snapshot()
 	_check(effects.has("bleed") and is_equal_approx(float((effects["bleed"] as Dictionary)["remaining"]), 30.0),
 		"effets d'état restaurés")
