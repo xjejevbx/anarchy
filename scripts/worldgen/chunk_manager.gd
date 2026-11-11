@@ -456,6 +456,35 @@ func terrain_index(cell: Vector2i) -> int:
 	return -1 if chunk == null else chunk.terrain[index_of(cell)]
 
 
+## Terrain d'une case à un étage donné, MÊME si cet étage n'est pas chargé : lit le delta sauvegardé s'il existe,
+## sinon régénère le chunk (fonction pure). Sert à valider une arrivée par escalier avant de changer d'étage.
+func terrain_at_level(cell: Vector2i, z: int) -> int:
+	var key: Vector3i = key_of(cell, z)
+	var index: int = index_of(cell)
+	if z == level:
+		var chunk := chunks.get(key) as Chunk
+		if chunk != null:
+			return chunk.terrain[index]
+	var delta: Dictionary = _terrain_deltas.get(key, {})
+	if delta.has(index):
+		return int(delta[index])
+	return ChunkGenerator.generate(world_seed, key, arena)[index]
+
+
+## Mobilier d'une case à un étage donné, chargé ou non (même principe que terrain_at_level).
+func furniture_at_level(cell: Vector2i, z: int) -> int:
+	var key: Vector3i = key_of(cell, z)
+	var index: int = index_of(cell)
+	if z == level:
+		var chunk := chunks.get(key) as Chunk
+		if chunk != null:
+			return chunk.furniture[index]
+	var delta: Dictionary = _furniture_deltas.get(key, {})
+	if delta.has(index):
+		return int(delta[index])
+	return ChunkGenerator.generate_furniture(world_seed, key, arena)[index]
+
+
 func has_terrain(cell: Vector2i) -> bool:
 	return chunk_at(cell) != null
 

@@ -138,6 +138,34 @@ func change_level(new_level: int) -> void:
 	update_fov()
 
 
+## Liaison verticale de la case de l'étage ACTIF : -1 (descente), +1 (montée), 0 (pas un escalier).
+func stair_link(cell: Vector2i) -> int:
+	if not chunks.has_terrain(cell):
+		return 0
+	return TerrainDB.z_link(chunks.terrain_index(cell))
+
+
+## Utilise l'escalier de `cell` : `direction` -1 pour descendre, +1 pour monter. L'étage voisin doit porter
+## l'escalier inverse à la même case ; sinon rien ne se passe (message). Renvoie true si l'étage a changé.
+func use_stairs(cell: Vector2i, direction: int) -> bool:
+	if direction != -1 and direction != 1:
+		return false
+	var link: int = stair_link(cell)
+	if link == 0 or signi(link) != direction:
+		EventBus.message_logged.emit("Vous n'êtes pas sur un escalier.")
+		return false
+	var target_level: int = get_level() + link
+	var target_terrain: int = chunks.terrain_at_level(cell, target_level)
+	var target_furniture: int = chunks.furniture_at_level(cell, target_level)
+	if TerrainDB.z_link(target_terrain) != -link or not TerrainDB.is_walkable(target_terrain) \
+			or not FurnitureDB.is_walkable(target_furniture):
+		EventBus.message_logged.emit("L'escalier ne mène nulle part.")
+		return false
+	change_level(target_level)
+	EventBus.message_logged.emit("Vous descendez." if link < 0 else "Vous montez.")
+	return true
+
+
 func _ground_dict() -> Dictionary:
 	return _ground_dict_of(get_level())
 

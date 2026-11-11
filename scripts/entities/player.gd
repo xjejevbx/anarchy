@@ -183,6 +183,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	var zoom_step: int = _zoom_direction(key_event)
 	if zoom_step != 0:
 		_change_zoom(zoom_step)
+	elif key_event.unicode == 62:  # « > » : descendre l'escalier de la case (Maj + . en QWERTY, à traiter avant l'attente)
+		_use_stairs(-1)
+	elif key_event.unicode == 60:  # « < » : monter l'escalier de la case
+		_use_stairs(1)
 	elif MOVE_KEYS.has(key) or WAIT_KEYS.has(key):
 		_held_key = key  # avant l'action : elle peut interrompre la répétition
 		_repeat_timer = REPEAT_DELAY
@@ -773,6 +777,12 @@ func _try_move(dir: Vector2i) -> void:
 	Fx.footstep(world, from_cell, grid_pos, posture == Posture.SPRINT, posture == Posture.CROUCH, was_swimming, swimming)
 	var time_factor: float = 1.0 if swimming else POSTURE_TIME_FACTOR[posture]  # on nage à la même vitesse quelle que soit la posture
 	_perform_action("Nage" if swimming else "Déplacement", MOVE_BASE_COST * time_factor, get_move_stamina_delta())
+
+
+## Monte ou descend l'escalier de la case du joueur (voir World.use_stairs) ; coûte une action si l'étage change.
+func _use_stairs(direction: int) -> void:
+	if world.use_stairs(grid_pos, direction):
+		_perform_action("Escalier", MOVE_BASE_COST, 0.0)
 
 
 func _attack(monster: Monster) -> void:

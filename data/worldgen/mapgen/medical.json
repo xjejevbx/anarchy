@@ -1,5 +1,5 @@
 {
- "_doc": "Plans medicaux (jalon 6b) : urban_hospital, urban_clinic, urban_nursing_home, urban_garage. Batiments de VILLE d'UNE cellule, poses sur les parcelles selon le zonage de towns.json. Meme format que houses.json (24 x 24 caracteres, facade au SUD, tournee par le jeu). Caracteres : '#' mur, '+' porte, 'w' fenetre, '_' sol, '=' trottoir, 'p' asphalte ; mobilier : q lit d'hopital, g brancard, x table d'operation, m tiroir de morgue, c chaise, D bureau, k comptoir, F frigo, t table, R rayonnage, H machine lourde. Les plans d'etage (sous-sols) se nommeront \"<id>@-1\". Regles verifiees par tests/test_worldgen_determinism.gd : murs dans le chunk (lignes et colonnes 1 a 22), une seule porte sur la rangee la plus basse, tout le sol atteignable depuis la case devant elle.",
+ "_doc": "Plans medicaux (jalon 6b) : urban_hospital, urban_clinic, urban_nursing_home, urban_garage. Batiments de VILLE d'UNE cellule, poses sur les parcelles selon le zonage de towns.json. Meme format que houses.json (24 x 24 caracteres, facade au SUD, tournee par le jeu). Caracteres : '#' mur, '+' porte, 'w' fenetre, '_' sol, '=' trottoir, 'p' asphalte ; mobilier : q lit d'hopital, g brancard, x table d'operation, m tiroir de morgue, c chaise, D bureau, k comptoir, F frigo, t table, R rayonnage, H machine lourde. Escaliers (jalon 8) : '>' descente, '<' montee ; le sous-sol \"urban_hospital@-1\" place sa montee au meme endroit que la descente de l'hopital (morgue). Regles verifiees par tests/test_worldgen_determinism.gd : murs dans le chunk (lignes et colonnes 1 a 22), une seule porte sur la rangee la plus basse, tout le sol atteignable depuis la case devant elle.",
  "palette": {
   ".": {},
   "#": {"terrain": "t_wall_house"},
@@ -18,7 +18,9 @@
   "F": {"terrain": "t_floor", "furniture": "f_fridge"},
   "t": {"terrain": "t_floor", "furniture": "f_table"},
   "R": {"terrain": "t_floor", "furniture": "f_rack"},
-  "H": {"terrain": "t_floor", "furniture": "f_machinery_heavy"}
+  "H": {"terrain": "t_floor", "furniture": "f_machinery_heavy"},
+  ">": {"terrain": "t_stairs_down"},
+  "<": {"terrain": "t_stairs_up"}
  },
  "plans": [
   {"id": "urban_hospital", "rows": [
@@ -37,7 +39,7 @@
    "..#__________________#..",
    "..###+########+#######..",
    "..#_______#__________#..",
-   "..#_mmmmm_+_c_c__c_c_#..",
+   "..#_mmmmm>+_c_c__c_c_#..",
    "..#_mmmmm_#_c_c__c_c_#..",
    "..####w####w##+##w####..",
    "..............=.........",
@@ -46,6 +48,32 @@
    "..............=.........",
    "..............=.........",
    "..............=........."
+  ]},
+  {"id": "urban_hospital@-1", "rows": [
+   "........................",
+   "........................",
+   "..####################..",
+   "..#__________________#..",
+   "..#_mmmmm___HHHH_____#..",
+   "..#_mmmmm___HHHH_____#..",
+   "..#__________________#..",
+   "..#__RRRR____________#..",
+   "..#__RRRR____________#..",
+   "..#__________________#..",
+   "..#__________________#..",
+   "..#__________________#..",
+   "..#__________________#..",
+   "..#__________________#..",
+   "..#__________________#..",
+   "..#______<___________#..",
+   "..#__________________#..",
+   "..#__HHHH____RRRR____#..",
+   "..#########+##########..",
+   "..#__________________#..",
+   "..####################..",
+   "........................",
+   "........................",
+   "........................"
   ]},
   {"id": "urban_clinic", "rows": [
    "........................",

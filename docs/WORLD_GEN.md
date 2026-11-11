@@ -145,11 +145,13 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 | `ChunkManager` | `set_level(z)` décharge l'ancien étage ; `chunk_at` sur l'étage actif |
 | Monstres | `Monster.z` ; réserve par clé 3D |
 | Objets au sol | `World._ground_by_level` |
-| `World` | `get_level()`, `change_level(z)` |
+| `World` | `get_level()`, `change_level(z)`, `stair_link(cell)`, `use_stairs(cell, direction)` |
 
-**Plans d'étage** : un plan `"<id du plan de surface>@<z>"` (ex. `urban_hospital@-1`), dans n'importe quel fichier de `mapgen/`, est l'étage de ce plan (`ChunkGenerator.level_plan`, même rotation que la surface) ; ses `.` gardent la roche / le vide. Escalier : `t_stairs_down` sur le plan de surface et `t_stairs_up` au même endroit sur `@-1`. Aucun plan d'étage n'existe encore.
+**Plans d'étage** : un plan `"<id du plan de surface>@<z>"` (ex. `urban_hospital@-1`), dans n'importe quel fichier de `mapgen/`, est l'étage de ce plan (`ChunkGenerator.level_plan`, même rotation que la surface) ; ses `.` gardent la roche / le vide. Escalier : `t_stairs_down` sur le plan de surface et `t_stairs_up` au même endroit sur `@-1`.
 
-**Reste (jalon 8)** : utiliser un escalier (`z_link`) pour appeler `change_level` ; plans d'étage (sous-sols du bunker, silo, labo, hôpital) ; toits et vue des étages voisins ; `MiniMapUI` et `LookUI` lisent la surface. Les sauvegardes conservent déjà les deltas par clé 3D (jalon 7, fait).
+**Premier étage jouable (jalon 8)** : `urban_hospital@-1` (morgue, réserves, chaufferie) dans `medical.json`. La descente est dans la morgue de l'hôpital, case locale `(9, 15)` ; la montée du sous-sol occupe la même case. Le joueur utilise l'escalier avec `<` (monter) / `>` (descendre) ; `World.use_stairs` vérifie que l'étage voisin porte bien l'escalier inverse avant de changer d'étage. Le changement coûte une action (les monstres du nouvel étage agissent), les monstres de l'ancien passent en réserve, les objets au sol et les deltas restent rangés par clé 3D.
+
+**Reste (jalon 8)** : sous-sols des autres lieux (bunker, silo, labo, clinique...), portes et fenêtres actionnables, toits et vue des étages voisins, `MiniMapUI` et `LookUI` lisent la surface, tuiles complètes. Les sauvegardes conservent déjà les deltas par clé 3D (jalon 7, fait).
 
 ## 9. Jalons
 | # | Jalon | État |
@@ -165,7 +167,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 | 6d | `SUMMON`, `RAISE`, `STEALTH`, `BLIND_HEARING`, `SWIM`, `AQUATIC`, `FLY`, `SPORE`, pathfinding par domaine, faune marine, uniques, rattrapage de la faune | fait |
 | 6 (loot) | Tables de loot par lieu | à faire |
 | 7 | Sauvegarde / chargement (seed + deltas) | fait |
-| 8 | Finitions : étages jouables, portes/fenêtres, toits, carte du joueur, tuiles complètes | à faire |
+| 8 | Finitions : étages jouables, portes/fenêtres, toits, carte du joueur, tuiles complètes | en cours (escaliers et sous-sol d'hôpital faits) |
 | 9 / 9b | Monde planétaire sans relief ; nage et noyade | fait |
 | 10 | Climats, îles, `zone` / `access`, pistes, scénario île | fait |
 | 11 | Zonage urbain (14 bâtiments), port, aéroport | fait |

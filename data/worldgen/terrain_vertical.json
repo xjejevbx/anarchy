@@ -1,5 +1,5 @@
 {
-    "_doc": "Terrains de l'axe vertical (jalon 6b), ajoutes APRES ceux de terrain.json (l'index suit l'ordre de chargement des fichiers, max 255 en tout). t_rock : roche pleine, remplit tout etage z < 0 sans plan. t_air : vide, remplit tout etage z > 0 sans plan. t_stairs_up / t_stairs_down : connects_z = +1 / -1 (liaison vers l'etage voisin ; le changement d'etage lui-meme viendra au jalon 8). Un lieu definit ses etages avec des plans nommes \"<id du plan de surface>@<z>\" (ex. \"urban_hospital@-1\") : ChunkGenerator les superpose a la roche ou au vide.",
+    "_doc": "Terrains de l'axe vertical (jalon 6b), ajoutes APRES ceux de terrain.json (l'index suit l'ordre de chargement des fichiers, max 255 en tout). t_rock : roche pleine, remplit tout etage z < 0 sans plan. t_air : vide, remplit tout etage z > 0 sans plan. t_stairs_up / t_stairs_down : connects_z = +1 / -1 (liaison vers l'etage voisin, utilisee par World.use_stairs depuis le jalon 8 : touches < et >). Un lieu definit ses etages avec des plans nommes \"<id du plan de surface>@<z>\" (ex. \"urban_hospital@-1\") : ChunkGenerator les superpose a la roche ou au vide.",
     "terrains": {
         "t_rock": {
             "name": "Roche",

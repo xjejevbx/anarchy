@@ -2,8 +2,8 @@ extends SceneTree
 ## Test de l'axe vertical (préparation des étages, jalon 6b). À lancer à la demande :
 ##   godot --headless --path <projet> --script res://tests/test_vertical.gd
 ## Code de sortie 0 = tout est bon. Vérifie : terrains verticaux, étages sans plan (roche sous la surface, vide au-dessus), hook des plans
-## d'étage, RNG à 4 coordonnées compatible avec l'existant, un seul étage chargé à la fois (ChunkManager.level), monstres et objets au sol
-## rangés par étage.
+## d'étage, escaliers (descente / montée à la même case, refus hors escalier), RNG à 4 coordonnées compatible avec l'existant, un seul étage
+## chargé à la fois (ChunkManager.level), monstres et objets au sol rangés par étage.
 
 var _failures: int = 0
 
@@ -12,6 +12,7 @@ func _initialize() -> void:
 	_check_terrains()
 	_check_rng()
 	_check_levels()
+	_check_stairs()
 	_check_manager(WorldRng.seed_from_text("cataclysme"))
 	print("RÉSULTAT : %s (%d échec(s))" % ["OK" if _failures == 0 else "ÉCHEC", _failures])
 	quit(_failures)
@@ -53,17 +54,70 @@ func _check_levels() -> void:
 		for base in keys:
 			var below := Vector3i(base.x, base.y, -1)
 			var above := Vector3i(base.x, base.y, 1)
-			_check(_all_equal(ChunkGenerator.generate(world_seed, below), rock), "seed %d %s : étage -1 sans plan = roche pleine" % [world_seed, base])
+			var below_data: PackedByteArray = ChunkGenerator.generate(world_seed, below)
+			var below_plan: Dictionary = ChunkGenerator.level_plan(world_seed, below)
+			if below_plan.is_empty():
+				_check(_all_equal(below_data, rock), "seed %d %s : étage -1 sans plan = roche pleine" % [world_seed, base])
+				_check(_all_equal(ChunkGenerator.generate_furniture(world_seed, below), 0), "seed %d %s : pas de mobilier dans la roche" % [world_seed, base])
+			else:
+				_check(not _all_equal(below_data, rock), "seed %d %s : plan d'étage superposé à la roche" % [world_seed, base])
 			_check(_all_equal(ChunkGenerator.generate(world_seed, Vector3i(base.x, base.y, -5)), rock), "seed %d %s : étage -5 = roche pleine" % [world_seed, base])
 			_check(_all_equal(ChunkGenerator.generate(world_seed, above), air), "seed %d %s : étage +1 sans plan = vide" % [world_seed, base])
 			_check(not _all_equal(ChunkGenerator.generate(world_seed, base), rock), "seed %d %s : la surface n'est pas de la roche" % [world_seed, base])
-			_check(_all_equal(ChunkGenerator.generate_furniture(world_seed, below), 0), "seed %d %s : pas de mobilier dans la roche" % [world_seed, base])
 			_check(ChunkGenerator.fingerprint(world_seed, below) == ChunkGenerator.fingerprint(world_seed, below), "seed %d %s : étage répétable" % [world_seed, base])
-			_check(ChunkGenerator.level_plan(world_seed, below).is_empty(), "seed %d %s : aucun plan d'étage défini pour l'instant" % [world_seed, base])
 			_check(SpawnGenerator.generate(world_seed, below, ChunkGenerator.generate(world_seed, below), PackedByteArray()).is_empty(), "seed %d %s : aucun monstre généré dans la roche" % [world_seed, base])
-	# Convention des plans d'étage : « <id>@<z> » (aucun n'existe encore : on vérifie seulement la recherche).
-	_check(MapgenDB.plan_by_id("urban_hospital@-1") < 0, "aucun plan « urban_hospital@-1 » pour l'instant")
+	# Convention des plans d'étage : « <id>@<z> ».
+	_check(MapgenDB.plan_by_id("urban_hospital@-1") >= 0, "plan de sous-sol « urban_hospital@-1 » défini")
 	_check(MapgenDB.plan_by_id("urban_hospital") >= 0, "le plan de surface existe")
+
+
+## Escaliers (jalon 8) : la descente de l'hôpital et la montée du sous-sol occupent la MÊME case du plan,
+## puis un monde réel descend et remonte par deltas de terrain (sans dépendre de l'emplacement des hôpitaux).
+func _check_stairs() -> void:
+	var surface_plan: int = MapgenDB.plan_by_id("urban_hospital")
+	var basement_plan: int = MapgenDB.plan_by_id("urban_hospital@-1")
+	_check(surface_plan >= 0 and basement_plan >= 0, "plans d'escalier de l'hôpital présents")
+	if surface_plan < 0 or basement_plan < 0:
+		return
+	var stair := Vector2i(9, 15)
+	var plan_index: int = stair.y * Chunk.SIZE + stair.x
+	_check(TerrainDB.z_link(MapgenDB.terrain_at(surface_plan, plan_index)) == -1, "hôpital : descente à la case (9, 15)")
+	_check(TerrainDB.z_link(MapgenDB.terrain_at(basement_plan, plan_index)) == 1, "sous-sol : montée à la même case (9, 15)")
+
+	var world_seed: int = WorldRng.seed_from_text("cataclysme")
+	var world := World.new()
+	world.world_seed = world_seed
+	root.add_child(world)
+	var cell: Vector2i = SettlementMap.for_seed(world_seed).spawn_cell() + Vector2i(1, 0)
+	world.chunks.update_around(cell)
+	var down: int = TerrainDB.index_of("t_stairs_down")
+	var up: int = TerrainDB.index_of("t_stairs_up")
+	world.chunks.set_terrain(cell, down)
+	world.chunks.set_level(-1)
+	world.chunks.update_around(cell)
+	world.chunks.set_terrain(cell, up)
+	world.chunks.set_level(0)
+	world.chunks.update_around(cell)
+	_check(world.stair_link(cell) == -1, "surface : la case porte une descente")
+	_check(not world.use_stairs(cell, 1), "surface : monter est refusé")
+	var player := Player.new()
+	player.world = world
+	player.grid_pos = cell
+	world.player = player
+	world.add_entity(player)
+	var before: float = GameClock.elapsed_points
+	player._use_stairs(-1)
+	_check(world.get_level() == -1, "le joueur est passé à l'étage -1")
+	_check(GameClock.elapsed_points > before, "le changement d'étage coûte une action")
+	_check(world.stair_link(cell) == 1, "sous-sol : la case porte une montée")
+	_check(not world.use_stairs(cell, -1), "sous-sol : descendre est refusé")
+	before = GameClock.elapsed_points
+	player._use_stairs(1)
+	_check(world.get_level() == 0, "le joueur est revenu à la surface")
+	_check(GameClock.elapsed_points > before, "la remontée coûte une action")
+	var plain: Vector2i = cell + Vector2i(1, 0)
+	_check(not world.use_stairs(plain, -1), "une case sans escalier est refusée")
+	world.queue_free()
 
 
 func _signature(world: World) -> Array[String]:
@@ -97,7 +151,9 @@ func _check_manager(world_seed: int) -> void:
 	_check(world.get_level() == -1 and world.monsters.is_empty(), "étage -1 : aucun monstre de la surface (en réserve)")
 	_check(world.chunks.stored_monster_count() == before.size(), "les monstres de la surface sont en réserve (%d)" % world.chunks.stored_monster_count())
 	_check(world.get_ground_items(item_cell).is_empty(), "étage -1 : l'objet posé à la surface n'y est pas")
-	_check(not world.is_walkable(spawn) and world.is_opaque(spawn), "étage -1 : la case sous le départ est de la roche")
+	var spawn_below := Vector3i(ChunkManager.key_of(spawn).x, ChunkManager.key_of(spawn).y, -1)
+	if ChunkGenerator.level_plan(world_seed, spawn_below).is_empty():
+		_check(not world.is_walkable(spawn) and world.is_opaque(spawn), "étage -1 : la case sous le départ est de la roche")
 	world.add_ground_item(item_cell, Item.create("pipe"))
 	_check(world.get_ground_items(item_cell).size() == 1, "un objet posé à l'étage -1 y reste")
 
