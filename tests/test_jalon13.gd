@@ -16,6 +16,7 @@ const PLAN_IDS: Array[String] = [
 ## Plans de surface dotés d'un sous-sol (jalon 8) : le plan d'étage doit être retrouvé pour la cellule du lieu.
 const BASEMENTS: Dictionary = {
 	"bunker": "bunker@-1", "missile_silo": "missile_silo@-1", "lab_building": "lab_building@-1",
+	"base_hq": "base_hq@-1", "depot_hall": "depot_hall@-1",
 }
 const HALF_REGIONS: int = 3
 
@@ -112,7 +113,7 @@ func _check_places(seeds: Array[int]) -> void:
 		_check(bad_zone == 0, "seed %d : zone et climat respectés (%d anomalies)" % [world_seed, bad_zone])
 		_check(bad_access == 0, "seed %d : accès respectés (route devant la façade, héliport dans le plan) : %d anomalies" % [world_seed, bad_access])
 		_check(bad_track == 0, "seed %d : pistes continues de la porte à une route : %d anomalies" % [world_seed, bad_track])
-		_check(bad_basement == 0, "seed %d : plans d'étage retrouvés pour bunker / silo / labo : %d anomalies" % [world_seed, bad_basement])
+		_check(bad_basement == 0, "seed %d : plans d'étage retrouvés pour bunker / silo / labo / PC / dépôt : %d anomalies" % [world_seed, bad_basement])
 	for id in PLACE_SIZES:
 		var n: int = int(counts.get(id, 0))
 		if n == 0:

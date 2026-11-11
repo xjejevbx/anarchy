@@ -7,6 +7,10 @@ extends SceneTree
 const CLIMATE_HALF: int = 60000
 const CLIMATE_STEP: int = 3000
 const PLACE_HALF_REGIONS: int = 3   # régions de -3 à +3 (7 x 7)
+## Plans de surface dotés d'un sous-sol (jalon 8) : le plan d'étage doit être retrouvé pour la cellule du lieu.
+const BASEMENTS: Dictionary = {
+	"npp_reactor": "npp_reactor@-1",
+}
 
 var _failures: int = 0
 
@@ -139,6 +143,7 @@ func _check_places(seeds: Array[int]) -> void:
 		var bad_track: int = 0
 		var bad_terrain: int = 0
 		var terrain_checked: int = 0
+		var bad_basement: int = 0
 		var helipad: int = TerrainDB.index_of("t_helipad")
 		for ry in range(-PLACE_HALF_REGIONS, PLACE_HALF_REGIONS + 1):
 			for rx in range(-PLACE_HALF_REGIONS, PLACE_HALF_REGIONS + 1):
@@ -149,6 +154,17 @@ func _check_places(seeds: Array[int]) -> void:
 					var access: String = place["access"]
 					counts[id] = int(counts.get(id, 0)) + 1
 					access_counts[access] = int(access_counts.get(access, 0)) + 1
+					# Jalon 8 : les lieux à sous-sol doivent retrouver leur plan d'étage à la même cellule.
+					for cell: Vector2i in footprint:
+						var plan_info: Dictionary = settlement.special_plan(cell)
+						if plan_info.is_empty():
+							continue
+						var surface_id: String = MapgenDB.plan_id(int(plan_info["plan"]))
+						if not BASEMENTS.has(surface_id):
+							continue
+						var level: Dictionary = ChunkGenerator.level_plan(world_seed, Vector3i(cell.x, cell.y, -1))
+						if level.is_empty() or MapgenDB.plan_id(int(level["plan"])) != String(BASEMENTS[surface_id]):
+							bad_basement += 1
 					if not specials.zone_ok(id, footprint):
 						bad_zone += 1
 					if not specials.climate_ok(id, footprint):
@@ -191,6 +207,7 @@ func _check_places(seeds: Array[int]) -> void:
 		_check(bad_access == 0, "seed %d : accès respectés (route, jetée sur l'eau, héliport dans le plan) : %d anomalies" % [world_seed, bad_access])
 		_check(bad_track == 0, "seed %d : pistes continues de la porte du lieu à une route, connexions symétriques : %d anomalies" % [world_seed, bad_track])
 		_check(bad_terrain == 0, "seed %d : cellules de piste dessinées en terre au centre (%d contrôlées) : %d anomalies" % [world_seed, terrain_checked, bad_terrain])
+		_check(bad_basement == 0, "seed %d : plans d'étage retrouvés pour la centrale : %d anomalies" % [world_seed, bad_basement])
 	for id in ["bunker_entrance", "desert_outpost", "lighthouse", "hermit_cabin", "oil_platform"]:
 		var n: int = int(counts.get(id, 0))
 		if n == 0:

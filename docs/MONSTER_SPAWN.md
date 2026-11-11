@@ -212,8 +212,8 @@ Implémenté : un unique est tiré au plus une fois par chunk, par la règle `un
 
 ## 16. Plans, mobilier, terrains à créer
 
-- **Fait (6b)** : plans `urban_hospital`, `urban_clinic`, `urban_nursing_home`, `urban_garage` (`medical.json`) ; mobilier `f_hospital_bed`, `f_gurney`, `f_surgery_table`, `f_morgue_drawer` (`furniture_medical.json`) ; terrains `t_rock`, `t_air`, escaliers.
-- **Reste** : mobilier `f_cell_bed`, `f_quarantine_bed`, `f_lab_table`, `f_cryo_pod`, `f_cage`, `f_vat`, `f_server`, `f_garage_pit` ; plans d'étage (`<id>@-1`...) pour hôpital, bunker, silo, labo ; marqueur de spawn optionnel dans la palette des plans (`"spawn": "<groupe>"`) pour les scènes que les affinités ne couvrent pas. La limite de 255 meubles n'est pas en danger.
+- **Fait (6b)** : plans `urban_hospital`, `urban_clinic`, `urban_nursing_home`, `urban_garage` (`medical.json`) ; mobilier `f_hospital_bed`, `f_gurney`, `f_surgery_table`, `f_morgue_drawer` (`furniture_medical.json`) ; terrains `t_rock`, `t_air`, escaliers. Depuis le jalon 8 : sous-sols `urban_hospital@-1`, `urban_clinic@-1`, `bunker@-1`, `missile_silo@-1`, `lab_building@-1`, `npp_reactor@-1`, `base_hq@-1`, `depot_hall@-1`, `cave@-1`.
+- **Reste** : mobilier `f_cell_bed`, `f_quarantine_bed`, `f_lab_table`, `f_cryo_pod`, `f_cage`, `f_vat`, `f_server`, `f_garage_pit` ; marqueur de spawn optionnel dans la palette des plans (`"spawn": "<groupe>"`) pour les scènes que les affinités ne couvrent pas. La limite de 255 meubles n'est pas en danger.
 - **Sprites** : `MISSING_SPRITE.md`.
 
 ## 17. Tests

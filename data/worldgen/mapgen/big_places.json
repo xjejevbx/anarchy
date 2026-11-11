@@ -1,5 +1,5 @@
 {
- "_doc": "Plans des grands lieux (jalon 5) : centrale nucleaire (3 x 3), cabane, camping, cimetiere, chapelle, ranch, entrepot, usine, station d'epuration, poste electrique. Meme format que places.json (24 x 24 caracteres, facade au SUD, tournee par le jeu vers la route). Ici : 'f' cloture, 'x' beton, 'W' bassin (eau profonde), 'g' tombe, 'N' coeur de reacteur, 'C' console, 'M' machine (le mobilier d'exterieur repose sur un carreau de sol). Les batiments tiennent dans leur chunk (murs aux lignes et colonnes 1 a 22) et chaque porte de facade est reliee par un chemin (terre ou asphalte) au bord de la cellule.",
+ "_doc": "Plans des grands lieux (jalon 5) : centrale nucleaire (3 x 3), cabane, camping, cimetiere, chapelle, ranch, entrepot, usine, station d'epuration, poste electrique. Meme format que places.json (24 x 24 caracteres, facade au SUD, tournee par le jeu vers la route). Ici : 'f' cloture, 'x' beton, 'W' bassin (eau profonde), 'g' tombe, 'N' coeur de reacteur, 'C' console, 'M' machine (le mobilier d'exterieur repose sur un carreau de sol). Escaliers (jalon 8) : '>' descente, '<' montee ; le sous-sol \"npp_reactor@-1\" place sa montee au meme endroit que la descente du reacteur. Les batiments tiennent dans leur chunk (murs aux lignes et colonnes 1 a 22) et chaque porte de facade est reliee par un chemin (terre ou asphalte) au bord de la cellule.",
  "palette": {
   ".": {},
   "#": {"terrain": "t_wall_house"},
@@ -26,7 +26,9 @@
   "U": {"terrain": "t_floor", "furniture": "f_bathtub"},
   "R": {"terrain": "t_floor", "furniture": "f_rack"},
   "C": {"terrain": "t_floor", "furniture": "f_console"},
-  "M": {"terrain": "t_floor", "furniture": "f_machinery_light"}
+  "M": {"terrain": "t_floor", "furniture": "f_machinery_light"},
+  ">": {"terrain": "t_stairs_down"},
+  "<": {"terrain": "t_stairs_up"}
  },
  "plans": [
   {"id": "npp_turbine", "rows": [
@@ -147,7 +149,7 @@
    "..#_C____NNNNNN____C_#..",
    "..#_C____NNNNNN____C_#..",
    "..#__________________#..",
-   "..#__________________#..",
+   "..#________>_________#..",
    "..w__________________w..",
    "..#__________________#..",
    "..#_MMM__________MMM_#..",
@@ -158,6 +160,32 @@
    "..........ppp...........",
    "..........ppp...........",
    "..........ppp..........."
+  ]},
+  {"id": "npp_reactor@-1", "rows": [
+   "........................",
+   "........................",
+   "..####################..",
+   "..#xxxxxxxxxxxxxxxxxx#..",
+   "..#xxxNNNNNNNNNNNNxxx#..",
+   "..#xxxNNNNNNNNNNNNxxx#..",
+   "..#xxxNNNNNNNNNNNNxxx#..",
+   "..#xxxNNNNNNNNNNNNxxx#..",
+   "..#xxxxxxxxxxxxxxxxxx#..",
+   "..#xxWWWWWxxxxMMMMMxx#..",
+   "..#xxWWWWWxxxxMMMMMxx#..",
+   "..#xxWWWWWxxxxMMMMMxx#..",
+   "..#xxxxxxxxxxxxxxxxxx#..",
+   "..#xxxxxxxx<xxxxxxxxx#..",
+   "..#xxRRRRxxxxCCCCCCxx#..",
+   "..#xxRRRRxxxxCCCCCCxx#..",
+   "..#xxxxxxxxxxxxxxxxxx#..",
+   "..#xxMMMxxxxxxxxMMMxx#..",
+   "..#xxxxxxxxxxxxxxxxxx#..",
+   "..####################..",
+   "........................",
+   "........................",
+   "........................",
+   "........................"
   ]},
   {"id": "npp_control", "rows": [
    "......................f.",

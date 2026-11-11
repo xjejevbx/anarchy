@@ -2,7 +2,7 @@ extends SceneTree
 ## Test de l'axe vertical (préparation des étages, jalon 6b). À lancer à la demande :
 ##   godot --headless --path <projet> --script res://tests/test_vertical.gd
 ## Code de sortie 0 = tout est bon. Vérifie : terrains verticaux, étages sans plan (roche sous la surface, vide au-dessus), hook des plans
-## d'étage, escaliers des paires hôpital / clinique / silo / labo / bunker (descente et montée à la même case, connectivité, refus hors
+## d'étage, escaliers des paires hôpital / clinique / silo / labo / bunker / réacteur / PC / dépôt / grotte (descente et montée à la même case, connectivité, refus hors
 ## escalier), RNG à 4 coordonnées compatible avec l'existant, un seul étage chargé à la fois (ChunkManager.level), monstres et objets au sol
 ## rangés par étage.
 
@@ -81,6 +81,10 @@ func _check_stairs() -> void:
 		["missile_silo", "missile_silo@-1", Vector2i(12, 15)],
 		["lab_building", "lab_building@-1", Vector2i(7, 15)],
 		["bunker", "bunker@-1", Vector2i(16, 10)],
+		["npp_reactor", "npp_reactor@-1", Vector2i(11, 13)],
+		["base_hq", "base_hq@-1", Vector2i(14, 14)],
+		["depot_hall", "depot_hall@-1", Vector2i(11, 16)],
+		["cave", "cave@-1", Vector2i(11, 11)],
 	]
 	for pair: Array in pairs:
 		_check_stair_pair(String(pair[0]), String(pair[1]), pair[2])

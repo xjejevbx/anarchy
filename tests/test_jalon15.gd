@@ -18,6 +18,10 @@ const PLAN_IDS: Array[String] = [
 	"arctic_hq", "arctic_pad", "temple", "nomad_camp",
 ]
 const HALF_REGIONS: int = 3
+## Plans de surface dotés d'un sous-sol (jalon 8) : le plan d'étage doit être retrouvé pour la cellule du lieu.
+const BASEMENTS: Dictionary = {
+	"cave": "cave@-1",
+}
 
 var _failures: int = 0
 
@@ -68,6 +72,7 @@ func _check_places(seeds: Array[int]) -> void:
 		var bad_climate: int = 0
 		var bad_access: int = 0
 		var bad_track: int = 0
+		var bad_basement: int = 0
 		for ry in range(-HALF_REGIONS, HALF_REGIONS + 1):
 			for rx in range(-HALF_REGIONS, HALF_REGIONS + 1):
 				for place: Dictionary in specials.region_places(Vector2i(rx, ry)):
@@ -78,6 +83,17 @@ func _check_places(seeds: Array[int]) -> void:
 					var footprint: Array = place["cells"]
 					var access: String = place["access"]
 					access_counts[access] = int(access_counts.get(access, 0)) + 1
+					# Jalon 8 : les lieux à sous-sol doivent retrouver leur plan d'étage à la même cellule.
+					for cell: Vector2i in footprint:
+						var plan_info: Dictionary = settlement.special_plan(cell)
+						if plan_info.is_empty():
+							continue
+						var surface_id: String = MapgenDB.plan_id(int(plan_info["plan"]))
+						if not BASEMENTS.has(surface_id):
+							continue
+						var level: Dictionary = ChunkGenerator.level_plan(world_seed, Vector3i(cell.x, cell.y, -1))
+						if level.is_empty() or MapgenDB.plan_id(int(level["plan"])) != String(BASEMENTS[surface_id]):
+							bad_basement += 1
 					if footprint.size() != int(PLACE_SIZES[id]):
 						bad_size += 1
 					if not specials.zone_ok(id, footprint):
@@ -109,6 +125,7 @@ func _check_places(seeds: Array[int]) -> void:
 		_check(bad_climate == 0, "seed %d : lieux par climat (froid / chaud) respectés (%d anomalies)" % [world_seed, bad_climate])
 		_check(bad_access == 0, "seed %d : accès respectés (route, héliport) : %d anomalies" % [world_seed, bad_access])
 		_check(bad_track == 0, "seed %d : pistes continues de la porte à une route : %d anomalies" % [world_seed, bad_track])
+		_check(bad_basement == 0, "seed %d : plan d'étage retrouvé pour la grotte : %d anomalies" % [world_seed, bad_basement])
 	for id in PLACE_SIZES:
 		var n: int = int(counts.get(id, 0))
 		if n == 0:
