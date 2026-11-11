@@ -54,7 +54,7 @@
   "zombie_predator": {"name": "Zombie prédateur", "hp": 70, "move_cost": 0.7, "detect_range": 20, "abilities": ["LEAP", "STEALTH"], "tags": ["zombie"],
    "attack": {"cost": 1.2, "damage": 11, "zones": "claw"}},
   "zombie_necro": {"name": "Nécromancien zombie", "hp": 60, "move_cost": 1.4, "abilities": ["RAISE"], "tags": ["zombie"], "attack": {"damage": 4}},
-  "zombie_master": {"name": "Maître zombie", "hp": 90, "move_cost": 1.3, "detect_range": 20, "abilities": ["SUMMON"], "tags": ["zombie"], "attack": {"damage": 6}},
+  "zombie_master": {"name": "Maître zombie", "hp": 90, "move_cost": 1.3, "detect_range": 20, "abilities": ["SUMMON"], "summons": ["zombie", "zombie_fast", "zombie_tough"], "tags": ["zombie"], "attack": {"damage": 6}},
 
   "zombie_pajamas": {"name": "Zombie en pyjama", "hp": 18, "move_cost": 1.3, "abilities": ["DORMANT"], "tags": ["zombie", "civil"], "attack": {"damage": 3}},
   "zombie_elder": {"name": "Zombie âgé", "hp": 14, "move_cost": 1.8, "tags": ["zombie", "civil"], "attack": {"damage": 3}},

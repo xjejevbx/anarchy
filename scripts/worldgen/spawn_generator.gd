@@ -14,10 +14,13 @@ extends RefCounted
 ## Chaque monstre reçoit un ÉTAT (sleep / idle / guard : part « dormant » de la règle, ou état par défaut du monstre) et 0 à 2 AFFIXES
 ## (règle `affix`, affixes de climat d'ecology.json pour les cases extérieures, « alpha » dans un groupe de 4 et plus).
 ## Aucune apparition : à moins de `safe_radius` cases d'un point sûr (départ du joueur), sur une porte ou devant une porte.
+## Jalon 6d : mode `water` (cases d'eau : monstres aquatiques ou nageurs), UNIQUES (règle `unique` : un monstre unique par lieu ou par chunk,
+## tiré par mix(seed, LAYER_SPAWN, chunk, hash(id)), jamais repeuplé), `salt` (autre tirage de la faune ambiante : migration, voir ChunkManager) et
+## `ambient_only` ; chaque entrée porte `ambient` (créée par la couche ambiante : elle migre, pas les monstres de lieu).
 ## Étages (z != 0) : aucun monstre pour l'instant (les règles `min_depth` des lieux à étages viendront avec le jalon 8).
 
 const GROUPS_PATHS: Array[String] = ["res://data/worldgen/spawn_groups.json", "res://data/worldgen/spawn_groups_places.json",
-	"res://data/worldgen/spawn_groups_contamination.json"]
+	"res://data/worldgen/spawn_groups_contamination.json", "res://data/worldgen/spawn_groups_aquatic.json"]
 const CONTAMINATION_TYPES: Array[String] = ["radiation", "toxic", "experiment", "fire", "cursed", "oil"]
 const SWARM_EXTRA_MIN: int = 2
 const SWARM_EXTRA_MAX: int = 4
@@ -27,7 +30,7 @@ const MAX_GROUP_DEPTH: int = 3
 const SPACING_ATTEMPTS: int = 6
 const ALPHA_MIN_GROUP: int = 4      # un groupe d'au moins N monstres (une règle) peut avoir un alpha
 const ALPHA_CHANCE: float = 0.08
-const MODES: Array[String] = ["floor", "paved", "nature", "any", "affinity"]
+const MODES: Array[String] = ["floor", "paved", "nature", "any", "affinity", "water"]
 const RING: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
 
 static var _loaded: bool = false
@@ -190,6 +193,9 @@ static func _validate_rule(plan_id: String, rule: Dictionary) -> void:
 		var value: float = float(rule.get(field, 0.0))
 		if value < 0.0 or value > 1.0:
 			_fail("%s : %s hors de [0, 1]." % [label, field])
+	var unique: Dictionary = rule.get("unique", {})
+	if not unique.is_empty() and not MonsterDB.has_id(String(unique.get("monster", ""))):
+		_fail("%s : unique inconnu « %s »." % [label, unique.get("monster", "")])
 	var affix: Dictionary = rule.get("affix", {})
 	if not affix.is_empty() and not MonsterDB.affix_ids().has(String(affix.get("id", ""))):
 		_fail("%s : affixe inconnu « %s »." % [label, affix.get("id", "")])
@@ -202,6 +208,11 @@ static func _validate_context(label: String, entry: Dictionary) -> void:
 		_fail("ecology.json %s : groupe inconnu « %s »." % [label, entry.get("group", "")])
 	if float(entry.get("density", 0.0)) < 0.0:
 		_fail("ecology.json %s : densité négative." % label)
+	if entry.has("mode") and not MODES.has(String(entry["mode"])):
+		_fail("ecology.json %s : mode inconnu « %s »." % [label, entry["mode"]])
+	var unique: Dictionary = entry.get("unique", {})
+	if not unique.is_empty() and not MonsterDB.has_id(String(unique.get("monster", ""))):
+		_fail("ecology.json %s : unique inconnu « %s »." % [label, unique.get("monster", "")])
 
 
 static func _depth_ok(group_id: String, depth: int) -> bool:
@@ -280,10 +291,11 @@ static func limit(name: String, fallback: int) -> int:
 ## Monstres initiaux du chunk : [{monster, cell, facing, state, affixes}], dans l'ordre de tirage.
 ## `population` multiplie les densités et les chances (0 : aucun monstre) ; `safe_centers` : cases (en plus du départ par défaut de la
 ## seed) autour desquelles aucun monstre n'apparaît ; `plan_override` (tests) : id d'un plan dont on applique les règles à ce terrain,
-## sans couche ambiante ; `contamination_override` (tests) : {level, type} imposé au lieu de ContaminationMap.
+## sans couche ambiante ; `contamination_override` (tests) : {level, type} imposé au lieu de ContaminationMap ; `salt` != 0 : autre tirage
+## (migration de la faune) ; `ambient_only` : seulement la couche ambiante (pas de règles de lieu ni d'uniques).
 static func generate(world_seed: int, key: Vector3i, terrain: PackedByteArray, furniture: PackedByteArray,
 		population: float = 1.0, safe_centers: Array[Vector2i] = [], plan_override: String = "",
-		contamination_override: Dictionary = {}) -> Array[Dictionary]:
+		contamination_override: Dictionary = {}, salt: int = 0, ambient_only: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if key.z != 0 or population <= 0.0 or terrain.size() != Chunk.CELLS:
 		return out
@@ -303,7 +315,7 @@ static func generate(world_seed: int, key: Vector3i, terrain: PackedByteArray, f
 		ambient = _ambient_context(world_map, settlement, coord)
 		if not ambient.is_empty():
 			ambient["group"] = contaminated_group(String(ambient["group"]), contamination)
-	var rules: Array = _places.get(plan_id, []) if plan_id != "" else []
+	var rules: Array = _places.get(plan_id, []) if plan_id != "" and not ambient_only else []
 	if rules.is_empty() and ambient.is_empty():
 		return out
 	var ctx: Dictionary = {"kind": world_map.cell_kind(coord), "climate": world_map.cell_climate(coord), "contamination": contamination}
@@ -314,14 +326,18 @@ static func generate(world_seed: int, key: Vector3i, terrain: PackedByteArray, f
 	var is_place: bool = not rules.is_empty()
 	var st: Dictionary = {
 		"taken": {}, "threat": 0, "count": 0,
+		"seed": world_seed, "water": _water_cells(key, terrain, safes), "ambient_only": ambient_only,
 		"cap": limit("place_max_per_chunk", 20) if is_place else limit("max_per_chunk", 12),
 		"budget": limit("place_threat_budget", 60) if is_place else limit("threat_budget", 30),
 	}
-	var rng: RandomNumberGenerator = WorldRng.rng_for(world_seed, WorldRng.LAYER_SPAWN, key.x, key.y, key.z)
+	var rng: RandomNumberGenerator = WorldRng.rng_for(world_seed, WorldRng.LAYER_SPAWN, key.x, key.y, key.z, salt)
 	for rule: Dictionary in rules:
 		_apply_rule(rule, key, terrain, furniture, ok, rng, ctx, st, population, out)
 	if not ambient.is_empty():
+		var first_ambient: int = out.size()
 		_apply_rule(ambient, key, terrain, furniture, ok, rng, ctx, st, population, out)
+		for i in range(first_ambient, out.size()):
+			out[i]["ambient"] = true
 	return out
 
 
@@ -366,7 +382,7 @@ static func _entry_rule(entry: Dictionary, mode: String) -> Dictionary:
 	if entry.is_empty() or float(entry.get("density", 0.0)) <= 0.0:
 		return {}
 	var rule: Dictionary = entry.duplicate()
-	rule["mode"] = mode
+	rule["mode"] = String(entry.get("mode", mode))   # une entrée d'écologie peut imposer son mode (eau)
 	return rule
 
 
@@ -397,6 +413,25 @@ static func _base_cells(key: Vector3i, terrain: PackedByteArray, furniture: Pack
 	return ok
 
 
+## 1 si la case est de l'eau (nageable) et hors zone sûre : cases des monstres aquatiques ou nageurs (mode `water`).
+static func _water_cells(key: Vector3i, terrain: PackedByteArray, safes: Array[Vector2i]) -> PackedByteArray:
+	var flags := PackedByteArray()
+	flags.resize(Chunk.CELLS)
+	var safe_radius: float = float(limit("safe_radius", 12))
+	for i in Chunk.CELLS:
+		if TerrainDB.swim_depth(terrain[i]) == TerrainDB.SWIM_NONE:
+			continue
+		var cell: Vector2i = _cell_of(key, i)
+		var safe: bool = false
+		for center: Vector2i in safes:
+			if Vector2(cell).distance_to(Vector2(center)) <= safe_radius:
+				safe = true
+				break
+		if not safe:
+			flags[i] = 1
+	return flags
+
+
 ## Indices libres (non pris) qui conviennent au mode : floor (t_floor), paved (chaussée), nature (ni chaussée, ni plancher, ni porte), any.
 ## Les cases avec un meuble sont exclues (sauf par le mode affinity, qui les traite à part).
 static func _mode_cells(mode: String, terrain: PackedByteArray, furniture: PackedByteArray, ok: PackedByteArray, taken: Dictionary) -> PackedInt32Array:
@@ -416,6 +451,8 @@ static func _mode_cells(mode: String, terrain: PackedByteArray, furniture: Packe
 				fits = not _paved.has(t) and not _indoor.has(t)
 			"any":
 				fits = true
+			"water":
+				fits = TerrainDB.swim_depth(t) != TerrainDB.SWIM_NONE
 		if fits:
 			out.append(i)
 	return out
@@ -462,7 +499,10 @@ static func _apply_rule(rule: Dictionary, key: Vector3i, terrain: PackedByteArra
 		_apply_affinity(rule, key, terrain, furniture, ok, rng, ctx, st, population, out)
 		return
 	var taken: Dictionary = st["taken"]
-	var candidates: PackedInt32Array = _mode_cells(mode, terrain, furniture, ok, taken)
+	var flags: PackedByteArray = st["water"] if mode == "water" else ok   # cases utilisables : eau ou terre ferme
+	if rule.has("unique") and not bool(st["ambient_only"]):
+		_apply_unique(rule, mode, key, terrain, furniture, flags, rng, ctx, st, out)
+	var candidates: PackedInt32Array = _mode_cells(mode, terrain, furniture, flags, taken)
 	var expected: float = float(rule.get("density", 0.0)) * float(candidates.size()) / 100.0 * population
 	var count: int = floori(expected)
 	if rng.randf() < expected - float(count):
@@ -504,11 +544,31 @@ static func _apply_rule(rule: Dictionary, key: Vector3i, terrain: PackedByteArra
 		out.append(entry)
 		made.append(entry)
 		if MonsterDB.has_ability(monster_id, "SWARM"):
-			_add_swarm(monster_id, index, key, ok, rng, rule, ctx, outdoor, st, out)
+			_add_swarm(monster_id, index, key, flags, rng, rule, ctx, outdoor, st, out)
 	if made.size() >= ALPHA_MIN_GROUP and rng.randf() < ALPHA_CHANCE:
 		var affixes: Array = made[0]["affixes"]
 		if affixes.size() < 2 and not affixes.has("alpha") and MonsterDB.affix_ok(String(made[0]["monster"]), "alpha"):
 			affixes.append("alpha")
+
+
+## Unique (règle `unique` : {monster, chance}) : tirage pur de (seed, chunk, id) ; s'il passe, une case du mode reçoit le monstre (état et
+## affixes par défaut), sans tenir compte du budget de menace. Un unique tué ne revient jamais (le chunk n'est plus repeuplé).
+static func _apply_unique(rule: Dictionary, mode: String, key: Vector3i, terrain: PackedByteArray, furniture: PackedByteArray, flags: PackedByteArray,
+		rng: RandomNumberGenerator, ctx: Dictionary, st: Dictionary, out: Array[Dictionary]) -> void:
+	var unique: Dictionary = rule["unique"]
+	var unique_id: String = String(unique.get("monster", ""))
+	var roll: float = WorldRng.unit(WorldRng.mix(int(st["seed"]), WorldRng.LAYER_SPAWN, key.x, key.y, WorldRng.seed_from_text(unique_id)))
+	if unique_id == "" or roll >= float(unique.get("chance", 0.1)) or int(st["count"]) >= int(st["cap"]):
+		return
+	var taken: Dictionary = st["taken"]
+	var candidates: PackedInt32Array = _mode_cells(mode, terrain, furniture, flags, taken)
+	if candidates.is_empty():
+		return
+	var index: int = candidates[rng.randi_range(0, candidates.size() - 1)]
+	taken[index] = true
+	st["threat"] = int(st["threat"]) + MonsterDB.threat_of(unique_id)
+	st["count"] = int(st["count"]) + 1
+	out.append(_make_entry(unique_id, _cell_of(key, index), rng, {}, ctx, false))
 
 
 ## Affinité : chaque meuble (ou terrain) correspondant tire sa chance ; le monstre prend la case du meuble s'il est praticable (chaise,
@@ -593,7 +653,7 @@ static func _make_entry(monster_id: String, cell: Vector2i, rng: RandomNumberGen
 		state = "sleep"
 	if state == "sleep" and affixes.has("feral"):
 		state = "idle"
-	return {"monster": monster_id, "cell": cell, "facing": facing, "state": state, "affixes": affixes}
+	return {"monster": monster_id, "cell": cell, "facing": facing, "state": state, "affixes": affixes, "ambient": false}
 
 
 ## Substitution de contamination : [monstre, affixe imposé ("" si aucun)]. Un tirage seulement quand le monstre a une variante pour ce type.

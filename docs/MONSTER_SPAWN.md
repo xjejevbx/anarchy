@@ -1,8 +1,8 @@
 # MONSTER_SPAWN.md — Population du monde : monstres, apparitions, écologie (jalon 6)
 
-Document de conception ET d'état (les anciens `JALON_6A/6B/6C.md` y sont fusionnés). Complète `WORLD_GEN.md` (§4.8, §9) et `GAME_DESIGN.md`. Toutes les valeurs chiffrées (PV, densités, probabilités) sont posées « à l'aveugle » : à régler en jeu, comme `Infection.DURATION`.
+Document de conception ET d'état (les anciens `JALON_6A/6B/6C/6D.md` y sont fusionnés). Complète `WORLD_GEN.md` (§4.8, §9) et `GAME_DESIGN.md`. Toutes les valeurs chiffrées (PV, densités, probabilités) sont posées « à l'aveugle » : à régler en jeu, comme `Infection.DURATION`.
 
-**Le bestiaire, les groupes et les tables de lieux vivent dans les JSON** (source de vérité, ne plus les recopier ici) : `data/monsters.json`, `monsters_places.json`, `monsters_mutants.json`, `monster_affixes.json`, `data/worldgen/spawn_groups*.json`, `place_spawns.json`, `ecology.json`. Ce document garde les principes, les mécanismes, l'état d'avancement et ce qui reste à créer.
+**Le bestiaire, les groupes et les tables de lieux vivent dans les JSON** (source de vérité, ne plus les recopier ici) : `data/monsters.json`, `monsters_places.json`, `monsters_mutants.json`, `monsters_aquatic.json`, `monster_affixes.json`, `data/worldgen/spawn_groups*.json`, `place_spawns.json`, `ecology.json`. Ce document garde les principes, les mécanismes, l'état d'avancement et ce qui reste à créer.
 
 ## 0. État d'avancement
 
@@ -11,10 +11,10 @@ Document de conception ET d'état (les anciens `JALON_6A/6B/6C.md` y sont fusion
 | 6a | `monsters.json` (91 monstres), `MonsterDB`, `SpawnGenerator` (couche ambiante), chunks propriétaires (réserve, restauration), comportements passif / territorial, `ARMOR(n)`, repli visuel teinté | **fait** |
 | 6b | Axe vertical (préparation), population par lieu (`place_spawns.json`, 73 plans, mode `affinity`), états `sleep` / `idle` / `guard`, bruit et réveil, `DORMANT` / `GUARD` / `AMBUSH` / `ERRATIC`, 9 affixes, plans médicaux (hôpital, clinique, maison de retraite, garage), mobilier médical | **fait** |
 | 6c | `ContaminationMap`, substitutions mutantes, faune contaminée, 20 mutants, capacités `EXPLODE`, auras, `REGEN`, `LEAP`, `CHARGE`, `GRAB`/`CONSTRICT` (drain), `SPLIT`, `SWARM`, `THROW`, `BURST`, 5 affixes de plus (14 au total), statuts `radiation` / `burn` / `frostbite` | **fait** |
-| 6d | `SUMMON`, `RAISE`, `STEALTH`, `BLIND_HEARING`, `SWIM`, `AQUATIC`, `FLY`, `SPORE`, pathfinding nautique, faune marine, uniques, rattrapage et migration de la faune | à faire |
+| 6d | `SUMMON`, `RAISE`, `STEALTH`, `BLIND_HEARING`, `SWIM`, `AQUATIC`, `FLY`, `SPORE`, pathfinding par domaine (marche / nage / eau / vol), faune marine, uniques, rattrapage et migration de la faune | **fait** |
 | loot | Champ `drops`, tables de loot, `LOOT_CARRIER` | à faire |
 
-Total : **171 monstres** (91 + 60 + 20), 14 affixes, 100+ groupes, 73 plans peuplés.
+Total : **183 monstres** (91 + 60 + 20 + 12 aquatiques), 14 affixes, 109 groupes, 92 plans peuplés.
 
 ## 1. Principes
 
@@ -30,14 +30,14 @@ Total : **171 monstres** (91 + 60 + 20), 14 affixes, 100+ groupes, 73 plans peup
 
 | Fichier | Rôle |
 |---|---|
-| `scripts/data/monster_db.gd` | `MonsterDB` : charge les trois `monsters*.json` et les affixes, `create(id, affixes)`, validation (`errors()`), `default_state_of`, `threat_of`, `affix_ok` |
+| `scripts/data/monster_db.gd` | `MonsterDB` : charge les quatre `monsters*.json` et les affixes, `create(id, affixes)`, validation (`errors()`), `default_state_of`, `threat_of`, `affix_ok` |
 | `scripts/data/monster_data.gd` | `MonsterData` : données d'un type (façade `zombie()`, `wolf()`...) ; `has_ability`, `ability_arg`, `ability_value` |
 | `scripts/worldgen/spawn_generator.gd` | `SpawnGenerator.generate(seed, key, terrain, furniture, population, safe_centers, ...)` : fonction pure ; `fingerprint` |
 | `scripts/worldgen/contamination_map.gd` | `ContaminationMap.sample(seed, chunk)` → `{level, type}` |
 | `scripts/entities/monster.gd` | états, orientation, capacités, `to_dict` |
-| `scripts/worldgen/chunk_manager.gd` | `_populated`, `_monster_store`, restauration |
-| `scripts/world/world.gd` | `spawn_monster_at`, `restore_monster`, `make_noise`, `explode`, `spawn_split`, `MAX_MONSTERS` (300) |
-| `tests/test_spawn.gd`, `test_contamination.gd`, `test_monsters.gd`, `test_vertical.gd` | voir §17 |
+| `scripts/worldgen/chunk_manager.gd` | `_populated`, `_monster_store`, restauration, rattrapage et migration (`CATCHUP_AFTER`, `_migrate`), deltas de sauvegarde (jalon 7) |
+| `scripts/world/world.gd` | `spawn_monster_at`, `restore_monster`, `spawn_near`, `monster_can_enter`, `add_corpse` / `take_corpse_near`, `record_noise` / `hears_noise`, `make_noise`, `explode`, `spawn_split`, `MAX_MONSTERS` (300) |
+| `tests/test_spawn.gd`, `test_jalon6d.gd`, `test_contamination.gd`, `test_monsters.gd`, `test_vertical.gd` | voir §17 |
 
 Flux au chargement d'un chunk :
 ```
@@ -118,21 +118,26 @@ Effet recherché : un hôpital silencieux qu'on traverse accroupi, des gardes qu
 | `SWARM` | apparaît en essaim | agit |
 | `THROW(type)` | le tir lance une explosion de rayon 1 sur le joueur (ignore la ligne de vue) | agit |
 | `BURST` | tir en rafale de 3 coups à moitié dégâts | agit |
-| `SUMMON`, `RAISE`, `STEALTH`, `BLIND_HEARING` | appelle des zombies, relève des cadavres, détection ÷2, détecte au bruit seulement | 6d |
-| `SWIM`, `AQUATIC`, `FLY` | traverse l'eau profonde, reste dans l'eau, ignore le terrain | 6d |
-| `SPORE` | nuage de spores (poison / infection) | 6d |
+| `SUMMON` | appelle des renforts (`summons`, rayon 2, 6 max, recharge 30 s) | agit |
+| `RAISE` | relève un cadavre à 6 cases en zombie (recharge 10 s ; `World.MAX_CORPSES` = 200, les plus anciens sont oubliés) | agit |
+| `STEALTH` | invisible et non signalé au-delà de 3 cases (`World.STEALTH_REVEAL_RANGE`) | agit |
+| `BLIND_HEARING` | ne voit qu'au contact ; entend la marche (3 cases), le sprint (8) et les coups (10), mémoire 5 s (`World.NOISE_*`) | agit |
+| `SWIM` | marche + eau profonde (`DOMAIN_SWIM`) | agit |
+| `AQUATIC` | reste dans l'eau (`DOMAIN_AQUATIC`) ; longe la rive si le joueur est à terre | agit |
+| `FLY` | ignore le terrain sauf murs et fenêtres (`DOMAIN_FLY`) | agit |
+| `SPORE` | le coup empoisonne la partie touchée (affixe « envahi » compris) | agit |
 | `LOOT_CARRIER` | porte un objet spécial | loot |
 
-Les capacités non encore actives sont lues et ignorées (pas d'erreur).
+Seule `LOOT_CARRIER` reste lue et ignorée (pas d'erreur).
 
 ## 8. Bestiaire
 
-Les 171 fiches sont dans les JSON. Familles couvertes : zombies communs et de métier (foyer, commerces, services, éducation, culte, santé, ordre public, militaire, science, industrie, mer et air), faune normale et mutante, climats (froid, savane, désert, jungle), expériences ratées, contamination.
+Les 183 fiches sont dans les JSON. Familles couvertes : zombies communs et de métier (foyer, commerces, services, éducation, culte, santé, ordre public, militaire, science, industrie, mer et air), faune normale, aquatique et mutante, climats (froid, savane, désert, jungle), expériences ratées, contamination.
 
 **À créer** (liste indicative, vérifier avec `MonsterDB.ids()`) :
-- **Uniques** (§13) : `zombie_mayor`, `patient_zero`, `zombie_lab_director`, `experiment_nightmare`, `zombie_commander`, `reactor_horror`, `pirate_captain`, `kraken`, `ant_queen`, `alpha_wolf`.
-- **Militaire / science (jalon 13, lieux à étages)** : `zombie_combat_medic`, `zombie_commando`, `zombie_heavy_gunner`, `zombie_armored_brute`, `zombie_bio_op`, `zombie_cryo`, `zombie_researcher`, `zombie_lab_guard`, `zombie_dam_engineer`, `experiment_clone`, `experiment_parasite`, `experiment_screamer`, `experiment_tyrant`.
-- **Mer et climats** : `zombie_pirate`, `zombie_smuggler`, `zombie_oceanographer`, `zombie_skier`, `piranha_swarm`, `eel_electric`, `jellyfish`, `shark`, `shark_mutant`, `squid_giant`, `alligator_mutant`.
+- **Uniques** (§13) : `zombie_mayor`, `patient_zero`, `zombie_lab_director`, `experiment_nightmare`, `zombie_commander`, `reactor_horror`, `ant_queen`, `alpha_wolf` (`pirate_captain` et `kraken` sont faits).
+- **Militaire / science (jalon 13, lieux à étages)** : `zombie_combat_medic`, `zombie_commando`, `zombie_heavy_gunner`, `zombie_armored_brute`, `zombie_bio_op`, `zombie_cryo`, `zombie_researcher`, `zombie_lab_guard`, `experiment_clone`, `experiment_parasite`, `experiment_screamer`, `experiment_tyrant`.
+- **Mer et climats** : `zombie_skier`, `alligator_mutant` (les aquatiques `piranha_swarm`, `eel_electric`, `jellyfish`, `shark`, `shark_mutant`, `squid_giant`, `kraken`, `pirate_captain`, `zombie_pirate`, `zombie_smuggler`, `zombie_oceanographer`, `zombie_dam_engineer` sont faits).
 - **Faune** : `cockroach_giant`, `ant_giant`, `spider_mutant`, `spider_cave`, `bat_swarm`, `bat_giant`, `snake_mutant`, `troglodyte`, `ruin_guardian`.
 - **Humains hostiles** (`bandit`, `raider`, `cannibal`, `cultist`, `hermit`, `sniper_survivor`) : jalon à part (PNJ : équipement, dialogue, factions).
 
@@ -163,26 +168,26 @@ Exemples : policier zombie gelé, infirmier zombie irradié, garde de labo vét�
 
 ## 10. Groupes de spawn
 
-Contenu actuel : voir `spawn_groups.json` (ambiants), `spawn_groups_places.json` (foyer, commerce, services, santé, industrie, rural, routes, air, mer partielle), `spawn_groups_contamination.json`. **Groupes à créer** avec les lieux correspondants :
-- **Militaire et secret (jalon 13)** : `bunker_g` (soldats, soldats blindés, sentinelles, sniper, officier, médecin, sapeur), `bunker_deep` (bio-opérateurs, commandos, brute blindée, traqueur), `silo_g` (soldats blindés, commandos, lance-flammes, mitrailleurs, officier), `radio_g`, `lab_staff`, `lab_guard`, `lab_subjects`, `lab_failed`, `lab_deep`, `arctic_g`, `carrier_g`.
-- **Mer et eau (jalon 14)** : `dam_g`, `marina_g`, `shipwreck_g`, `pirate_g`, `research_g`, `island_village_g`, `sewage_basin_g` (mode `water`).
+Contenu actuel (109 groupes) : voir `spawn_groups.json` (ambiants), `spawn_groups_places.json` (foyer, commerce, services, santé, industrie, rural, routes, air, mer partielle), `spawn_groups_aquatic.json` (faune d'eau et lieux marins), `spawn_groups_contamination.json`. **Groupes à créer** avec les lieux correspondants :
+- **Militaire et secret (jalon 13)** : `bunker_g` (soldats, soldats blindés, sentinelles, sniper, officier, médecin, sapeur), `bunker_deep` (bio-opérateurs, commandos, brute blindée, traqueur), `silo_g` (soldats blindés, commandos, lance-flammes, mitrailleurs, officier), `radio_g`, `lab_staff`, `lab_guard`, `lab_subjects`, `lab_failed`, `lab_deep`, `arctic_g`.
+- **Mer et eau (jalon 14, 6d fait)** : `island_village_g`, `sewage_basin_g` (mode `water`) ; `dam_g`, `marina_g`, `shipwreck_g`, `pirate_g`, `research_g`, `carrier_g` sont faits.
 - **Lieux extrêmes (jalon 15)** : `ski_g`, `volcano_g`, `ruins_g`, `cave_g`, `oasis_g`.
 
 ## 11. Population des lieux
 
-Implémentée pour 73 plans (`place_spawns.json`) : maisons, 14 bâtiments de ville, hôpital, clinique, maison de retraite, garage, station-service, motel, ferme, ranch, centrale nucléaire, camping, cimetière, chapelle, entrepôt, usine, égouts, poste électrique, avant-poste du désert, phare, plateforme, 7 lieux de route, port, aéroport.
+Implémentée pour 92 plans (`place_spawns.json`) : maisons, 14 bâtiments de ville, hôpital, clinique, maison de retraite, garage, station-service, motel, ferme, ranch, centrale nucléaire, camping, cimetière, chapelle, entrepôt, usine, égouts, poste électrique, avant-poste du désert, phare, plateforme, 7 lieux de route, port, aéroport ; depuis 6d : porte-avions, marina, fort pirate (`pirate_captain` unique), barrage, station de recherche, épaves et débris (dont faune aquatique en mode `water`).
 
-**Pas encore peuplés** : `sewage_basin` (eau), bunker, silo, labo, lieux marins et ruraux des jalons 13 à 15 (monstres ou étages inexistants). Prévus : `radio_tower` (`radio_g`, gardes), `bunker` (niveau 0 `bunker_g`, niveaux −1 à −2 `bunker_deep`), `missile_silo` (+ `zombie_commander`), labo (z=0 personnel et gardes, z=−1 sujets, z=−2 ratés, z=−3 `lab_deep` ; affinités `f_cage`, `f_cryo_pod`, `f_lab_table` ; uniques `zombie_lab_director`, `experiment_nightmare`), `aircraft_carrier`, `lighthouse_island`, `cargo_wreck` (+ clandestins dans les conteneurs), `marina`, `hydro_dam`, `island_village`, `pirate_base` (+ `pirate_captain`), `research_station`, `oasis`, `ski_resort`, `volcano_site`, `ancient_ruins`, `cave_entrance`, `arctic_base`, lieux par climat (affixe `mummified` chaud, `frozen` froid).
+**Pas encore peuplés** : `sewage_basin` (eau), bunker, silo, labo, lieux ruraux du jalon 15 et quelques lieux marins (`lighthouse_island`, `cargo_wreck`, `island_village`). Prévus : `radio_tower` (`radio_g`, gardes), `bunker` (niveau 0 `bunker_g`, niveaux −1 à −2 `bunker_deep`), `missile_silo` (+ `zombie_commander`), labo (z=0 personnel et gardes, z=−1 sujets, z=−2 ratés, z=−3 `lab_deep` ; affinités `f_cage`, `f_cryo_pod`, `f_lab_table` ; uniques `zombie_lab_director`, `experiment_nightmare`), `cargo_wreck` (+ clandestins dans les conteneurs), `island_village`, `oasis`, `ski_resort`, `volcano_site`, `ancient_ruins`, `cave_entrance`, `arctic_base`, lieux par climat (affixe `mummified` chaud, `frozen` froid).
 
 Hôpital : le sous-sol d'expériences (`min_depth`) et le tirage de `patient_zero` attendent les étages et les uniques ; quarantaine et psychiatrie sont des règles rares sur le sol de l'hôpital.
 
 ## 12. Écologie ambiante
 
-Implémentée : rue, jardin, route, nature par nature de case (plaine, forêt, marais, taïga, toundra, désert, savane, jungle, plage, berges), densités de 0,025 à 0,25 monstre pour 100 cases, part dormante pour la ville et les routes ; affixes de climat. **Non implémenté** : eaux (lacs, rivières, océan : `eco_water_shallow`, `eco_lake_deep`, `eco_ocean_shallow`, `eco_ocean_deep`, en 6d), et la hausse de faune hostile loin des villes (×1,6 au-delà de 40 cellules : demande la distance à la ville la plus proche, donc la lecture des régions voisines).
+Implémentée : rue, jardin, route, nature par nature de case (plaine, forêt, marais, taïga, toundra, désert, savane, jungle, plage, berges), densités de 0,025 à 0,25 monstre pour 100 cases, part dormante pour la ville et les routes ; affixes de climat. Depuis 6d, l'eau a sa propre faune, en mode `water` : `eco_water_shallow`, `eco_lake_deep`, `eco_ocean_shallow`, `eco_ocean_deep` (piranhas, anguilles, méduses, requins, calmars, noyés et nageurs). **Non implémenté** : la hausse de faune hostile loin des villes (×1,6 au-delà de 40 cellules : demande la distance à la ville la plus proche, donc la lecture des régions voisines).
 
 ## 13. Uniques
 
-Un unique existe au plus une fois par monde (par cellule de région) : tirage `mix(seed, LAYER_SPAWN, rx, ry, hash(id))` avec probabilité de lieu ; non réapparition après la mort (drapeau stocké avec `_populated`). Prévus : `zombie_mayor` (mairie, 0,5), `patient_zero` (hôpital ou labo, 0,15), `zombie_lab_director` (labo, 0,8), `experiment_nightmare` (labo profond, 0,3), `zombie_commander` (silo, bunker profond, 0,5), `reactor_horror` (cœur de réacteur, 0,3), `pirate_captain` (base pirate, 0,7), `kraken` (pleine mer, 0,05 par région océanique), `ant_queen`, `alpha_wolf` (forêt, taïga, 0,08).
+Implémenté : un unique est tiré au plus une fois par chunk, par la règle `unique: {monster, chance}` d'une règle d'écologie ou de lieu. Tirage pur `mix(seed, LAYER_SPAWN, cx, cy, hash(id))`, un par chunk au plus, jamais repeuplé (le chunk `populated` fige la population). Les uniques ne migrent pas (tag `unique`). Faits : `pirate_captain` (fort pirate, 0,7) et `kraken` (océan profond, 0,001 par chunk). Prévus : `zombie_mayor` (mairie, 0,5), `patient_zero` (hôpital ou labo, 0,15), `zombie_lab_director` (labo, 0,8), `experiment_nightmare` (labo profond, 0,3), `zombie_commander` (silo, bunker profond, 0,5), `reactor_horror` (cœur de réacteur, 0,3), `ant_queen`, `alpha_wolf` (forêt, taïga, 0,08).
 
 ## 14. Équilibrage et plafonds
 
@@ -202,7 +207,7 @@ Un unique existe au plus une fois par monde (par cellule de région) : tirage `m
 - **Sauvegarde (jalon 7, fait)** : par chunk modifié, `populated` et la liste des monstres VIVANTS (`to_dict` : id, cellule, PV, état, affixes, étage, génération, cible, délais, capacités...). Un chunk peuplé est toujours écrit, même sans monstre : `populated` empêche tout repeuplement, donc les monstres absents sont morts (uniques compris). Un chunk ni peuplé ni modifié n'est pas écrit et se régénère à l'identique.
 - **Coût du tour des monstres** : borné par les chunks chargés ; les dormeurs coûtent un test de distance toutes les 5 s.
 - **Contamination** : lire les sources d'une région voisine force la génération de ses lieux (donc de ses routes) un peu avant l'arrivée du joueur ; le travail total ne change pas. `test_contamination.gd` affiche le coût à froid (25 chunks). Au-delà de 16 cellules de rayon, il faudrait étaler le calcul.
-- **Temps gelé hors des chunks chargés** : acceptable au départ. Évolution (6d) : rattrapage à la recharge (un chunk absent depuis plus d'une heure de jeu perd 30 % de ses ambiants et en gagne selon l'écologie).
+- **Temps gelé hors des chunks chargés** : acceptable au départ. Depuis 6d, rattrapage à la recharge : un chunk peuplé absent plus de `CATCHUP_AFTER` (3600 s de jeu) perd chaque monstre `ambient` non unique avec la probabilité `CATCHUP_LOSS` (0,3) ; des arrivants ambiants les remplacent, plus 30 % du tirage frais. Le tirage ne dépend que du chunk et de la période (`GameClock / CATCHUP_AFTER`), pas de l'ordre de visite ; les monstres de lieux et les uniques restent. Côté `SpawnGenerator`, `generate(..., salt, ambient_only)` sépare le flux aléatoire de la migration (`salt` ≠ 0) et exclut lieux et uniques (`ambient_only`) ; chaque entrée ambiante porte `ambient: true`, sauvegardé par `Monster.to_dict`.
 - **Hors périmètre** : errance entre lieux, hordes sur les routes (la structure `wander` / `hunt` est prête), jour / nuit (plus de dormants le jour, `feral` plus fréquent la nuit).
 
 ## 16. Plans, mobilier, terrains à créer
@@ -213,7 +218,8 @@ Un unique existe au plus une fois par monde (par cellule de région) : tirage `m
 
 ## 17. Tests
 
-- `test_spawn.gd` : bestiaire valide (PV, coûts, zones, effets), groupes sans cycle ni monstre inconnu, déterminisme (5 seeds, 3 ordres), placement (cases praticables, plafonds, zone sûre, portes, pas de doublon, population 0 / 0,5 / 2), persistance (réserve, restauration, monstre tué, monstre blessé), affixes, population de 12 plans sur leur propre terrain (thème, dormeurs), états (bruit, embuscade, garde, réveil en chaîne).
+- `test_spawn.gd` : bestiaire valide (PV, coûts, zones, effets), groupes sans cycle ni monstre inconnu, déterminisme (5 seeds, 3 ordres), placement (cases compatibles avec le domaine de déplacement, plafonds, zone sûre, portes, pas de doublon, population 0 / 0,5 / 2), persistance (réserve, restauration, monstre tué, monstre blessé), affixes, population de 12 plans sur leur propre terrain (thème, dormeurs), états (bruit, embuscade, garde, réveil en chaîne).
+- `test_jalon6d.gd` (scène `test_jalon6d.tscn`, autoloads) : données aquatiques, domaines, uniques (répétabilité, un par chunk), cadavres / RAISE, `spawn_near`, bruit, domaines eau / terre / vol et migration de la faune.
 - `test_contamination.gd` : sources valides, niveau = référence recalculée sans la logique de voisinage, substitutions, affixes de contamination, explosions, `EXPLODE` à la mort, `REGEN`, `SPLIT`, mesure de perf.
 - `test_monsters.gd` : les 14 monstres d'origine, infection, effets, orientation. `test_vertical.gd` : monstres rangés par étage.
 
@@ -227,5 +233,5 @@ Un unique existe au plus une fois par monde (par cellule de région) : tirage `m
 - `zombie_sniper`, `zombie_flamer`, `zombie_grenadier` : tir à distance seulement partiellement fidèle (pas de capacité propre au-delà de `THROW` / `BURST`).
 - Les chunks déjà peuplés avant l'ajout d'une contamination ne sont pas repeuplés.
 - Les affixes `veteran` ne sont pas posés dans `place_spawns.json` ; `electrified`, `bloated`, `feral`, `infested` n'ont pas de règle d'apparition.
-- Aquatiques : rien ne naît dans l'eau tant que le pathfinding nautique n'existe pas.
+- **6d** : `FLY` ne vaut que pour le déplacement (un volant reste à portée de mêlée) ; les aquatiques n'attaquent que depuis l'eau et perdent un joueur resté loin de la rive ; les cadavres (`RAISE`) et les délais de `SUMMON` / `RAISE` ne sont pas sauvegardés ; les sprites aquatiques sont improvisés (`MISSING_SPRITE.md`).
 - **Lisibilité** : trop de variantes visuelles identiques perdent le joueur ; le repli par teinte aide, mais les uniques et élites gagneront de vrais sprites.

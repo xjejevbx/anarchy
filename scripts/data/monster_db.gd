@@ -5,12 +5,12 @@ extends RefCounted
 ## create(id) fabrique un MonsterData neuf. Les erreurs de données sont listées par errors() (un monstre invalide est tout de même
 ## chargé : le jeu continue, le test tests/test_spawn.gd les signale).
 
-const PATHS: Array[String] = ["res://data/monsters.json", "res://data/monsters_places.json", "res://data/monsters_mutants.json"]
+const PATHS: Array[String] = ["res://data/monsters.json", "res://data/monsters_places.json", "res://data/monsters_mutants.json", "res://data/monsters_aquatic.json"]
 const AFFIX_PATH: String = "res://data/monster_affixes.json"
 
 ## Capacités connues (MONSTER_SPAWN.md section 7). Agissent : ARMOR, DORMANT, GUARD, AMBUSH, ERRATIC (6b) ; EXPLODE, AURA_RAD, COLD_AURA,
-## FIRE_AURA, REGEN, LEAP, CHARGE, GRAB, CONSTRICT, SPLIT, SWARM, THROW, BURST (6c). Les autres (SUMMON, RAISE, STEALTH, BLIND_HEARING, SWIM,
-## AQUATIC, FLY, SPORE, LOOT_CARRIER) sont lues et ignorées jusqu'à leur jalon.
+## FIRE_AURA, REGEN, LEAP, CHARGE, GRAB, CONSTRICT, SPLIT, SWARM, THROW, BURST (6c) ; SUMMON, RAISE, STEALTH, BLIND_HEARING, SWIM, AQUATIC, FLY,
+## SPORE (6d). Seule LOOT_CARRIER (loot) est lue et ignorée.
 const ABILITIES: Array[String] = ["ARMOR", "DORMANT", "GUARD", "AMBUSH", "ERRATIC", "EXPLODE", "AURA_RAD", "COLD_AURA", "FIRE_AURA",
 	"REGEN", "LEAP", "CHARGE", "GRAB", "CONSTRICT", "SPLIT", "SWARM", "THROW", "BURST", "SUMMON", "RAISE", "STEALTH", "BLIND_HEARING",
 	"SWIM", "AQUATIC", "FLY", "SPORE", "LOOT_CARRIER"]
@@ -178,6 +178,7 @@ static func create(monster_id: String, affix_ids: Array = []) -> MonsterData:
 	m.threat = threat_of(monster_id)
 	m.tags.assign(d.get("tags", []))
 	m.abilities.assign(d.get("abilities", []))
+	m.summon_ids.assign(d.get("summons", ["zombie"]))
 	for ability: String in m.abilities:
 		if _ability_base(ability) == "ARMOR":
 			m.armor = _ability_arg(ability)

@@ -9,6 +9,8 @@ extends Node2D
 ## ChunkManager.level) ; toutes les requêtes par case (Vector2i) portent sur cet étage, les objets au sol sont rangés par étage, les monstres
 ## des autres étages sont en réserve. change_level() prépare les escaliers (jalon 8).
 ## Jalon 6c : explosions (explode : à la mort d'un monstre EXPLODE, grenade THROW) et division des blobs (spawn_split).
+## Jalon 6d : domaines de déplacement des monstres (monster_can_enter : marche, nage, eau, vol), cadavres (RAISE), renforts (SUMMON),
+## bruit entendu par les monstres aveugles (BLIND_HEARING), monstres furtifs (STEALTH).
 ##
 ## Rendu en couches (de bas en haut) :
 ##   1. `_terrain_layer` : les chunks (sol : herbe, murs)
@@ -35,6 +37,16 @@ const EXPLOSIONS: Dictionary = {
 	"electric": {"radius": 2, "damage": 6.0, "effect": {"id": "", "chance": 1.0, "duration": 0.0, "dps": 0.0, "stamina": 25.0}},
 }
 const SPLIT_MAX_MONSTERS: int = 280      # au-delà, un blob ne se divise plus (marge sous MAX_MONSTERS)
+
+# --- Domaines de déplacement (jalon 6d) : ce qu'un monstre peut traverser (PathFinder, Monster) ---
+const DOMAIN_WALK: int = 0       # marche : cases praticables à pied (eau peu profonde comprise)
+const DOMAIN_SWIM: int = 1       # SWIM : marche + eau profonde
+const DOMAIN_AQUATIC: int = 2    # AQUATIC : l'eau seulement (peu profonde ou profonde)
+const DOMAIN_FLY: int = 3        # FLY : tout sauf murs et fenêtres
+const STEALTH_REVEAL_RANGE: int = 3   # STEALTH : un monstre furtif n'est visible (ni signalé) qu'à moins de N cases
+const NOISE_WALK: int = 3             # le joueur qui marche (ni accroupi ni sprint) est entendu à N cases par les monstres aveugles
+const NOISE_MEMORY: float = 5.0       # secondes pendant lesquelles un bruit reste « entendu »
+const MAX_CORPSES: int = 200          # cadavres retenus (RAISE) ; les plus anciens disparaissent
 
 # --- Bruit (jalon 6b) : rayon (cases) dans lequel les dormeurs se réveillent ---
 const NOISE_SPRINT: int = 8              # le joueur court
@@ -74,6 +86,10 @@ var _items_layer: Node2D
 var _pick_overlay: Node2D
 var _target_overlay: Node2D
 var _hovered: Monster = null
+var _corpses: Dictionary = {}           # étage (int) -> Array[Dictionary] {cell, id} : cadavres que RAISE peut relever
+var noise_cell: Vector2i = Vector2i.ZERO   # dernier bruit du joueur (voir record_noise)
+var noise_radius: int = 0
+var noise_time: float = -1000.0
 var _ground_by_level: Dictionary = {}   # étage (int) -> Dictionary Vector2i -> Array d'Item
 
 
@@ -305,8 +321,24 @@ func is_occupied(pos: Vector2i) -> bool:
 	return (player != null and player.grid_pos == pos) or get_monster_at(pos) != null
 
 
-func find_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
-	return PathFinder.find(self, from, to)
+func find_path(from: Vector2i, to: Vector2i, domain: int = DOMAIN_WALK) -> Array[Vector2i]:
+	return PathFinder.find(self, from, to, domain)
+
+
+## Un monstre du domaine `domain` peut-il se tenir sur cette case ? Marche : praticable à pied ; nage : aussi l'eau profonde ;
+## aquatique : seulement l'eau ; vol : tout terrain chargé sauf murs et fenêtres.
+func monster_can_enter(pos: Vector2i, domain: int) -> bool:
+	match domain:
+		DOMAIN_SWIM:
+			return is_walkable(pos) or is_deep_water(pos)
+		DOMAIN_AQUATIC:
+			return swim_depth(pos) != TerrainDB.SWIM_NONE
+		DOMAIN_FLY:
+			var index: int = chunks.terrain_index(pos)
+			if index < 0 or TerrainDB.autotile_of(index) == "wall":
+				return false
+			return TerrainDB.is_walkable(index) or not TerrainDB.links_wall(index)
+	return is_walkable(pos)
 
 
 # --- Champ de vision ---
@@ -341,6 +373,9 @@ func update_fov() -> void:
 func _refresh_monster_visibility() -> void:
 	for m in monsters:
 		var now_visible: bool = visible_cells.has(m.grid_pos)
+		if now_visible and player != null and m.data.has_ability("STEALTH") \
+				and maxi(absi(m.grid_pos.x - player.grid_pos.x), absi(m.grid_pos.y - player.grid_pos.y)) > STEALTH_REVEAL_RANGE:
+			now_visible = false   # furtif : on ne le voit (ni ne le signale) qu'à moins de STEALTH_REVEAL_RANGE cases
 		if now_visible and not m.visible:
 			# Le message n'apparaît qu'une fois par monstre ; il revient seulement si le monstre est resté hors de vue
 			# (dans le brouillard) au moins ALERT_REARM_POINTS : un monstre qui clignote en bord de vue ne spamme pas.
@@ -400,12 +435,91 @@ func spawn_monster(data: MonsterData, near: Vector2i) -> Monster:
 ## Pas de recalcul de la visibilité ici : update_fov() (ou le prochain déplacement du joueur) s'en charge.
 func spawn_monster_at(entry: Dictionary) -> Monster:
 	var cell: Vector2i = entry["cell"]
-	if not is_walkable(cell) or is_occupied(cell):
+	var data: MonsterData = MonsterDB.create(String(entry["monster"]), entry.get("affixes", []))
+	if not monster_can_enter(cell, Monster.domain_of(data)) or is_occupied(cell):
 		return null
-	var m: Monster = _create_monster(MonsterDB.create(String(entry["monster"]), entry.get("affixes", [])), cell)
+	var m: Monster = _create_monster(data, cell)
 	m.facing = entry.get("facing", m.facing)
 	m.state = _valid_state(String(entry.get("state", "idle")), m.data)
+	m.ambient = bool(entry.get("ambient", false))
 	return m
+
+
+## Crée un monstre `monster_id` sur la case libre la plus proche de `origin` (rayon `radius`, cases praticables à pied), en chasse du joueur si
+## `hunting`. Null s'il n'y a pas de place ou si le plafond de monstres est atteint (SUMMON, RAISE).
+func spawn_near(origin: Vector2i, monster_id: String, radius: int, hunting: bool) -> Monster:
+	if monsters.size() >= SPLIT_MAX_MONSTERS:
+		return null
+	for r in range(1, radius + 1):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var cell: Vector2i = origin + Vector2i(dx, dy)
+				if is_walkable(cell) and not is_occupied(cell) and swim_depth(cell) == TerrainDB.SWIM_NONE:
+					return _spawn_hunter(monster_id, cell, hunting)
+	return null
+
+
+## Crée un monstre sur une case précise (si elle est libre et praticable à pied).
+func spawn_at_cell(monster_id: String, cell: Vector2i, hunting: bool) -> Monster:
+	if monsters.size() >= SPLIT_MAX_MONSTERS or not is_walkable(cell) or is_occupied(cell):
+		return null
+	return _spawn_hunter(monster_id, cell, hunting)
+
+
+func _spawn_hunter(monster_id: String, cell: Vector2i, hunting: bool) -> Monster:
+	var m: Monster = _create_monster(MonsterDB.create(monster_id), cell)
+	if hunting and player != null:
+		m.has_target = true
+		m.target_cell = player.grid_pos
+	_refresh_monster_visibility()
+	return m
+
+
+# --- Cadavres (RAISE) ---
+
+func add_corpse(cell: Vector2i, monster_id: String) -> void:
+	var level: int = get_level()
+	if not _corpses.has(level):
+		_corpses[level] = []
+	var list: Array = _corpses[level]
+	list.append({"cell": cell, "id": monster_id})
+	while list.size() > MAX_CORPSES:
+		list.pop_front()
+
+
+## Retire et renvoie le cadavre le plus proche de `origin` à moins de `reach` cases ({cell, id}), {} s'il n'y en a pas.
+func take_corpse_near(origin: Vector2i, reach: int) -> Dictionary:
+	var list: Array = _corpses.get(get_level(), [])
+	var best: int = -1
+	var best_distance: int = reach + 1
+	for i in list.size():
+		var cell: Vector2i = (list[i] as Dictionary)["cell"]
+		var distance: int = maxi(absi(cell.x - origin.x), absi(cell.y - origin.y))
+		if distance < best_distance:
+			best_distance = distance
+			best = i
+	if best < 0:
+		return {}
+	var corpse: Dictionary = list[best]
+	list.remove_at(best)
+	return corpse
+
+
+# --- Bruit entendu (BLIND_HEARING) ---
+
+## Mémorise le dernier bruit du joueur (sans réveiller personne : voir make_noise pour les dormeurs).
+func record_noise(origin: Vector2i, radius: int) -> void:
+	noise_cell = origin
+	noise_radius = radius
+	noise_time = GameClock.elapsed_points
+
+
+## Un monstre en `cell` entend-il le dernier bruit du joueur (encore récent et assez proche) ?
+func hears_noise(cell: Vector2i) -> bool:
+	return GameClock.elapsed_points - noise_time <= NOISE_MEMORY \
+		and maxi(absi(cell.x - noise_cell.x), absi(cell.y - noise_cell.y)) <= noise_radius
 
 
 ## « sleep » est refusé pour un monstre qui ne dort jamais (garde, enragé).
@@ -440,6 +554,7 @@ func restore_monster(entry: Dictionary) -> Monster:
 	m._regen_clock = float(entry.get("regen_clock", 0.0))
 	m._rush_ready_at = float(entry.get("rush_ready_at", 0.0))
 	m._attack_bonus = float(entry.get("attack_bonus", 1.0))
+	m.ambient = bool(entry.get("ambient", false))
 	return m
 
 
@@ -503,6 +618,7 @@ func spawn_split(parent: Monster, hp_value: float) -> bool:
 
 ## Réveille les dormeurs (sauf les embuscades, qui n'écoutent que de près) à moins de `radius` cases de `origin`.
 func make_noise(origin: Vector2i, radius: int) -> void:
+	record_noise(origin, radius)
 	for m: Monster in monsters:
 		if m.state == "sleep" and not m.data.abilities.has("AMBUSH") \
 				and maxi(absi(m.grid_pos.x - origin.x), absi(m.grid_pos.y - origin.y)) <= radius:
@@ -517,6 +633,8 @@ func _on_player_action(action_name: String, _cost: float, _stamina_delta: float)
 		make_noise(player.grid_pos, NOISE_COMBAT)
 	elif action_name == "Déplacement" and player.posture == Player.Posture.SPRINT:
 		make_noise(player.grid_pos, NOISE_SPRINT)
+	elif action_name == "Déplacement" and player.posture == Player.Posture.WALK:
+		record_noise(player.grid_pos, NOISE_WALK)   # entendu des monstres aveugles, mais ne réveille pas les dormeurs
 
 
 func remove_monster(m: Monster) -> void:

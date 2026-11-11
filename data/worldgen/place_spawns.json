@@ -1,5 +1,5 @@
 {
- "_doc": "Population des LIEUX (jalon 6b, docs/MONSTER_SPAWN.md section 11). Cle = id de plan (MapgenDB) ; valeur = liste de regles, ou {\"copy\": id d'un autre plan}. Regle : group (spawn_groups*.json), mode = floor (t_floor libre) / paved (asphalte, trottoir, beton) / nature (terrain naturel praticable, ni plancher ni porte) / any (toute case praticable libre) / affinity (meuble `furniture` ou terrain `terrain` : chaque exemplaire fait apparaitre un monstre avec la probabilite `chance`, SUR le meuble s'il est praticable, sinon sur une case voisine libre). density = monstres attendus pour 100 cases candidates. dormant = part de monstres endormis. rare = probabilite par chunk que la regle s'active. affix = {id, chance}. Tout est multiplie par le reglage de population. Plafonds et budget de menace : ecology.json (place_max_per_chunk, place_threat_budget).",
+ "_doc": "Population des LIEUX (jalon 6b, docs/MONSTER_SPAWN.md section 11). Cle = id de plan (MapgenDB) ; valeur = liste de regles, ou {\"copy\": id d'un autre plan}. Regle : group (spawn_groups*.json), mode = floor (t_floor libre) / paved (asphalte, trottoir, beton) / nature (terrain naturel praticable, ni plancher ni porte) / any (toute case praticable libre) / affinity (meuble `furniture` ou terrain `terrain` : chaque exemplaire fait apparaitre un monstre avec la probabilite `chance`, SUR le meuble s'il est praticable, sinon sur une case voisine libre). density = monstres attendus pour 100 cases candidates. dormant = part de monstres endormis. rare = probabilite par chunk que la regle s'active. affix = {id, chance}. Tout est multiplie par le reglage de population. Plafonds et budget de menace : ecology.json (place_max_per_chunk, place_threat_budget). Jalon 6d : mode water (cases d'eau), unique = {monster, chance} (un monstre unique par chunk du plan : capitaine pirate), lieux de naval.json.",
  "plans": {
   "house_small": [{"group": "home_any", "mode": "floor", "density": 0.8, "dormant": 0.6}, {"group": "home_bed", "mode": "affinity", "chance": 0.45, "furniture": "f_bed", "dormant": 0.9}, {"group": "home_bath", "mode": "affinity", "chance": 0.2, "furniture": "f_bathtub", "dormant": 0.8}, {"group": "home_kitchen", "mode": "affinity", "chance": 0.3, "furniture": "f_oven", "dormant": 0.3}],
   "house_family": {"copy": "house_small"},
@@ -73,6 +73,25 @@
   "airport_apron": [{"group": "airport_apron_g", "mode": "any", "density": 0.3}, {"group": "airport_apron_g", "mode": "affinity", "chance": 0.5, "furniture": "f_machinery_heavy"}],
   "airport_hangar": [{"group": "airport_hangar_g", "mode": "floor", "density": 0.7, "dormant": 0.4}],
   "airport_terminal": [{"group": "airport_terminal_g", "mode": "affinity", "chance": 0.5, "furniture": "f_bench", "dormant": 0.8}, {"group": "airport_terminal_g", "mode": "floor", "density": 0.6}],
-  "airport_tower": [{"group": "airport_tower_g", "mode": "floor", "density": 0.9, "dormant": 0.3}]
+  "airport_tower": [{"group": "airport_tower_g", "mode": "floor", "density": 0.9, "dormant": 0.3}],
+  "carrier_deck_a": [{"group": "carrier_g", "mode": "paved", "density": 0.35}, {"group": "carrier_g", "mode": "affinity", "furniture": "f_machinery_heavy", "chance": 0.5}],
+  "carrier_bow_n": {"copy": "carrier_deck_a"},
+  "carrier_bow_s": {"copy": "carrier_deck_a"},
+  "carrier_deck_b": {"copy": "carrier_deck_a"},
+  "carrier_deck_pad": {"copy": "carrier_deck_a"},
+  "carrier_deck_s": {"copy": "carrier_deck_a"},
+  "carrier_stern_n": {"copy": "carrier_deck_a"},
+  "carrier_stern_s": {"copy": "carrier_deck_a"},
+  "carrier_tower": [{"group": "carrier_g", "mode": "floor", "density": 0.8, "dormant": 0.3}, {"group": "carrier_g", "mode": "paved", "density": 0.3}],
+  "marina": [{"group": "marina_g", "mode": "floor", "density": 0.6}, {"group": "marina_g", "mode": "paved", "density": 0.3}],
+  "pirate_fort": [{"group": "pirate_g", "mode": "floor", "density": 0.9, "dormant": 0.3}, {"group": "pirate_g", "mode": "floor", "density": 0.0, "unique": {"monster": "pirate_captain", "chance": 0.7}}],
+  "pirate_dock": [{"group": "pirate_g", "mode": "paved", "density": 0.3}, {"group": "port_container", "mode": "affinity", "furniture": "f_container", "chance": 0.3, "dormant": 0.8}],
+  "dam_wall": [{"group": "dam_g", "mode": "paved", "density": 0.2}],
+  "dam_power": [{"group": "dam_g", "mode": "floor", "density": 0.8}],
+  "research_station": [{"group": "research_g", "mode": "floor", "density": 0.8}, {"group": "research_g", "mode": "paved", "density": 0.2}],
+  "wreck_a": [{"group": "shipwreck_g", "mode": "any", "density": 0.4}, {"group": "shipwreck_water", "mode": "water", "density": 0.15}],
+  "wreck_b": {"copy": "wreck_a"},
+  "debris_a": [{"group": "shipwreck_water", "mode": "water", "density": 0.1}],
+  "debris_b": {"copy": "debris_a"}
  }
 }

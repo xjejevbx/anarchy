@@ -7,6 +7,9 @@ extends RefCounted
 ## paie en temps : voir Monster._move_toward) et n'est permis que si l'une des deux cases « de l'angle » est praticable (on ne se
 ## faufile pas entre deux murs / arbres qui se touchent par un coin). Coûts ENTIERS : à longueur égale, la diagonale est légèrement
 ## préférée (19 au lieu de 20), sinon A* choisirait presque toujours l'escalier de pas orthogonaux.
+##
+## Jalon 6d : `domain` (World.DOMAIN_*) = ce que le monstre peut traverser : marche (défaut), nage (marche + eau profonde), eau seulement
+## (monstres aquatiques), vol. Voir World.monster_can_enter.
 
 # --- Réglages ---
 const MAX_EXPANSIONS: int = 1500   # nombre maximal de cases explorées par recherche
@@ -21,12 +24,12 @@ const DIRS: Array[Vector2i] = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector
 
 ## Chemin de `from` à `to` (les deux inclus), ou tableau vide si introuvable. Même convention que AStarGrid2D.get_id_path.
 ## Deux cases consécutives du chemin peuvent être en diagonale.
-static func find(world: World, from: Vector2i, to: Vector2i) -> Array[Vector2i]:
+static func find(world: World, from: Vector2i, to: Vector2i, domain: int = World.DOMAIN_WALK) -> Array[Vector2i]:
 	var empty: Array[Vector2i] = []
 	if from == to:
 		var single: Array[Vector2i] = [from]
 		return single
-	if not world.is_walkable(to):
+	if not world.monster_can_enter(to, domain):
 		return empty
 	var open: Dictionary = {}             # seaux : open[f] = cases de coût estimé f (coûts entiers, pas de tas nécessaire)
 	var g_score: Dictionary = {from: 0}
@@ -56,10 +59,10 @@ static func find(world: World, from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 				continue
 			if absi(next.x - from.x) > MAX_RADIUS or absi(next.y - from.y) > MAX_RADIUS:
 				continue
-			if not world.is_walkable(next):
+			if not world.monster_can_enter(next, domain):
 				continue
 			var diagonal: bool = dir.x != 0 and dir.y != 0
-			if diagonal and not (world.is_walkable(node + Vector2i(dir.x, 0)) or world.is_walkable(node + Vector2i(0, dir.y))):
+			if diagonal and not (world.monster_can_enter(node + Vector2i(dir.x, 0), domain) or world.monster_can_enter(node + Vector2i(0, dir.y), domain)):
 				continue  # règle de l'angle
 			var next_g: int = g + (DIAGONAL_COST if diagonal else ORTHO_COST)
 			if next_g < int(g_score.get(next, 1 << 30)):

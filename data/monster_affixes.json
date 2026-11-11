@@ -32,6 +32,9 @@
    "allowed_tags": [
     "zombie",
     "animal"
+   ],
+   "abilities": [
+    "SPORE"
    ]
   },
   "rotten": {

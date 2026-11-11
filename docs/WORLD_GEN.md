@@ -111,14 +111,14 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 | `towns.json` | tailles, ratios, routes, zonage urbain, couleurs de mini-carte |
 | `specials.json` | règles de placement et empreintes |
 | `mapgen/*.json` | plans ASCII (palette + 24 lignes de 24 caractères) |
-| `spawn_groups.json`, `spawn_groups_places.json`, `spawn_groups_contamination.json` | groupes de spawn pondérés |
+| `spawn_groups.json`, `spawn_groups_places.json`, `spawn_groups_contamination.json`, `spawn_groups_aquatic.json` | groupes de spawn pondérés |
 | `place_spawns.json` | population par plan de lieu |
-| `ecology.json` | faune ambiante, plafonds, affixes de climat, contamination (sources, substitutions) |
-| `../monsters.json`, `../monsters_places.json`, `../monsters_mutants.json`, `../monster_affixes.json` | bestiaire (171 monstres) et modificateurs |
+| `ecology.json` | faune ambiante (terre et eau), plafonds, affixes de climat, uniques, contamination (sources, substitutions) |
+| `../monsters.json`, `../monsters_places.json`, `../monsters_mutants.json`, `../monsters_aquatic.json`, `../monster_affixes.json` | bestiaire (183 monstres) et modificateurs |
 | (à venir) `item_groups.json` | tables de loot |
 
 ## 6. Exécution
-- `ChunkManager` : génère rayon 3, immédiat rayon 2, décharge > 4 (≈ 49 chunks) ; 1 chunk lointain par frame. Mémoire des cases vues conservée au déchargement. Les murs voisins se redessinent à l'arrivée d'un chunk. Peuple les chunks neufs et restaure les monstres en réserve.
+- `ChunkManager` : génère rayon 3, immédiat rayon 2, décharge > 4 (≈ 49 chunks) ; 1 chunk lointain par frame. Mémoire des cases vues conservée au déchargement. Les murs voisins se redessinent à l'arrivée d'un chunk. Peuple les chunks neufs et restaure les monstres en réserve ; depuis 6d, un chunk peuplé absent plus de `CATCHUP_AFTER` (3600 s de jeu) fait migrer sa faune ambiante (voir `MONSTER_SPAWN.md` §15). Les deltas de terrain / mobilier du jalon 7 s'appliquent après la génération.
 - `Chunk` : terrain et mobilier (octets), cases vues, sprites d'arbres triés par Y ; sol dessiné une fois (cache Godot).
 - `PathFinder` : A* borné à la demande (8 directions, diagonale = 2 pas, règle de l'angle), sans grille globale.
 - Objets au sol rangés par étage dans `World` ; monstres rattachés aux chunks (réserve par clé 3D).
@@ -162,7 +162,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 | 6a | Bestiaire en JSON, population ambiante, chunks propriétaires | fait |
 | 6b | Axe vertical (préparation), population par lieu, sommeil, affixes, plans médicaux | fait |
 | 6c | Contamination, mutants, expériences ratées, capacités qui agissent | fait |
-| 6d | `SUMMON`, `RAISE`, `STEALTH`, `BLIND_HEARING`, `SWIM`, `AQUATIC`, `FLY`, `SPORE`, pathfinding nautique, faune marine, uniques, rattrapage de la faune | à faire |
+| 6d | `SUMMON`, `RAISE`, `STEALTH`, `BLIND_HEARING`, `SWIM`, `AQUATIC`, `FLY`, `SPORE`, pathfinding par domaine, faune marine, uniques, rattrapage de la faune | fait |
 | 6 (loot) | Tables de loot par lieu | à faire |
 | 7 | Sauvegarde / chargement (seed + deltas) | fait |
 | 8 | Finitions : étages jouables, portes/fenêtres, toits, carte du joueur, tuiles complètes | à faire |
@@ -180,7 +180,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 - Reporté : neige (saisons), ferries/ponts entre continents, routes limitées à un continent, bateaux, vêtements mouillés, sous-sols des lieux 13 à 15.
 
 ## 10. Tests
-`test_worldgen_determinism.gd` (ordres de génération, villes, routes + perf, maisons, lieux, biomes, planète, arène, RNG, structure de TOUS les plans : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations), `test_swimming.gd`, `test_save.gd` (sérialisation objet/inventaire, aller-retour complet monde + joueur, deltas de chunks, monstres, effets/infection, compatibilité, suppression ; à lancer via la scène `tests/test_save.tscn`, car il utilise les autoloads : `godot --headless --path <projet> res://tests/test_save.tscn`), `test_jalon10.gd` (climats, îles, zones, accès, pistes), `test_jalon11.gd` (zonage, bâtiments, port, aéroport), `test_jalon12.gd` (lieux sur la route), `test_jalon13.gd`, `test_jalon14.gd`, `test_jalon15.gd`, `test_vertical.gd` (étages), `test_spawn.gd`, `test_contamination.gd` (voir `MONSTER_SPAWN.md`), `test_pathfinder.gd`.
+`test_worldgen_determinism.gd` (ordres de génération, villes, routes + perf, maisons, lieux, biomes, planète, arène, RNG, structure de TOUS les plans : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations), `test_swimming.gd`, `test_save.gd` (sérialisation objet/inventaire, aller-retour complet monde + joueur, deltas de chunks, monstres, effets/infection, compatibilité, suppression ; à lancer via la scène `tests/test_save.tscn`, car il utilise les autoloads : `godot --headless --path <projet> res://tests/test_save.tscn`), `test_jalon10.gd` (climats, îles, zones, accès, pistes), `test_jalon11.gd` (zonage, bâtiments, port, aéroport), `test_jalon12.gd` (lieux sur la route), `test_jalon13.gd`, `test_jalon14.gd`, `test_jalon15.gd`, `test_vertical.gd` (étages), `test_spawn.gd`, `test_contamination.gd` (voir `MONSTER_SPAWN.md`), `test_pathfinder.gd`, `test_jalon6d.gd` (domaines, aquatiques, uniques, rattrapage ; à lancer via la scène `tests/test_jalon6d.tscn`, car il utilise les autoloads).
 
 ## 11. Risques et limites
 - **Échelle** : un continent de 30 000 cases est énorme à pied (marche automatique indispensable) ; à valider à l'œil avec la mini-carte.

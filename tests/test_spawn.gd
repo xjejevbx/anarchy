@@ -165,8 +165,21 @@ func _check_placement(seeds: Array[int]) -> void:
 				seen[cell] = true
 				var index: int = ChunkManager.index_of(cell)
 				var t: int = terrain[index]
-				if ChunkManager.key_of(cell) != key or not TerrainDB.is_walkable(t) or TerrainDB.swim_depth(t) != TerrainDB.SWIM_NONE \
-						or not FurnitureDB.is_walkable(furniture[index]):
+				# Jalon 6d : chaque monstre doit être sur une case compatible avec son domaine de déplacement
+				# (terre ferme, eau profonde pour SWIM, eau seulement pour AQUATIC, vol pour FLY).
+				var domain: int = Monster.domain_of(MonsterDB.create(monster_id))
+				var cell_ok: bool = ChunkManager.key_of(cell) == key
+				match domain:
+					World.DOMAIN_AQUATIC:
+						cell_ok = cell_ok and TerrainDB.swim_depth(t) != TerrainDB.SWIM_NONE
+					World.DOMAIN_SWIM:
+						cell_ok = cell_ok and (TerrainDB.is_walkable(t) or TerrainDB.swim_depth(t) == TerrainDB.SWIM_DEEP)
+					World.DOMAIN_FLY:
+						cell_ok = cell_ok and TerrainDB.autotile_of(t) != "wall" and not TerrainDB.links_wall(t)
+					_:
+						cell_ok = cell_ok and TerrainDB.is_walkable(t) and TerrainDB.swim_depth(t) == TerrainDB.SWIM_NONE \
+							and FurnitureDB.is_walkable(furniture[index])
+				if not cell_ok:
 					bad_cell += 1
 				if Vector2(cell).distance_to(Vector2(spawn)) <= safe_radius:
 					bad_safe += 1
@@ -179,7 +192,7 @@ func _check_placement(seeds: Array[int]) -> void:
 			if threat_sum > budget:
 				bad_limit += 1
 		_check(unknown == 0, "seed %d : tous les monstres tirés existent dans le bestiaire" % world_seed)
-		_check(bad_cell == 0, "seed %d : monstres sur des cases praticables à pied, hors eau, dans leur chunk (%d anomalies)" % [world_seed, bad_cell])
+		_check(bad_cell == 0, "seed %d : monstres sur des cases compatibles avec leur domaine, dans leur chunk (%d anomalies)" % [world_seed, bad_cell])
 		_check(bad_limit == 0, "seed %d : plafond de %d monstres et budget de menace %d respectés (%d chunks en défaut)" % [world_seed, max_per_chunk, budget, bad_limit])
 		_check(bad_safe == 0, "seed %d : aucun monstre à moins de %d cases du départ (%d anomalies)" % [world_seed, int(safe_radius), bad_safe])
 		_check(bad_door == 0, "seed %d : aucun monstre sur ou devant une porte (%d anomalies)" % [world_seed, bad_door])

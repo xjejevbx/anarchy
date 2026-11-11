@@ -1,0 +1,16 @@
+{
+ "_doc": "Groupes de l'eau et des lieux marins (jalon 6d, docs/MONSTER_SPAWN.md sections 10 et 12). eco_water_* / eco_lake_deep / eco_ocean_* : faune ambiante des eaux (mode water d'ecology.json). Les autres : population des lieux de naval.json (place_spawns.json).",
+ "groups": {
+  "eco_water_shallow": {"entries": [{"monster": "piranha_swarm", "weight": 3}, {"monster": "eel_electric", "weight": 1}, {"monster": "zombie_drowned", "weight": 2}]},
+  "eco_lake_deep": {"entries": [{"monster": "eel_electric", "weight": 2}, {"monster": "zombie_drowned", "weight": 3}]},
+  "eco_ocean_shallow": {"entries": [{"monster": "jellyfish", "weight": 4}, {"monster": "shark", "weight": 1}, {"monster": "zombie_swimmer", "weight": 2}]},
+  "eco_ocean_deep": {"entries": [{"monster": "shark", "weight": 3}, {"monster": "squid_giant", "weight": 2}, {"monster": "shark_mutant", "weight": 1}, {"monster": "zombie_swimmer", "weight": 1}]},
+  "shipwreck_water": {"entries": [{"monster": "zombie_drowned", "weight": 5}, {"monster": "shark", "weight": 1}]},
+  "pirate_g": {"entries": [{"monster": "zombie_pirate", "weight": 6}, {"monster": "zombie_smuggler", "weight": 3}, {"monster": "zombie_sailor", "weight": 2}]},
+  "marina_g": {"entries": [{"monster": "zombie_sailor", "weight": 4}, {"monster": "zombie_fisherman", "weight": 3}, {"monster": "zombie_tourist", "weight": 3}, {"monster": "zombie_drowned", "weight": 2}]},
+  "shipwreck_g": {"entries": [{"monster": "zombie_drowned", "weight": 5}, {"monster": "zombie_sailor", "weight": 3}]},
+  "research_g": {"entries": [{"monster": "zombie_oceanographer", "weight": 4}, {"monster": "zombie_scientist", "weight": 3}, {"monster": "zombie_diver", "weight": 2}]},
+  "dam_g": {"entries": [{"monster": "zombie_dam_engineer", "weight": 4}, {"monster": "zombie_electrician", "weight": 2}, {"monster": "zombie_worker", "weight": 2}, {"monster": "zombie_drowned", "weight": 3}]},
+  "carrier_g": {"entries": [{"monster": "zombie_pilot_mil", "weight": 4}, {"monster": "zombie_sailor", "weight": 4}, {"monster": "zombie_soldier", "weight": 3}, {"monster": "zombie_officer", "weight": 1}, {"monster": "zombie_sniper", "weight": 1}]}
+ }
+}

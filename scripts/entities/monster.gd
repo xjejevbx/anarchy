@@ -32,6 +32,11 @@ extends Node2D
 ## World.spawn_split), EXPLODE(type) à la mort (World.explode), THROW(type) (le tir lance une explosion de rayon 1 sur le joueur),
 ## BURST (le tir fait BURST_SHOTS coups à dégâts réduits).
 ##
+## CAPACITÉS (jalon 6d) : déplacement par domaine (`_domain`, World.DOMAIN_*) : SWIM (marche + eau profonde), AQUATIC (l'eau seulement : l'aquatique
+## qui poursuit un joueur resté à terre vient au bord, dans l'eau la plus proche), FLY (tout sauf murs et fenêtres) ; SUMMON (appelle des renforts),
+## RAISE (relève un cadavre en zombie), SPORE (le coup empoisonne), BLIND_HEARING (« voit » au contact, entend la marche, la course et les coups),
+## STEALTH (visible seulement à moins de World.STEALTH_REVEAL_RANGE cases : voir World._refresh_monster_visibility).
+##
 ## Stamina : les monstres ont la même stamina que le joueur (Player.STAMINA_MAX) et les mêmes règles de ralentissement :
 ## chaque tranche de 30 % perdue ajoute +10 % à la durée de leurs actions (max +30 %). Se déplacer à terre regagne de la stamina,
 ## nager (eau peu profonde ; ils ne vont pas en eau profonde) en coûte, attendre régénère, attaquer fatigue.
@@ -76,7 +81,18 @@ const GRAB_STAMINA_DRAIN: float = 20.0
 const GRAB_TEXT: String = "L'étreinte vous épuise : -%d de stamina."
 const SPLIT_MIN_HP: float = 12.0      # un blob plus fragile ne se divise plus
 const SPLIT_MAX_GENERATION: int = 3
+const SUMMON_COOLDOWN: float = 30.0
+const SUMMON_MAX: int = 6             # renforts appelés au total par un même monstre
+const SUMMON_COST: float = 3.0
+const SUMMON_RADIUS: int = 2
+const RAISE_RANGE: int = 6            # distance maximale d'un cadavre relevable
+const RAISE_COOLDOWN: float = 10.0
+const RAISE_COST: float = 3.0
+const SPORE_EFFECT: Dictionary = {"id": "poison", "chance": 1.0, "duration": 10.0, "dps": 0.3, "stamina": 0.0}
 const ABILITY_TEXT: Dictionary = {
+	"SUMMON": "Appelle des renforts", "RAISE": "Relève les cadavres en zombies", "SPORE": "Nuage de spores : empoisonne",
+	"STEALTH": "Furtif (visible à 3 cases)", "BLIND_HEARING": "Aveugle : entend le bruit", "SWIM": "Nage (eau profonde)",
+	"AQUATIC": "Reste dans l'eau", "FLY": "Vole (ignore le terrain)",
 	"AURA_RAD": "Aura radioactive (rayon 2) : irradie", "FIRE_AURA": "Aura de feu (rayon 1) : brûle", "COLD_AURA": "Aura de froid (rayon 1) : engelure",
 	"REGEN": "Régénère", "LEAP": "Bondit sur sa cible (2 à 3 cases)", "CHARGE": "Charge en ligne droite (coup x1.5)",
 	"GRAB": "Agrippe : draine la stamina", "CONSTRICT": "Étreint : draine la stamina", "SPLIT": "Se divise quand on le frappe",
@@ -123,6 +139,10 @@ var _hop: float = 0.0
 var _breath: float = 0.0
 var _threat: bool = false               # le joueur est dans sa zone d'attaque (flèche vive)
 var generation: int = 0                 # SPLIT : 0 pour l'original, +1 par division
+var ambient: bool = false               # créé par la couche ambiante (la faune migre : voir ChunkManager)
+var _domain: int = World.DOMAIN_WALK    # ce qu'il peut traverser (voir domain_of)
+var _support_ready_at: float = 0.0      # moment où SUMMON / RAISE sont de nouveau possibles
+var _summoned: int = 0                  # renforts déjà appelés (SUMMON)
 var _last_hurt: float = -1000.0         # moment (points d'action) du dernier dégât reçu (REGEN)
 var _regen_clock: float = 0.0           # dernier moment compté par REGEN
 var _rush_ready_at: float = 0.0         # moment où LEAP / CHARGE sont de nouveau possibles
@@ -130,7 +150,19 @@ var _attack_bonus: float = 1.0          # multiplicateur du prochain coup (charg
 var _dead: bool = false                 # a déjà subi le coup fatal (EXPLODE ne se déclenche qu'une fois)
 
 
+## Domaine de déplacement d'un monstre : aquatique (eau seulement), vol, nage, sinon marche.
+static func domain_of(monster_data: MonsterData) -> int:
+	if monster_data.has_ability("AQUATIC"):
+		return World.DOMAIN_AQUATIC
+	if monster_data.has_ability("FLY"):
+		return World.DOMAIN_FLY
+	if monster_data.has_ability("SWIM"):
+		return World.DOMAIN_SWIM
+	return World.DOMAIN_WALK
+
+
 func _ready() -> void:
+	_domain = domain_of(data)
 	position = Vector2(grid_pos * World.TILE_SIZE)
 	facing = RING[_rng.randi() % RING.size()]   # orientation de départ au hasard (World peut la remplacer juste après)
 	# Chaque monstre garde la variante de sprite tirée à sa création.
@@ -168,7 +200,7 @@ func to_dict() -> Dictionary:
 		"hidden_since": hidden_since, "ranged_ready_at": _ranged_ready_at,
 		"scream_ready_at": _scream_ready_at, "last_hurt": _last_hurt,
 		"regen_clock": _regen_clock, "rush_ready_at": _rush_ready_at,
-		"attack_bonus": _attack_bonus,
+		"attack_bonus": _attack_bonus, "ambient": ambient,
 	}
 
 
@@ -192,32 +224,69 @@ func take_turn() -> float:
 		if has_target and distance > TERRITORY_LEASH:
 			has_target = false  # le joueur est sorti de son territoire
 	var sees: bool = distance <= reach and world.is_visible_cell(grid_pos)
+	if data.has_ability("BLIND_HEARING"):
+		# Aveugle : il ne « voit » qu'au contact, mais entend la marche, la course et les coups du joueur (World.hears_noise).
+		sees = distance <= 1 and world.is_visible_cell(grid_pos)
+		if not sees and world.hears_noise(grid_pos):
+			alert(world.noise_cell)
 	if sees:
-		if distance <= reach and world.is_visible_cell(grid_pos):
-			alert(player.grid_pos)
-			if data.scream_radius > 0 and GameClock.elapsed_points >= _scream_ready_at:
-				return _scream()
+		alert(player.grid_pos)
+		if data.scream_radius > 0 and GameClock.elapsed_points >= _scream_ready_at:
+			return _scream()
 		if _can_melee(player.grid_pos):
 			if in_front_arc(facing, _direction_to(player.grid_pos)):
 				return _attack_player()
 			return _turn_toward(player.grid_pos)   # à portée mais dans son dos / son flanc : il doit d'abord pivoter
+		var support: float = _try_support(distance)
+		if support >= 0.0:
+			return support
 		var rush: float = _try_rush(player, delta, distance)
 		if rush >= 0.0:
 			return rush
-		if has_target:
-			if sees and _can_shoot(delta):
-				face(_direction_to(player.grid_pos))   # il se tourne vers sa cible pour tirer (gratuit)
-				return _shoot()
-			if grid_pos == target_cell:
-				has_target = false  # arrivé là où on a vu le joueur pour la dernière fois : plus personne
-				return _rest(IDLE_COST)
-			return _move_toward(target_cell)
+	if has_target:   # il poursuit le joueur (vu, ou dernière position connue : coup reçu, cri, meute, bruit)
+		if sees and _can_shoot(delta):
+			face(_direction_to(player.grid_pos))   # il se tourne vers sa cible pour tirer (gratuit)
+			return _shoot()
+		if grid_pos == target_cell:
+			has_target = false  # arrivé là où on a vu le joueur pour la dernière fois : plus personne
+			return _rest(IDLE_COST)
+		return _move_toward(target_cell)
 	if state == "guard" and grid_pos != home_cell:
 		return _move_toward(home_cell)   # retour au poste
 	return _rest(IDLE_COST)
 
 
 # --- Capacités (jalon 6c) ---
+
+## SUMMON (appelle des renforts : `summon_ids`, n = argument de la capacité, 2 par défaut) et RAISE (relève le cadavre le plus proche en zombie).
+## Renvoie le coût de l'action, ou -1.0 si rien n'a eu lieu.
+func _try_support(distance: int) -> float:
+	if GameClock.elapsed_points < _support_ready_at:
+		return -1.0
+	if data.has_ability("SUMMON") and _summoned < SUMMON_MAX and distance >= 2:
+		var made: int = 0
+		var count: int = roundi(data.ability_value("SUMMON", 2.0))
+		for i in count:
+			var ids: Array[String] = data.summon_ids
+			if ids.is_empty() or world.spawn_near(grid_pos, ids[i % ids.size()], SUMMON_RADIUS, true) == null:
+				continue
+			made += 1
+		if made > 0:
+			_summoned += made
+			_support_ready_at = GameClock.elapsed_points + SUMMON_COOLDOWN
+			EventBus.message_logged.emit("%s appelle des renforts !" % data.display_name)
+			return _finish(SUMMON_COST, 0.0)
+	if data.has_ability("RAISE"):
+		var corpse: Dictionary = world.take_corpse_near(grid_pos, RAISE_RANGE)
+		if not corpse.is_empty():
+			var ids: Array[String] = data.summon_ids
+			var raised: Monster = world.spawn_at_cell(ids[0] if not ids.is_empty() else "zombie", corpse["cell"], true)
+			if raised != null:
+				_support_ready_at = GameClock.elapsed_points + RAISE_COOLDOWN
+				EventBus.message_logged.emit("%s relève un cadavre !" % data.display_name)
+				return _finish(RAISE_COST, 0.0)
+	return -1.0
+
 
 ## REGEN(x) : x PV par seconde de jeu écoulée, tant que le monstre n'a pas été touché depuis REGEN_DELAY secondes.
 func _regen_tick() -> void:
@@ -284,6 +353,7 @@ func _try_split() -> void:
 
 ## Coup fatal : EXPLODE(type) déclenche une explosion centrée sur le monstre.
 func _on_death() -> void:
+	world.add_corpse(grid_pos, data.id)
 	var kind: String = data.ability_arg("EXPLODE")
 	if kind != "":
 		world.explode(grid_pos, -1, kind, self)
@@ -330,7 +400,7 @@ func _passive_turn(player: Player, _delta: Vector2i, distance: int) -> float:
 	var best_d2: int = (player.grid_pos - grid_pos).length_squared()
 	for dir: Vector2i in RING:
 		var candidate: Vector2i = grid_pos + dir
-		if not world.is_walkable(candidate) or world.is_occupied(candidate) or world.swim_depth(candidate) != TerrainDB.SWIM_NONE:
+		if not _step_ok(candidate):
 			continue
 		var d2: int = (player.grid_pos - candidate).length_squared()
 		if d2 > best_d2:
@@ -456,7 +526,7 @@ func _finish(base_cost: float, stamina_delta: float) -> float:
 ## Variation de stamina pour UNE seconde d'attente : planche en eau peu profonde, récupération à terre.
 func _wait_stamina_delta() -> float:
 	var depth: int = world.swim_depth(grid_pos)
-	if depth != TerrainDB.SWIM_NONE:
+	if depth != TerrainDB.SWIM_NONE and _domain == World.DOMAIN_WALK:
 		return Player.swim_wait_stamina_delta(depth, 0.0)
 	return Player.load_stamina_delta(0.0, Player.WAIT_REGEN_MAX)
 
@@ -464,7 +534,7 @@ func _wait_stamina_delta() -> float:
 ## Variation de stamina pour UN pas, selon la case où le monstre se trouve (à appeler après le déplacement).
 func _move_stamina_delta() -> float:
 	var depth: int = world.swim_depth(grid_pos)
-	if depth != TerrainDB.SWIM_NONE:
+	if depth != TerrainDB.SWIM_NONE and _domain == World.DOMAIN_WALK:
 		return Player.swim_move_stamina_delta(depth, 0.0)
 	return Player.load_stamina_delta(0.0, Player.MOVE_REGEN_MAX)
 
@@ -505,6 +575,8 @@ func _attack_player() -> float:
 	var infection_chance: float = data.special_infection if use_special else data.attack_infection
 	if infection_chance > 0.0 and not world.player.dead and _rng.randf() < infection_chance:
 		Infection.infect(world.player)
+	if data.has_ability("SPORE") and not world.player.dead:
+		StatusEffects.apply(world.player, SPORE_EFFECT, part)
 	if (data.has_ability("GRAB") or data.has_ability("CONSTRICT")) and not world.player.dead:
 		StatusEffects.apply(world.player, {"id": "", "chance": 1.0, "duration": 0.0, "dps": 0.0, "stamina": GRAB_STAMINA_DRAIN, "text": GRAB_TEXT}, part)
 	return _finish(cost, -cost * ATTACK_STAMINA_PER_SECOND)
@@ -569,7 +641,12 @@ func _move_toward(cell: Vector2i) -> float:
 		var wander: float = _wander_step()
 		if wander >= 0.0:
 			return wander
-	var path: Array[Vector2i] = world.find_path(grid_pos, cell)
+	var goal: Vector2i = cell
+	if _domain == World.DOMAIN_AQUATIC and not world.monster_can_enter(cell, _domain):
+		goal = _nearest_water(cell)   # le joueur est resté à terre : l'aquatique vient dans l'eau la plus proche de lui
+		if goal == grid_pos:
+			return _rest(IDLE_COST)
+	var path: Array[Vector2i] = world.find_path(grid_pos, goal, _domain)
 	if path.size() < 2:
 		has_target = false
 		return _rest(IDLE_COST)
@@ -584,12 +661,39 @@ func _move_toward(cell: Vector2i) -> float:
 	return _finish(data.move_cost * steps, _move_stamina_delta() * steps)
 
 
+## La case est-elle libre et franchissable pour ce monstre ? Un marcheur évite aussi l'eau (flâner, fuir) ; les autres suivent leur domaine.
+func _step_ok(cell: Vector2i) -> bool:
+	if world.is_occupied(cell):
+		return false
+	if _domain == World.DOMAIN_WALK:
+		return world.is_walkable(cell) and world.swim_depth(cell) == TerrainDB.SWIM_NONE
+	return world.monster_can_enter(cell, _domain)
+
+
+## Case d'eau libre la plus proche de `cell` (rayon 3) ; la case actuelle du monstre s'il n'y en a pas de meilleure.
+func _nearest_water(cell: Vector2i) -> Vector2i:
+	var best: Vector2i = grid_pos
+	var best_d2: int = 1 << 30
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			var candidate: Vector2i = cell + Vector2i(dx, dy)
+			if candidate != grid_pos and (world.is_occupied(candidate) or not world.monster_can_enter(candidate, _domain)):
+				continue
+			if not world.monster_can_enter(candidate, _domain):
+				continue
+			var d2: int = (candidate - cell).length_squared() * 4 + (candidate - grid_pos).length_squared()
+			if d2 < best_d2:
+				best_d2 = d2
+				best = candidate
+	return best
+
+
 ## Un pas dans une direction libre tirée au hasard (ERRATIC). Renvoie le coût, ou -1.0 si aucune case n'est libre.
 func _wander_step() -> float:
 	var options: Array[Vector2i] = []
 	for dir: Vector2i in RING:
 		var candidate: Vector2i = grid_pos + dir
-		if world.is_walkable(candidate) and not world.is_occupied(candidate) and world.swim_depth(candidate) == TerrainDB.SWIM_NONE:
+		if _step_ok(candidate):
 			options.append(candidate)
 	if options.is_empty():
 		return -1.0

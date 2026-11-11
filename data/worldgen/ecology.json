@@ -1,5 +1,5 @@
 {
- "_doc": "Ecologie ambiante (jalon 6a, docs/MONSTER_SPAWN.md section 12). ambient : pour chaque contexte, le groupe tire (spawn_groups.json) et la densite = nombre de monstres attendus pour 100 cases candidates (avant le reglage de population). street = rues de ville (cases asphalte, trottoir, beton) ; yard = parcelles et jardins de ville (cases de terrain naturel, hors batiment) ; road = routes entre villes (cases asphalte) ; kinds = chunk hors ville, selon la nature de case de la cellule macro (ids de biomes.json). Une nature absente de kinds (eau, lacs, ocean) n'a aucun monstre en 6a (les aquatiques arrivent en 6d). Les lieux speciaux n'ont pas de population ambiante : leur population vient de place_spawns.json (jalon 6b). limits : max_per_chunk = plafond de monstres par chunk, threat_budget = somme maximale de la menace (monstre.threat) par chunk, safe_radius = rayon (cases) sans monstre autour du depart du joueur, min_spacing = ecart minimal (Tchebychev) entre deux monstres d'un meme chunk. Jalon 6b : dormant = part de monstres ambiants crees endormis ; limits.place_max_per_chunk et place_threat_budget = plafonds d'un chunk qui porte un plan (lieu ou batiment) ; climate_affixes = affixes (monster_affixes.json) tires pour les monstres des cases EXTERIEURES (rues, routes, nature) : affix, chance, tag (le monstre doit l'avoir), climate (temperate / hot / cold) et/ou kinds (natures de case de biomes.json) du chunk. Jalon 6c : contamination = sources, rayon et substitutions (docs/MONSTER_SPAWN.md section 5). sources : id de LIEU SPECIAL (specials.json) -> force (0 a 1, niveau au coeur), radius (cellules macro = chunks), type (radiation, toxic, experiment, fire, cursed, oil). Niveau d'un chunk = max sur les sources de force x (1 - distance / rayon) ^ falloff, distance a la cellule la plus proche de l'empreinte du lieu. substitute_chance : un monstre tire est remplace par sa variante selon niveau x substitute_chance ; substitutions : monstre -> {type: monstre mutant, ou \"affix:<id>\" pour lui donner un affixe}. ambient_switch_level : au-dessus, la couche ambiante tire dans eco_contaminated_<type>. Une regle de lieu avec contaminate = false ignore la substitution.",
+ "_doc": "Ecologie ambiante (jalon 6a, docs/MONSTER_SPAWN.md section 12). ambient : pour chaque contexte, le groupe tire (spawn_groups.json) et la densite = nombre de monstres attendus pour 100 cases candidates (avant le reglage de population). street = rues de ville (cases asphalte, trottoir, beton) ; yard = parcelles et jardins de ville (cases de terrain naturel, hors batiment) ; road = routes entre villes (cases asphalte) ; kinds = chunk hors ville, selon la nature de case de la cellule macro (ids de biomes.json). Une nature absente de kinds n'a aucun monstre. Les lieux speciaux n'ont pas de population ambiante : leur population vient de place_spawns.json (jalon 6b). limits : max_per_chunk = plafond de monstres par chunk, threat_budget = somme maximale de la menace (monstre.threat) par chunk, safe_radius = rayon (cases) sans monstre autour du depart du joueur, min_spacing = ecart minimal (Tchebychev) entre deux monstres d'un meme chunk. Jalon 6b : dormant = part de monstres ambiants crees endormis ; limits.place_max_per_chunk et place_threat_budget = plafonds d'un chunk qui porte un plan (lieu ou batiment) ; climate_affixes = affixes (monster_affixes.json) tires pour les monstres des cases EXTERIEURES (rues, routes, nature) : affix, chance, tag (le monstre doit l'avoir), climate (temperate / hot / cold) et/ou kinds (natures de case de biomes.json) du chunk. Jalon 6c : contamination = sources, rayon et substitutions (docs/MONSTER_SPAWN.md section 5). sources : id de LIEU SPECIAL (specials.json) -> force (0 a 1, niveau au coeur), radius (cellules macro = chunks), type (radiation, toxic, experiment, fire, cursed, oil). Niveau d'un chunk = max sur les sources de force x (1 - distance / rayon) ^ falloff, distance a la cellule la plus proche de l'empreinte du lieu. substitute_chance : un monstre tire est remplace par sa variante selon niveau x substitute_chance ; substitutions : monstre -> {type: monstre mutant, ou \"affix:<id>\" pour lui donner un affixe}. ambient_switch_level : au-dessus, la couche ambiante tire dans eco_contaminated_<type>. Une regle de lieu avec contaminate = false ignore la substitution. Jalon 6d : une entree de kinds peut avoir mode = water (monstres aquatiques ou nageurs : cases d'eau) et unique = {monster, chance} (un monstre unique par chunk avec cette probabilite, tire par mix(seed, LAYER_SPAWN, chunk, hash(id)) ; jamais repeuple).",
  "limits": {
   "max_per_chunk": 12,
   "threat_budget": 30,
@@ -68,6 +68,40 @@
    "bank_river": {
     "group": "eco_shore_river",
     "density": 0.05
+   },
+   "lake_shallow": {
+    "group": "eco_water_shallow",
+    "mode": "water",
+    "density": 0.04
+   },
+   "river_shallow": {
+    "group": "eco_water_shallow",
+    "mode": "water",
+    "density": 0.04
+   },
+   "river_deep": {
+    "group": "eco_lake_deep",
+    "mode": "water",
+    "density": 0.03
+   },
+   "lake_deep": {
+    "group": "eco_lake_deep",
+    "mode": "water",
+    "density": 0.03
+   },
+   "ocean_shallow": {
+    "group": "eco_ocean_shallow",
+    "mode": "water",
+    "density": 0.03
+   },
+   "ocean_deep": {
+    "group": "eco_ocean_deep",
+    "mode": "water",
+    "density": 0.015,
+    "unique": {
+     "monster": "kraken",
+     "chance": 0.001
+    }
    }
   }
  },

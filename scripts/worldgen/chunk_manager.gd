@@ -6,6 +6,9 @@ extends RefCounted
 ## Jalon 6a (docs/MONSTER_SPAWN.md §2.3) : à son PREMIER chargement, un chunk reçoit ses monstres (SpawnGenerator, fonction pure) ;
 ## à son déchargement, ses monstres vivants sont mis en réserve (`_monster_store`, comme `_seen_store`) et rendus tels quels au
 ## rechargement. Un chunk déjà peuplé n'est jamais repeuplé : un monstre tué reste tué.
+## Jalon 6d (docs/MONSTER_SPAWN.md §15, « rattrapage ») : un chunk absent depuis plus de CATCHUP_AFTER secondes de jeu voit sa faune AMBIANTE migrer à son
+## retour : chaque monstre ambiant (hors uniques) part avec la probabilité CATCHUP_LOSS, et de nouveaux arrivent (autre tirage de l'écologie, `salt`).
+## Les monstres de lieux ne migrent pas : ils sont chez eux.
 ## Axe vertical (jalon 6b) : le gestionnaire ne charge QU'UN étage (`level`, 0 = surface). Les requêtes par case (Vector2i) portent sur cet
 ## étage ; set_level() décharge tous les chunks de l'ancien étage (cases vues et monstres sont gardés par clé Vector3i, z compris).
 
@@ -14,6 +17,8 @@ const GEN_RADIUS: int = 3         # chunks maintenus autour du joueur (7 x 7)
 const NEAR_RADIUS: int = 2        # chunks générés immédiatement (la vue de 20 cases tient dedans)
 const KEEP_RADIUS: int = 4        # au-delà, le chunk est déchargé
 const CHUNKS_PER_FRAME: int = 1   # génération étalée des chunks lointains (un chunk coûte quelques ms)
+const CATCHUP_AFTER: float = 3600.0   # absence (secondes de jeu) au-delà de laquelle la faune ambiante migre
+const CATCHUP_LOSS: float = 0.3       # part des monstres ambiants qui partent (et part de la faune fraîche qui arrive en plus)
 
 var world_seed: int = 0
 var arena: bool = false
@@ -26,6 +31,7 @@ var _entities: Node2D             # parent des sprites d'arbres
 var _seen_store: Dictionary = {}  # Vector3i -> PackedByteArray (cases vues des chunks déchargés)
 var _populated: Dictionary = {}   # Vector3i -> true : chunks déjà peuplés (ne le sont plus jamais)
 var _monster_store: Dictionary = {}  # Vector3i -> Array[Dictionary] (Monster.to_dict) des chunks déchargés
+var _unloaded_at: Dictionary = {}    # Vector3i -> moment (points d'action) du déchargement d'un chunk peuplé
 var _queue: Array[Vector3i] = []
 # --- Deltas de sauvegarde (jalon 7) ---
 var _modified: Dictionary = {}          # Vector3i -> true : chunk à écrire dans la sauvegarde
@@ -123,6 +129,8 @@ func _apply_deltas(key: Vector3i, chunk: Chunk) -> void:
 
 func _unload(key: Vector3i) -> void:
 	var chunk := chunks[key] as Chunk
+	if _populated.has(key):
+		_unloaded_at[key] = GameClock.elapsed_points
 	_store_monsters(key)
 	_seen_store[key] = chunk.seen
 	chunk.release()
@@ -135,20 +143,67 @@ func _unload(key: Vector3i) -> void:
 func _populate(key: Vector3i, chunk: Chunk) -> void:
 	if world == null or arena:
 		return
+	var away: float = _away_time(key)
 	if _monster_store.has(key):
 		var saved: Array = _monster_store[key]
 		_monster_store.erase(key)
+		var gains: Array[Dictionary] = []
+		if away >= CATCHUP_AFTER:
+			saved = _migrate(key, chunk, saved, gains)
 		for entry: Dictionary in saved:
 			world.restore_monster(entry)
+		for entry: Dictionary in gains:
+			world.spawn_monster_at(entry)
 		_modified[key] = true
 		return
-	if _populated.has(key) or world.monsters.size() >= World.MAX_MONSTERS:
-		return  # déjà peuplé (monstres tués compris) ; ou plafond global atteint : on retentera au prochain chargement
+	if _populated.has(key):
+		if away >= CATCHUP_AFTER:   # chunk vidé (ou sans monstre) : la faune ambiante peut revenir
+			var gains: Array[Dictionary] = []
+			_migrate(key, chunk, [], gains)
+			for entry: Dictionary in gains:
+				world.spawn_monster_at(entry)
+			if not gains.is_empty():
+				_modified[key] = true
+		return
+	if world.monsters.size() >= World.MAX_MONSTERS:
+		return  # plafond global atteint : on retentera au prochain chargement
 	_populated[key] = true
 	_modified[key] = true  # même sans monstre, le chunk doit être sauvegardé (population figée)
 	var entries: Array[Dictionary] = SpawnGenerator.generate(world_seed, key, chunk.terrain, chunk.furniture, world.population, world.safe_centers)
 	for entry: Dictionary in entries:
 		world.spawn_monster_at(entry)
+
+
+## Secondes de jeu écoulées depuis le déchargement du chunk (0 s'il n'a jamais été déchargé) ; consomme l'horodatage.
+func _away_time(key: Vector3i) -> float:
+	if not _unloaded_at.has(key):
+		return 0.0
+	var away: float = GameClock.elapsed_points - float(_unloaded_at[key])
+	_unloaded_at.erase(key)
+	return away
+
+
+## Migration de la faune d'un chunk resté absent : renvoie les monstres gardés (les uniques et ceux des lieux restent ; chaque monstre ambiant
+## part avec CATCHUP_LOSS) ; `gains` reçoit les nouveaux arrivants (faune ambiante tirée avec un autre sel, autant que de partants plus une part
+## du tirage frais). Pas de nouvel arrivant si le plafond de monstres est atteint.
+func _migrate(key: Vector3i, chunk: Chunk, saved: Array, gains: Array[Dictionary]) -> Array:
+	var bucket: int = maxi(int(GameClock.elapsed_points / CATCHUP_AFTER), 1)
+	var rng: RandomNumberGenerator = WorldRng.rng_for(world_seed, WorldRng.LAYER_SPAWN, key.x, key.y, key.z, bucket + 1000003)
+	var kept: Array = []
+	var lost: int = 0
+	for entry: Dictionary in saved:
+		if bool(entry.get("ambient", false)) and not MonsterDB.tags_of(String(entry["id"])).has("unique") and rng.randf() < CATCHUP_LOSS:
+			lost += 1
+		else:
+			kept.append(entry)
+	if world.monsters.size() >= World.MAX_MONSTERS:
+		return kept
+	var fresh: Array[Dictionary] = SpawnGenerator.generate(world_seed, key, chunk.terrain, chunk.furniture, world.population, world.safe_centers,
+		"", {}, bucket + 1, true)
+	var count: int = mini(lost + ceili(CATCHUP_LOSS * float(fresh.size())), fresh.size())
+	for i in count:
+		gains.append(fresh[i])
+	return kept
 
 
 ## Déchargement : les monstres qui se trouvent dans le chunk quittent le monde et sont mis en réserve.
@@ -174,6 +229,7 @@ func reset_state() -> void:
 	_seen_store.clear()
 	_populated.clear()
 	_monster_store.clear()
+	_unloaded_at.clear()
 	reset_deltas()
 	level = 0
 
