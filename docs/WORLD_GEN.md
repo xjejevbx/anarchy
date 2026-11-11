@@ -154,7 +154,9 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 
 **Portes et fenêtres (jalon 8)** : les plans de mapgen posent `t_door` (fermée) et `t_window` (fermée). Les champs `open_into` / `close_into` de `terrain.json` donnent l'état ouvert (`t_door_o`, `t_window_open`), avec `open_cost` / `open_noise` et `close_cost` / `close_noise`. `World.toggle_openable` change le terrain, fait du bruit et recalcule la vue ; une porte fermée bloque le passage et la vue, une porte ouverte laisse passer les deux, une fenêtre est toujours transparente mais ne se franchit qu'ouverte. L'état passe par `ChunkManager.set_terrain` : c'est un delta ordinaire, sauvegardé et réappliqué au rechargement du chunk. Le joueur ouvre au contact (pousser la direction) ou avec `o` sur une case adjacente ; le déplacement automatique traverse les portes fermées connues et les ouvre au contact.
 
-**Reste (jalon 8)** : toits et vue des étages voisins, `MiniMapUI` et `LookUI` lisent la surface, tuiles complètes. Les sauvegardes conservent déjà les deltas par clé 3D (jalon 7, fait).
+**Cartes par étage (jalon 8)** : `MiniMapUI` (touche `m`, debug) suit l'étage actif. En surface, elle affiche biomes, villes et routes ; sous terre, elle n'affiche que le plan de l'étage (terrain réel, roche hors plan) et s'ouvre directement au zoom « 1 case = 1 échantillon », sans dézoomer au-delà. Le cache de tuiles est séparé par étage (`Vector4i` : étage, zoom, tuile). `LookUI` lit le terrain, le mobilier, les objets et les monstres de l'étage actif ; sous terre, le biome et le lieu affichés sont explicitement marqués « surface ».
+
+**Reste (jalon 8)** : toits et vue des étages voisins, tuiles complètes. Les sauvegardes conservent déjà les deltas par clé 3D (jalon 7, fait).
 
 ## 9. Jalons
 | # | Jalon | État |
@@ -170,7 +172,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 | 6d | `SUMMON`, `RAISE`, `STEALTH`, `BLIND_HEARING`, `SWIM`, `AQUATIC`, `FLY`, `SPORE`, pathfinding par domaine, faune marine, uniques, rattrapage de la faune | fait |
 | 6 (loot) | Tables de loot par lieu | à faire |
 | 7 | Sauvegarde / chargement (seed + deltas) | fait |
-| 8 | Finitions : étages jouables, portes/fenêtres, toits, carte du joueur, tuiles complètes | en cours (escaliers, neuf sous-sols et portes/fenêtres faits) |
+| 8 | Finitions : étages jouables, portes/fenêtres, toits, carte du joueur, tuiles complètes | en cours (escaliers, neuf sous-sols, portes/fenêtres et cartes par étage faits) |
 | 9 / 9b | Monde planétaire sans relief ; nage et noyade | fait |
 | 10 | Climats, îles, `zone` / `access`, pistes, scénario île | fait |
 | 11 | Zonage urbain (14 bâtiments), port, aéroport | fait |
@@ -185,7 +187,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 - Reporté : neige (saisons), ferries/ponts entre continents, routes limitées à un continent, bateaux, vêtements mouillés.
 
 ## 10. Tests
-`test_worldgen_determinism.gd` (ordres de génération, villes, routes + perf, maisons, lieux, biomes, planète, arène, RNG, structure de TOUS les plans : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations), `test_swimming.gd`, `test_save.gd` (sérialisation objet/inventaire, aller-retour complet monde + joueur, deltas de chunks, monstres, effets/infection, compatibilité, suppression ; à lancer via la scène `tests/test_save.tscn`, car il utilise les autoloads : `godot --headless --path <projet> res://tests/test_save.tscn`), `test_jalon10.gd` (climats, îles, zones, accès, pistes), `test_jalon11.gd` (zonage, bâtiments, port, aéroport), `test_jalon12.gd` (lieux sur la route), `test_jalon13.gd`, `test_jalon14.gd`, `test_jalon15.gd`, `test_vertical.gd` (étages), `test_doors.gd` (portes et fenêtres ; via `tests/test_doors.tscn`, autoloads), `test_spawn.gd`, `test_contamination.gd` (voir `MONSTER_SPAWN.md`), `test_pathfinder.gd`, `test_jalon6d.gd` (domaines, aquatiques, uniques, rattrapage ; à lancer via la scène `tests/test_jalon6d.tscn`, car il utilise les autoloads).
+`test_worldgen_determinism.gd` (ordres de génération, villes, routes + perf, maisons, lieux, biomes, planète, arène, RNG, structure de TOUS les plans : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations), `test_swimming.gd`, `test_save.gd` (sérialisation objet/inventaire, aller-retour complet monde + joueur, deltas de chunks, monstres, effets/infection, compatibilité, suppression ; à lancer via la scène `tests/test_save.tscn`, car il utilise les autoloads : `godot --headless --path <projet> res://tests/test_save.tscn`), `test_jalon10.gd` (climats, îles, zones, accès, pistes), `test_jalon11.gd` (zonage, bâtiments, port, aéroport), `test_jalon12.gd` (lieux sur la route), `test_jalon13.gd`, `test_jalon14.gd`, `test_jalon15.gd`, `test_vertical.gd` (étages), `test_doors.gd` (portes et fenêtres ; via `tests/test_doors.tscn`, autoloads), `test_ui_levels.gd` (mini-carte et mode regard par étage ; via `tests/test_ui_levels.tscn`, autoloads), `test_spawn.gd`, `test_contamination.gd` (voir `MONSTER_SPAWN.md`), `test_pathfinder.gd`, `test_jalon6d.gd` (domaines, aquatiques, uniques, rattrapage ; à lancer via la scène `tests/test_jalon6d.tscn`, car il utilise les autoloads).
 
 ## 11. Risques et limites
 - **Échelle** : un continent de 30 000 cases est énorme à pied (marche automatique indispensable) ; à valider à l'œil avec la mini-carte.

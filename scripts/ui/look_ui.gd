@@ -2,6 +2,8 @@ class_name LookUI
 extends CanvasLayer
 ## Mode regard (touche x, ou Maj + pavé numérique / flèches depuis le monde) : la CAMÉRA se déplace, pas le joueur.
 ## Aucun temps ne passe (le jeu est en pause) et rien n'est révélé : le champ de vision et le brouillard restent ceux du joueur.
+## Jalon 8 : le panneau lit l'ÉTAGE ACTIF (terrain, mobilier, objets, monstres) ; en sous-sol, les indications de biome et
+## de lieu sont explicitement marquées « surface ».
 ## Un curseur (la case surlignée) désigne une case ; le panneau à droite donne ce qu'on sait d'elle :
 ##   - case VISIBLE : biome, lieu, terrain, mobilier, praticabilité, objets au sol, monstre (PV, coûts, probabilités de toucher
 ##     chaque partie du corps, comme l'infobulle de survol) ;
@@ -127,7 +129,8 @@ func _build_lines() -> void:
 	var world: World = player.world
 	var cell: Vector2i = _cursor
 	var offset: Vector2i = cell - player.grid_pos
-	_add("REGARD   case (%d, %d)" % [cell.x, cell.y], COLOR_HEADER)
+	var level: int = world.get_level()
+	_add("REGARD   case (%d, %d)   —   %s" % [cell.x, cell.y, "surface" if level == 0 else "étage %d" % level], COLOR_HEADER)
 	if offset == Vector2i.ZERO:
 		_add("Vous êtes ici.", COLOR_ACCENT)
 	else:
@@ -180,21 +183,23 @@ func _build_lines() -> void:
 		_add("Rien de particulier ici.", COLOR_MUTED)
 
 
-## Biome, ville et lieu spécial de la case (pas dans l'arène de test).
+## Biome, ville et lieu spécial de la case (pas dans l'arène de test). Sous terre, ces informations décrivent la
+## SURFACE au-dessus du joueur : on les préfixe pour ne pas les confondre avec le plan de l'étage.
 func _add_place_lines(world: World, cell: Vector2i) -> void:
 	if world.use_arena:
 		return
+	var under: bool = world.get_level() != 0
 	var kind: int = WorldMap.for_seed(world.world_seed).kind_at(cell)
-	_add("Biome : %s" % WorldMap.kind_name(kind))
+	_add(("Biome (surface) : %s" if under else "Biome : %s") % WorldMap.kind_name(kind))
 	var key: Vector3i = ChunkManager.key_of(cell)
 	var coord := Vector2i(key.x, key.y)
 	var settlement: SettlementMap = SettlementMap.for_seed(world.world_seed)
 	var town: Dictionary = settlement.town_at(coord)
 	if not town.is_empty():
-		_add("Lieu : %s" % String(town["name"]))
+		_add(("Lieu (surface) : %s" if under else "Lieu : %s") % String(town["name"]))
 	var special: Dictionary = settlement.specials().special_cell(coord)
 	if not special.is_empty():
-		_add("Lieu : %s" % settlement.specials().place_name(String(special["place"])))
+		_add(("Lieu (surface) : %s" if under else "Lieu : %s") % settlement.specials().place_name(String(special["place"])))
 
 
 # --- Dessin ---
