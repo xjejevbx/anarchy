@@ -2,8 +2,9 @@ extends SceneTree
 ## Test de l'axe vertical (préparation des étages, jalon 6b). À lancer à la demande :
 ##   godot --headless --path <projet> --script res://tests/test_vertical.gd
 ## Code de sortie 0 = tout est bon. Vérifie : terrains verticaux, étages sans plan (roche sous la surface, vide au-dessus), hook des plans
-## d'étage, escaliers (descente / montée à la même case, refus hors escalier), RNG à 4 coordonnées compatible avec l'existant, un seul étage
-## chargé à la fois (ChunkManager.level), monstres et objets au sol rangés par étage.
+## d'étage, escaliers des paires hôpital / clinique / silo / labo / bunker (descente et montée à la même case, connectivité, refus hors
+## escalier), RNG à 4 coordonnées compatible avec l'existant, un seul étage chargé à la fois (ChunkManager.level), monstres et objets au sol
+## rangés par étage.
 
 var _failures: int = 0
 
@@ -71,18 +72,18 @@ func _check_levels() -> void:
 	_check(MapgenDB.plan_by_id("urban_hospital") >= 0, "le plan de surface existe")
 
 
-## Escaliers (jalon 8) : la descente de l'hôpital et la montée du sous-sol occupent la MÊME case du plan,
-## puis un monde réel descend et remonte par deltas de terrain (sans dépendre de l'emplacement des hôpitaux).
+## Escaliers (jalon 8) : chaque descente de plan de surface et la montée de son sous-sol occupent la MÊME case locale,
+## puis un monde réel descend et remonte par deltas de terrain (sans dépendre de l'emplacement des lieux).
 func _check_stairs() -> void:
-	var surface_plan: int = MapgenDB.plan_by_id("urban_hospital")
-	var basement_plan: int = MapgenDB.plan_by_id("urban_hospital@-1")
-	_check(surface_plan >= 0 and basement_plan >= 0, "plans d'escalier de l'hôpital présents")
-	if surface_plan < 0 or basement_plan < 0:
-		return
-	var stair := Vector2i(9, 15)
-	var plan_index: int = stair.y * Chunk.SIZE + stair.x
-	_check(TerrainDB.z_link(MapgenDB.terrain_at(surface_plan, plan_index)) == -1, "hôpital : descente à la case (9, 15)")
-	_check(TerrainDB.z_link(MapgenDB.terrain_at(basement_plan, plan_index)) == 1, "sous-sol : montée à la même case (9, 15)")
+	var pairs: Array = [
+		["urban_hospital", "urban_hospital@-1", Vector2i(9, 15)],
+		["urban_clinic", "urban_clinic@-1", Vector2i(16, 16)],
+		["missile_silo", "missile_silo@-1", Vector2i(12, 15)],
+		["lab_building", "lab_building@-1", Vector2i(7, 15)],
+		["bunker", "bunker@-1", Vector2i(16, 10)],
+	]
+	for pair: Array in pairs:
+		_check_stair_pair(String(pair[0]), String(pair[1]), pair[2])
 
 	var world_seed: int = WorldRng.seed_from_text("cataclysme")
 	var world := World.new()
@@ -118,6 +119,72 @@ func _check_stairs() -> void:
 	var plain: Vector2i = cell + Vector2i(1, 0)
 	_check(not world.use_stairs(plain, -1), "une case sans escalier est refusée")
 	world.queue_free()
+
+
+## Escalier d'un plan de surface et de son sous-sol : même case locale, tout le sol atteignable (surface depuis la porte,
+## sous-sol depuis l'escalier).
+func _check_stair_pair(surface_id: String, basement_id: String, stair: Vector2i) -> void:
+	var surface_plan: int = MapgenDB.plan_by_id(surface_id)
+	var basement_plan: int = MapgenDB.plan_by_id(basement_id)
+	_check(surface_plan >= 0 and basement_plan >= 0, "plans %s / %s présents" % [surface_id, basement_id])
+	if surface_plan < 0 or basement_plan < 0:
+		return
+	var plan_index: int = stair.y * Chunk.SIZE + stair.x
+	_check(TerrainDB.z_link(MapgenDB.terrain_at(surface_plan, plan_index)) == -1, "%s : descente à la case %s" % [surface_id, stair])
+	_check(TerrainDB.z_link(MapgenDB.terrain_at(basement_plan, plan_index)) == 1, "%s : montée à la même case %s" % [basement_id, stair])
+	_check(_plan_floor_reachable(basement_plan, stair, false), "%s : tout le sol est atteignable depuis l'escalier" % basement_id)
+	var front: Vector2i = _front_door_outside(surface_plan)
+	_check(front.x >= 0 and _plan_floor_reachable(surface_plan, front, true),
+			"%s : tout le sol est atteignable depuis la porte (escalier compris)" % surface_id)
+
+
+## Case devant la porte de façade (la porte la plus au sud) du plan non tourné ; (-1, -1) s'il n'y en a pas.
+func _front_door_outside(plan: int) -> Vector2i:
+	var door: int = TerrainDB.index_of("t_door")
+	var best := Vector2i(-1, -1)
+	for y in Chunk.SIZE:
+		for x in Chunk.SIZE:
+			if MapgenDB.terrain_at(plan, y * Chunk.SIZE + x) == door:
+				best = Vector2i(x, y)
+	if best.y < 0 or best.y + 1 >= Chunk.SIZE:
+		return Vector2i(-1, -1)
+	return best + Vector2i.DOWN
+
+
+## Toutes les cases praticables du plan sont-elles atteignables depuis `start` (4 directions) ? `nature_walkable` : au sol,
+## les « . » gardent le terrain naturel (praticable) ; en sous-sol, ils deviennent de la roche.
+func _plan_floor_reachable(plan: int, start: Vector2i, nature_walkable: bool) -> bool:
+	var walk := PackedByteArray()
+	walk.resize(Chunk.CELLS)
+	var visited := PackedByteArray()
+	visited.resize(Chunk.CELLS)
+	for y in Chunk.SIZE:
+		for x in Chunk.SIZE:
+			var index: int = y * Chunk.SIZE + x
+			var terrain: int = MapgenDB.terrain_at(plan, index)
+			var open: bool = (terrain == MapgenDB.NATURE and nature_walkable) or TerrainDB.is_walkable(terrain)
+			walk[index] = 1 if open and FurnitureDB.is_walkable(MapgenDB.furniture_at(plan, index)) else 0
+	if start.x < 0 or start.y < 0 or start.x >= Chunk.SIZE or start.y >= Chunk.SIZE:
+		return false
+	var start_index: int = start.y * Chunk.SIZE + start.x
+	if walk[start_index] == 0:
+		return false
+	var stack: Array[Vector2i] = [start]
+	visited[start_index] = 1
+	while not stack.is_empty():
+		var current: Vector2i = stack.pop_back()
+		for step: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+			var next: Vector2i = current + step
+			if next.x < 0 or next.y < 0 or next.x >= Chunk.SIZE or next.y >= Chunk.SIZE:
+				continue
+			var next_index: int = next.y * Chunk.SIZE + next.x
+			if walk[next_index] == 1 and visited[next_index] == 0:
+				visited[next_index] = 1
+				stack.append(next)
+	for index in Chunk.CELLS:
+		if walk[index] == 1 and visited[index] == 0:
+			return false
+	return true
 
 
 func _signature(world: World) -> Array[String]:
