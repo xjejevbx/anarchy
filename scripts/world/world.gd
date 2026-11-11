@@ -11,6 +11,8 @@ extends Node2D
 ## Jalon 6c : explosions (explode : à la mort d'un monstre EXPLODE, grenade THROW) et division des blobs (spawn_split).
 ## Jalon 6d : domaines de déplacement des monstres (monster_can_enter : marche, nage, eau, vol), cadavres (RAISE), renforts (SUMMON),
 ## bruit entendu par les monstres aveugles (BLIND_HEARING), monstres furtifs (STEALTH).
+## Jalon 8 (portes et fenêtres) : toggle_openable() change le terrain entre son état fermé et ouvert (delta sauvegardé),
+## refait la vue et fait du bruit ; une porte fermée bloque le passage et la vue, une porte ouverte laisse passer les deux.
 ##
 ## Rendu en couches (de bas en haut) :
 ##   1. `_terrain_layer` : les chunks (sol : herbe, murs)
@@ -168,6 +170,74 @@ func use_stairs(cell: Vector2i, direction: int) -> bool:
 
 func _ground_dict() -> Dictionary:
 	return _ground_dict_of(get_level())
+
+
+# --- Portes et fenêtres (jalon 8) ---
+
+## État d'ouverture de la case : 1 = fermée et actionnable, -1 = ouverte et actionnable, 0 = rien d'actionnable.
+func openable_state(cell: Vector2i) -> int:
+	var index: int = chunks.terrain_index(cell)
+	if index < 0:
+		return 0
+	if TerrainDB.open_into(index) >= 0:
+		return 1
+	if TerrainDB.close_into(index) >= 0:
+		return -1
+	return 0
+
+
+func is_closed_openable(cell: Vector2i) -> bool:
+	return openable_state(cell) == 1
+
+
+## Porte fermée CONNUE (visible ou déjà vue) : le déplacement automatique peut la viser, elle s'ouvre au contact.
+## Les fenêtres n'en font pas partie : on ne les traverse pas par un simple double-clic.
+func is_known_closed_door(cell: Vector2i) -> bool:
+	var index: int = chunks.terrain_index(cell)
+	return index >= 0 and TerrainDB.is_door(index) and TerrainDB.open_into(index) >= 0 \
+		and (visible_cells.has(cell) or is_seen(cell))
+
+
+## Case connue et traversable par le déplacement automatique : praticable, ou porte fermée connue (ouvrable au contact).
+func is_known_traversable(cell: Vector2i) -> bool:
+	return is_known_walkable(cell) or is_known_closed_door(cell)
+
+
+## Ouvre ou ferme la porte / fenêtre de `cell` (l'état vient de terrain.json). Renvoie un dictionnaire :
+## `changed`, `opened`, `cost` (points d'action) et `kind` ("door" / "window"). Une case occupée ne peut pas être fermée.
+func toggle_openable(cell: Vector2i) -> Dictionary:
+	var result: Dictionary = {"changed": false, "opened": false, "cost": 0.0, "kind": ""}
+	var index: int = chunks.terrain_index(cell)
+	if index < 0:
+		return result
+	var opened: bool = false
+	var target: int = TerrainDB.open_into(index)
+	var cost: float = TerrainDB.open_cost(index)
+	var noise: int = TerrainDB.open_noise(index)
+	if target >= 0:
+		opened = true
+	else:
+		target = TerrainDB.close_into(index)
+		cost = TerrainDB.close_cost(index)
+		noise = TerrainDB.close_noise(index)
+		if target < 0:
+			return result
+		if is_occupied(cell):
+			EventBus.message_logged.emit("Quelque chose gêne pour fermer %s." % ("la porte" if TerrainDB.is_door(index) else "la fenêtre"))
+			return result
+	var door: bool = TerrainDB.is_door(index)
+	chunks.set_terrain(cell, target)
+	make_noise(cell, noise)
+	update_fov()
+	if door:
+		EventBus.message_logged.emit("Vous ouvrez la porte." if opened else "Vous fermez la porte.")
+	else:
+		EventBus.message_logged.emit("Vous ouvrez la fenêtre." if opened else "Vous fermez la fenêtre.")
+	result["changed"] = true
+	result["opened"] = opened
+	result["cost"] = cost
+	result["kind"] = "door" if door else "window"
+	return result
 
 
 func add_entity(node: Node2D) -> void:

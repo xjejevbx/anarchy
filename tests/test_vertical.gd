@@ -166,7 +166,8 @@ func _plan_floor_reachable(plan: int, start: Vector2i, nature_walkable: bool) ->
 		for x in Chunk.SIZE:
 			var index: int = y * Chunk.SIZE + x
 			var terrain: int = MapgenDB.terrain_at(plan, index)
-			var open: bool = (terrain == MapgenDB.NATURE and nature_walkable) or TerrainDB.is_walkable(terrain)
+			# Une porte fermée est ouvrable : pour la connectivité du plan, elle compte comme un passage.
+			var open: bool = (terrain == MapgenDB.NATURE and nature_walkable) or TerrainDB.is_walkable(terrain) or TerrainDB.is_door(terrain)
 			walk[index] = 1 if open and FurnitureDB.is_walkable(MapgenDB.furniture_at(plan, index)) else 0
 	if start.x < 0 or start.y < 0 or start.x >= Chunk.SIZE or start.y >= Chunk.SIZE:
 		return false

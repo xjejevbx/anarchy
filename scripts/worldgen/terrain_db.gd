@@ -3,6 +3,8 @@ extends RefCounted
 ## Terrains du monde, chargés depuis res://data/worldgen/terrain.json puis terrain_vertical.json (voir le champ "_doc" des fichiers).
 ## Les chunks stockent l'INDEX du terrain (un octet par case) ; cette classe donne les propriétés d'un index.
 ## Jalon 6b (axe vertical) : terrain_vertical.json ajoute roche, vide et escaliers ; `connects_z` (+1 / -1) = liaison vers l'étage voisin.
+## Jalon 8 (portes et fenêtres) : `open_into` / `close_into` donnent l'état ouvert ou fermé d'une case actionnable
+## (t_door <-> t_door_o, t_window <-> t_window_open), avec `open_cost` / `open_noise` et `close_cost` / `close_noise`.
 
 const PATHS: Array[String] = ["res://data/worldgen/terrain.json", "res://data/worldgen/terrain_vertical.json"]
 
@@ -138,6 +140,55 @@ static func autotile_of(index: int) -> String:
 static func links_wall(index: int) -> bool:
 	_ensure_loaded()
 	return index >= 0 and index < _defs.size() and bool(_defs[index].get("wall_link", false))
+
+
+## Porte (fermée ou ouverte) : champ "door" de terrain.json. Les fenêtres, elles, n'en ont pas.
+static func is_door(index: int) -> bool:
+	_ensure_loaded()
+	return index >= 0 and index < _defs.size() and bool(_defs[index].get("door", false))
+
+
+## État ouvert d'un terrain fermé actionnable (porte, fenêtre), -1 s'il ne s'ouvre pas.
+static func open_into(index: int) -> int:
+	return _linked(index, "open_into")
+
+
+## État fermé d'un terrain ouvert actionnable (porte, fenêtre), -1 s'il ne se ferme pas.
+static func close_into(index: int) -> int:
+	return _linked(index, "close_into")
+
+
+## Coût en points d'action pour ouvrir / fermer (0 si le terrain ne l'est pas).
+static func open_cost(index: int) -> float:
+	return _def_float(index, "open_cost")
+
+
+static func close_cost(index: int) -> float:
+	return _def_float(index, "close_cost")
+
+
+## Bruit (rayon en cases) fait en ouvrant / fermant.
+static func open_noise(index: int) -> int:
+	return roundi(_def_float(index, "open_noise"))
+
+
+static func close_noise(index: int) -> int:
+	return roundi(_def_float(index, "close_noise"))
+
+
+static func _linked(index: int, field: String) -> int:
+	_ensure_loaded()
+	if index < 0 or index >= _defs.size():
+		return -1
+	var target: String = String(_defs[index].get(field, ""))
+	return int(_index.get(target, -1))
+
+
+static func _def_float(index: int, field: String) -> float:
+	_ensure_loaded()
+	if index < 0 or index >= _defs.size():
+		return 0.0
+	return float(_defs[index].get(field, 0.0))
 
 
 static func has_id(id: String) -> bool:

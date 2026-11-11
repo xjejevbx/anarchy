@@ -512,7 +512,8 @@ func _check_house_plans() -> void:
 					var plan_cell: int = MapgenDB.plan_index(lx, ly, rot)
 					used[plan_cell] = true
 					var terrain_here: int = MapgenDB.terrain_at(plan, plan_cell)
-					var open: bool = terrain_here == MapgenDB.NATURE or TerrainDB.is_walkable(terrain_here)
+					# Une porte fermée est ouvrable : elle compte comme un passage pour la connectivité du plan.
+					var open: bool = terrain_here == MapgenDB.NATURE or TerrainDB.is_walkable(terrain_here) or TerrainDB.is_door(terrain_here)
 					walk[ly * Chunk.SIZE + lx] = 1 if open and FurnitureDB.is_walkable(MapgenDB.furniture_at(plan, plan_cell)) else 0
 			if used.size() != Chunk.CELLS:
 				mapping_ok = false
@@ -576,7 +577,8 @@ func _plan_floor_reachable(plan: int, rot: int, front_door: Vector2i, floor_terr
 		for lx in Chunk.SIZE:
 			var plan_cell: int = MapgenDB.plan_index(lx, ly, rot)
 			var terrain_here: int = MapgenDB.terrain_at(plan, plan_cell)
-			var open: bool = terrain_here == MapgenDB.NATURE or TerrainDB.is_walkable(terrain_here)
+			# Une porte fermée est ouvrable : elle compte comme un passage pour la connectivité du plan.
+			var open: bool = terrain_here == MapgenDB.NATURE or TerrainDB.is_walkable(terrain_here) or TerrainDB.is_door(terrain_here)
 			walk[ly * Chunk.SIZE + lx] = 1 if open and FurnitureDB.is_walkable(MapgenDB.furniture_at(plan, plan_cell)) else 0
 	var start: Vector2i = _rotate_plan_cell(front_door + Vector2i.DOWN, rot)
 	if walk[start.y * Chunk.SIZE + start.x] != 1:

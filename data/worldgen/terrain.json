@@ -121,10 +121,14 @@
         "t_door": {
             "name": "Porte",
             "tile": "t_door_c",
-            "walkable": true,
+            "walkable": false,
             "opaque": true,
             "wall_link": true,
-            "color": "#7a5230"
+            "color": "#7a5230",
+            "door": true,
+            "open_into": "t_door_o",
+            "open_cost": 1.0,
+            "open_noise": 4
         },
         "t_window": {
             "name": "Fenêtre",
@@ -132,7 +136,10 @@
             "walkable": false,
             "opaque": false,
             "wall_link": true,
-            "color": "#7fb4d8"
+            "color": "#7fb4d8",
+            "open_into": "t_window_open",
+            "open_cost": 2.0,
+            "open_noise": 5
         },
         "t_field": {
             "name": "Champ",
@@ -189,6 +196,29 @@
             "walkable": true,
             "opaque": false,
             "color": "#8a6a45"
+        },
+        "t_door_o": {
+            "name": "Porte ouverte",
+            "tile": "t_door_o",
+            "walkable": true,
+            "opaque": false,
+            "wall_link": true,
+            "color": "#7a5230",
+            "door": true,
+            "close_into": "t_door",
+            "close_cost": 1.0,
+            "close_noise": 3
+        },
+        "t_window_open": {
+            "name": "Fenêtre ouverte",
+            "tile": "t_window_open",
+            "walkable": true,
+            "opaque": false,
+            "wall_link": true,
+            "color": "#7fb4d8",
+            "close_into": "t_window",
+            "close_cost": 2.0,
+            "close_noise": 5
         }
     }
 }

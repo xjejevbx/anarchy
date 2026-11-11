@@ -1,8 +1,9 @@
 class_name AutoPath
 extends RefCounted
 ## Chemin court pour les déplacements automatiques du joueur : touche maintenue, double-clic et touche * du mode regard.
-## Il n'emprunte que les cases CONNUES du joueur (visibles ou déjà vues, voir World.is_known_walkable) : il contourne les arbres
-## qu'on voit mais ne « devine » pas ce qui est caché.
+## Il n'emprunte que les cases CONNUES du joueur (visibles ou déjà vues, voir World.is_known_traversable) : il contourne les arbres
+## qu'on voit mais ne « devine » pas ce qui est caché. Une porte fermée connue fait partie du chemin : le joueur l'ouvre au contact
+## (voir Player._travel_step).
 ##
 ## Deux modes :
 ##  - `prefer` nul (double-clic, touche * du mode regard) : recherche en 8 directions. Un pas diagonal compte pour DEUX pas
@@ -41,7 +42,7 @@ static func _is_diagonal(dir: Vector2i) -> bool:
 
 
 static func _passable(world: World, cell: Vector2i, from: Vector2i) -> bool:
-	return cell == from or world.is_known_walkable(cell)
+	return cell == from or world.is_known_traversable(cell)
 
 
 ## Le pas `dir` depuis `a` est-il permis ? Case d'arrivée connue et praticable (le départ est toujours permis : le joueur peut nager) ;
@@ -138,7 +139,7 @@ static func _find_preferred(world: World, from: Vector2i, to: Vector2i, radius: 
 				continue
 			if absi(next.x - from.x) > radius or absi(next.y - from.y) > radius:
 				continue
-			if not world.is_known_walkable(next):
+			if not world.is_known_traversable(next):
 				continue
 			came[next] = node
 			queue.append(next)

@@ -96,6 +96,7 @@ var avoid_scenery: bool = true          # option « esquive automatique du déco
 
 var _fg_sprite: String = ""
 var _held_key: Key = KEY_NONE
+var _facing: Vector2i = Vector2i.DOWN  # dernier déplacement réussi : priorité pour ouvrir/fermer (touche o)
 var _repeat_timer: float = 0.0
 var _travel_path: Array[Vector2i] = []  # déplacement automatique en cours (double-clic) : cases restant à parcourir
 var _travel_timer: float = 0.0
@@ -187,6 +188,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_use_stairs(-1)
 	elif key_event.unicode == 60:  # « < » : monter l'escalier de la case
 		_use_stairs(1)
+	elif KeyUtil.is_letter(key_event, "o"):  # ouvrir / fermer une porte ou une fenêtre adjacente
+		_toggle_openable()
 	elif MOVE_KEYS.has(key) or WAIT_KEYS.has(key):
 		_held_key = key  # avant l'action : elle peut interrompre la répétition
 		_repeat_timer = REPEAT_DELAY
@@ -282,7 +285,14 @@ func _start_travel(cell: Vector2i) -> void:
 func _travel_step() -> void:
 	var next: Vector2i = _travel_path[0]
 	var step: Vector2i = next - grid_pos
-	if maxi(absi(step.x), absi(step.y)) != 1 or not world.is_walkable(next) or world.get_monster_at(next) != null:
+	if maxi(absi(step.x), absi(step.y)) != 1 or world.get_monster_at(next) != null:
+		_travel_path.clear()  # chemin bloqué
+		return
+	if world.is_closed_openable(next):
+		if not _toggle_openable_at(next):
+			_travel_path.clear()  # porte impossible à ouvrir : ne pas boucler
+		return  # l'ouverture coûte l'action ; le chemin reste, on passera au prochain pas
+	if not world.is_walkable(next):
 		_travel_path.clear()  # chemin bloqué
 		return
 	if step.x != 0 and step.y != 0:
@@ -310,6 +320,7 @@ func _diagonal_passable(dir: Vector2i) -> bool:
 ## de DEUX déplacements passe, un par un (les monstres peuvent agir entre les deux).
 func _move_diagonal_direct(dir: Vector2i) -> void:
 	var from_cell: Vector2i = grid_pos
+	_facing = dir
 	var was_swimming: bool = is_swimming()
 	grid_pos += dir
 	position = Vector2(grid_pos * World.TILE_SIZE)
@@ -434,6 +445,10 @@ func _repeat_action(key: Key) -> void:
 		_stop_repeat()  # à bout de souffle : c'est au joueur de décider (flotter, rejoindre la rive...)
 		return
 	var dir: Vector2i = MOVE_KEYS[key]
+	var front: Vector2i = grid_pos + dir
+	if maxi(absi(dir.x), absi(dir.y)) == 1 and world.get_monster_at(front) == null and world.is_closed_openable(front):
+		_toggle_openable_at(front)  # on pousse la porte / fenêtre : elle s'ouvre, le pas suivant passera
+		return
 	if _ray_clear(dir):
 		_do_repeatable_action(key)
 		return
@@ -468,6 +483,9 @@ func set_avoid_scenery(value: bool) -> void:
 ## active, on contourne l'obstacle. Sans détour possible, rien ne se passe (comme avant).
 func _move_with_dodge(dir: Vector2i) -> void:
 	var target: Vector2i = grid_pos + dir
+	if world.get_monster_at(target) == null and world.is_closed_openable(target):
+		_toggle_openable_at(target)  # ouvrir au contact : une porte fermée ne déclenche pas de détour
+		return
 	if avoid_scenery and world.get_monster_at(target) == null and not world.can_player_enter(target) and _dodge(dir):
 		return
 	_try_move(dir)
@@ -764,8 +782,12 @@ func _try_move(dir: Vector2i) -> void:
 	if monster != null:
 		_attack(monster)
 		return
+	if world.is_closed_openable(target):
+		_toggle_openable_at(target)  # pousser une porte fermée l'ouvre (coûte une action, sans déplacement)
+		return
 	if not world.can_player_enter(target):
 		return
+	_facing = dir
 	grid_pos = target
 	position = Vector2(grid_pos * World.TILE_SIZE)
 	var from_cell: Vector2i = grid_pos
@@ -783,6 +805,39 @@ func _try_move(dir: Vector2i) -> void:
 func _use_stairs(direction: int) -> void:
 	if world.use_stairs(grid_pos, direction):
 		_perform_action("Escalier", MOVE_BASE_COST, 0.0)
+
+
+## Touche o : ouvre ou ferme une porte / fenêtre adjacente. La case dans la direction du dernier déplacement
+## est prioritaire, puis nord, est, sud, ouest et les diagonales.
+func _toggle_openable() -> void:
+	var cell: Vector2i = _openable_nearby()
+	if cell == Vector2i(-1, -1):
+		EventBus.message_logged.emit("Rien à ouvrir ou fermer à côté.")
+		return
+	_toggle_openable_at(cell)
+
+
+## Case adjacente actionnable (fermée ou ouverte), (-1, -1) s'il n'y en a pas.
+func _openable_nearby() -> Vector2i:
+	var dirs: Array[Vector2i] = [_facing]
+	for dir: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT,
+			Vector2i(1, -1), Vector2i(1, 1), Vector2i(-1, 1), Vector2i(-1, -1)]:
+		if not dirs.has(dir):
+			dirs.append(dir)
+	for dir: Vector2i in dirs:
+		var cell: Vector2i = grid_pos + dir
+		if world.openable_state(cell) != 0:
+			return cell
+	return Vector2i(-1, -1)
+
+
+## Ouvre / ferme une case actionnable et paie son coût (voir World.toggle_openable). true si l'état a changé.
+func _toggle_openable_at(cell: Vector2i) -> bool:
+	var info: Dictionary = world.toggle_openable(cell)
+	if not bool(info.get("changed", false)):
+		return false
+	_perform_action("Ouvrir" if bool(info.get("opened", false)) else "Fermer", float(info.get("cost", 0.0)), 0.0)
+	return true
 
 
 func _attack(monster: Monster) -> void:

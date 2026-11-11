@@ -64,7 +64,7 @@ Champs continus évalués à toute coordonnée (aucune couture) : altitude, humi
 ### 4.4 Maisons et plans (`MapgenDB`, `houses.json`, `FurnitureDB`)
 - Plans ASCII 24 × 24, façade au SUD, compilés une fois en terrain + mobilier ; palette caractère → terrain et/ou meuble (vide = nature). Murs dans les lignes/colonnes 1-22, porte de façade sur le mur du bas avec chemin jusqu'au bord. 4 plans de maison (petite, familiale, pavillon, cabanon).
 - `lot_plan(cell)` : 85 % des parcelles habitables ; plan tiré par `mix(seed, LAYER_MAPGEN, x, y, 1)`, rotation vers une rue voisine (`mix(..., 2)`) : `rot` 0 sud, 1 ouest, 2 nord, 3 est.
-- Terrains : `t_floor`, `t_wall_house`, `t_door`, `t_window` (`wall_link` : les murs se raccordent). Mobilier : un octet par case (`Chunk.furniture`), index 1-based, 0 = rien ; ajouter à la suite (`furniture.json` puis `furniture_medical.json` : l'index ne change jamais).
+- Terrains : `t_floor`, `t_wall_house`, `t_door` (fermée), `t_window` (fermée), et leurs états ouverts `t_door_o` / `t_window_open` (`wall_link` : les murs se raccordent ; `open_into` / `close_into` : voir §8). Mobilier : un octet par case (`Chunk.furniture`), index 1-based, 0 = rien ; ajouter à la suite (`furniture.json` puis `furniture_medical.json` : l'index ne change jamais).
 - `MapgenDB` charge dans l'ordre : `houses`, `places`, `big_places`, `access_places`, `urban`, `military`, `naval`, `rural`, `medical`. Les plans de maison viennent en premier ; les autres sont retrouvés par `plan_by_id`.
 - Un plan nommé `<id>@<z>` est le plan d'ÉTAGE de `<id>` (§8).
 
@@ -105,7 +105,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 ## 5. Données (`data/worldgen/` sauf mention)
 | Fichier | Contenu |
 |---|---|
-| `terrain.json`, `terrain_vertical.json` | terrains : tuile, `base`, `entity_sprite`, `autotile`, `walkable` (à pied), `swim`, `opaque`, `wall_link`, `connects_z`, `color` ; l'ORDRE (fichiers dans l'ordre de chargement) donne l'index (max 255) |
+| `terrain.json`, `terrain_vertical.json` | terrains : tuile, `base`, `entity_sprite`, `autotile`, `walkable` (à pied), `swim`, `opaque`, `wall_link`, `connects_z`, `color`, `open_into` / `close_into` + `open_cost` / `open_noise` (portes et fenêtres) ; l'ORDRE (fichiers dans l'ordre de chargement) donne l'index (max 255) |
 | `furniture.json`, `furniture_medical.json` | mobilier : `tile`, `walkable`, `opaque`, `color` (max 255, ajouter à la suite) |
 | `biomes.json` | bruits, seuils, planète, îles, arbres, couleurs |
 | `towns.json` | tailles, ratios, routes, zonage urbain, couleurs de mini-carte |
@@ -146,12 +146,15 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 | Monstres | `Monster.z` ; réserve par clé 3D |
 | Objets au sol | `World._ground_by_level` |
 | `World` | `get_level()`, `change_level(z)`, `stair_link(cell)`, `use_stairs(cell, direction)` |
+| Portes / fenêtres | `World.toggle_openable(cell)` : `t_door` <-> `t_door_o`, `t_window` <-> `t_window_open` (delta de terrain) |
 
 **Plans d'étage** : un plan `"<id du plan de surface>@<z>"` (ex. `urban_hospital@-1`), dans n'importe quel fichier de `mapgen/`, est l'étage de ce plan (`ChunkGenerator.level_plan`, même rotation que la surface) ; ses `.` gardent la roche / le vide. Escalier : `t_stairs_down` sur le plan de surface et `t_stairs_up` au même endroit sur `@-1`.
 
 **Étages jouables (jalon 8)** : `urban_hospital@-1` (morgue, réserves, chaufferie), `urban_clinic@-1` (réserves, morgue), `bunker@-1` (caserne, réserve, salle des machines), `missile_silo@-1` (salle de lancement), `lab_building@-1` (salle blanche, confinement), `npp_reactor@-1` (réacteur, piscine de refroidissement, pompes), `base_hq@-1` (PC enterré, salle de commandement), `depot_hall@-1` (réserves enterrées) et `cave@-1` (grotte profonde, campement caché). La descente est sur le plan de surface et la montée du sous-sol occupe la même case locale ; `test_vertical.gd` vérifie chaque paire, y compris que tout le sol du sous-sol est atteignable depuis l'escalier. Le joueur utilise l'escalier avec `<` (monter) / `>` (descendre) ; `World.use_stairs` vérifie que l'étage voisin porte bien l'escalier inverse avant de changer d'étage. Le changement coûte une action (les monstres du nouvel étage agissent), les monstres de l'ancien passent en réserve, les objets au sol et les deltas restent rangés par clé 3D.
 
-**Reste (jalon 8)** : portes et fenêtres actionnables, toits et vue des étages voisins, `MiniMapUI` et `LookUI` lisent la surface, tuiles complètes. Les sauvegardes conservent déjà les deltas par clé 3D (jalon 7, fait).
+**Portes et fenêtres (jalon 8)** : les plans de mapgen posent `t_door` (fermée) et `t_window` (fermée). Les champs `open_into` / `close_into` de `terrain.json` donnent l'état ouvert (`t_door_o`, `t_window_open`), avec `open_cost` / `open_noise` et `close_cost` / `close_noise`. `World.toggle_openable` change le terrain, fait du bruit et recalcule la vue ; une porte fermée bloque le passage et la vue, une porte ouverte laisse passer les deux, une fenêtre est toujours transparente mais ne se franchit qu'ouverte. L'état passe par `ChunkManager.set_terrain` : c'est un delta ordinaire, sauvegardé et réappliqué au rechargement du chunk. Le joueur ouvre au contact (pousser la direction) ou avec `o` sur une case adjacente ; le déplacement automatique traverse les portes fermées connues et les ouvre au contact.
+
+**Reste (jalon 8)** : toits et vue des étages voisins, `MiniMapUI` et `LookUI` lisent la surface, tuiles complètes. Les sauvegardes conservent déjà les deltas par clé 3D (jalon 7, fait).
 
 ## 9. Jalons
 | # | Jalon | État |
@@ -167,7 +170,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 | 6d | `SUMMON`, `RAISE`, `STEALTH`, `BLIND_HEARING`, `SWIM`, `AQUATIC`, `FLY`, `SPORE`, pathfinding par domaine, faune marine, uniques, rattrapage de la faune | fait |
 | 6 (loot) | Tables de loot par lieu | à faire |
 | 7 | Sauvegarde / chargement (seed + deltas) | fait |
-| 8 | Finitions : étages jouables, portes/fenêtres, toits, carte du joueur, tuiles complètes | en cours (escaliers et neuf sous-sols faits) |
+| 8 | Finitions : étages jouables, portes/fenêtres, toits, carte du joueur, tuiles complètes | en cours (escaliers, neuf sous-sols et portes/fenêtres faits) |
 | 9 / 9b | Monde planétaire sans relief ; nage et noyade | fait |
 | 10 | Climats, îles, `zone` / `access`, pistes, scénario île | fait |
 | 11 | Zonage urbain (14 bâtiments), port, aéroport | fait |
@@ -182,7 +185,7 @@ Les monstres initiaux d'un chunk sont une fonction pure de `(seed, clé, terrain
 - Reporté : neige (saisons), ferries/ponts entre continents, routes limitées à un continent, bateaux, vêtements mouillés.
 
 ## 10. Tests
-`test_worldgen_determinism.gd` (ordres de génération, villes, routes + perf, maisons, lieux, biomes, planète, arène, RNG, structure de TOUS les plans : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations), `test_swimming.gd`, `test_save.gd` (sérialisation objet/inventaire, aller-retour complet monde + joueur, deltas de chunks, monstres, effets/infection, compatibilité, suppression ; à lancer via la scène `tests/test_save.tscn`, car il utilise les autoloads : `godot --headless --path <projet> res://tests/test_save.tscn`), `test_jalon10.gd` (climats, îles, zones, accès, pistes), `test_jalon11.gd` (zonage, bâtiments, port, aéroport), `test_jalon12.gd` (lieux sur la route), `test_jalon13.gd`, `test_jalon14.gd`, `test_jalon15.gd`, `test_vertical.gd` (étages), `test_spawn.gd`, `test_contamination.gd` (voir `MONSTER_SPAWN.md`), `test_pathfinder.gd`, `test_jalon6d.gd` (domaines, aquatiques, uniques, rattrapage ; à lancer via la scène `tests/test_jalon6d.tscn`, car il utilise les autoloads).
+`test_worldgen_determinism.gd` (ordres de génération, villes, routes + perf, maisons, lieux, biomes, planète, arène, RNG, structure de TOUS les plans : murs dans le chunk, sol atteignable depuis la porte dans les 4 rotations), `test_swimming.gd`, `test_save.gd` (sérialisation objet/inventaire, aller-retour complet monde + joueur, deltas de chunks, monstres, effets/infection, compatibilité, suppression ; à lancer via la scène `tests/test_save.tscn`, car il utilise les autoloads : `godot --headless --path <projet> res://tests/test_save.tscn`), `test_jalon10.gd` (climats, îles, zones, accès, pistes), `test_jalon11.gd` (zonage, bâtiments, port, aéroport), `test_jalon12.gd` (lieux sur la route), `test_jalon13.gd`, `test_jalon14.gd`, `test_jalon15.gd`, `test_vertical.gd` (étages), `test_doors.gd` (portes et fenêtres ; via `tests/test_doors.tscn`, autoloads), `test_spawn.gd`, `test_contamination.gd` (voir `MONSTER_SPAWN.md`), `test_pathfinder.gd`, `test_jalon6d.gd` (domaines, aquatiques, uniques, rattrapage ; à lancer via la scène `tests/test_jalon6d.tscn`, car il utilise les autoloads).
 
 ## 11. Risques et limites
 - **Échelle** : un continent de 30 000 cases est énorme à pied (marche automatique indispensable) ; à valider à l'œil avec la mini-carte.
