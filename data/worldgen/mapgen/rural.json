@@ -1,5 +1,5 @@
 {
- "_doc": "Plans du jalon 15 (rural et divers). Meme format que houses.json (24 x 24 caracteres, facade au SUD, tournee par le jeu). Lieux assembles par specials.json : oasis, ski_resort (2 x 1), volcano_site (2 x 2), ancient_ruins (2 x 1), cave_entrance, arctic_base (2 x 1), jungle_temple, nomad_camp et trapper_cabin (plan cabin existant). Caracteres : '#' mur (ou roche pour la grotte), '+' porte, 'w' fenetre, '_' sol, '=' terre, 'p' asphalte, 'x' beton / dallage / basalte, 'f' cloture, 'h' heliport, 'v' lave (t_reactor, non praticable), 'a' cendres (t_dirt), 'o' eau peu profonde, 'O' eau profonde, 's' sable, 'g' herbe, 'm' mousse (pistes de ski), 'T' arbre ; '.' = nature ; mobilier : b lit, t table, c chaise, k comptoir, F frigo, B bibliotheque, R rayonnage, C console, M machine legere, H machine lourde (remontees mecaniques, vehicules), D bureau, L casier, S coffre-fort, X caisse, A autel. Le volcan est un cercle de 48 x 48 cases decoupe en quatre plans (volcano_nw, _ne, _sw, _se). Regles verifiees par tests/test_worldgen_determinism.gd : murs dans le chunk (lignes et colonnes 1 a 22), tout le sol atteignable depuis la porte de facade (4 rotations) ; les plans sans porte (ruines, volcan, pistes de ski) sont libres. Escaliers (jalon 8) : '>' descente, '<' montee ; le sous-sol cave@-1 (grotte profonde) place sa montee au meme endroit que la descente de la grotte.",
+ "_doc": "Plans du jalon 15 (rural et divers). Meme format que houses.json (24 x 24 caracteres, facade au SUD, tournee par le jeu). Lieux assembles par specials.json : oasis, ski_resort (2 x 1), volcano_site (2 x 2), ancient_ruins (2 x 1), cave_entrance, arctic_base (2 x 1), jungle_temple, nomad_camp et trapper_cabin (plan cabin existant). Caracteres : '#' mur (ou roche pour la grotte), '+' porte, 'w' fenetre, '_' sol, '=' terre, 'p' asphalte, 'x' beton / dallage / basalte, 'f' cloture, 'h' heliport, 'v' lave (t_lava, non praticable), 'a' cendres (t_dirt), 'o' eau peu profonde, 'O' eau profonde, 's' sable, 'g' herbe, 'm' mousse (pistes de ski), 'T' arbre ; '.' = nature ; mobilier : b lit, t table, c chaise, k comptoir, F frigo, B bibliotheque, R rayonnage, C console, M machine legere, H machine lourde (remontees mecaniques, vehicules), D bureau, L casier, S coffre-fort, X caisse, A autel. Le volcan est un cercle de 48 x 48 cases decoupe en quatre plans (volcano_nw, _ne, _sw, _se). Regles verifiees par tests/test_worldgen_determinism.gd : murs dans le chunk (lignes et colonnes 1 a 22), tout le sol atteignable depuis la porte de facade (4 rotations) ; les plans sans porte (ruines, volcan, pistes de ski) sont libres. Escaliers (jalon 8) : '>' descente, '<' montee ; le sous-sol cave@-1 (grotte profonde) place sa montee au meme endroit que la descente de la grotte.",
  "palette": {
   ".": {},
   "#": {"terrain": "t_wall_house"},
@@ -11,7 +11,7 @@
   "x": {"terrain": "t_concrete"},
   "f": {"terrain": "t_fence"},
   "h": {"terrain": "t_helipad"},
-  "v": {"terrain": "t_reactor"},
+  "v": {"terrain": "t_lava"},
   "a": {"terrain": "t_dirt"},
   "o": {"terrain": "t_water_sh"},
   "O": {"terrain": "t_water_dp"},

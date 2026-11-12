@@ -241233,6 +241233,101 @@
 	}
    ],
    "bg": []
+  },
+  "t_grave": {
+   "fg": [
+	{
+	 "sprite": "f_grave_stone_1",
+	 "weight": 1
+	},
+	{
+	 "sprite": "f_grave_stone_2",
+	 "weight": 1
+	}
+   ],
+   "bg": [
+	{
+	 "sprite": "t_grass",
+	 "weight": 1
+	}
+   ]
+  },
+  "t_reactor": {
+   "fg": [
+	{
+	 "sprite": "139_vp_minireactor_0",
+	 "weight": 1
+	}
+   ],
+   "bg": [
+	{
+	 "sprite": "t_rock_floor_center",
+	 "weight": 1
+	}
+   ]
+  },
+  "t_helipad": {
+   "fg": [
+	{
+	 "sprite": "helipad",
+	 "weight": 1
+	}
+   ],
+   "bg": []
+  },
+  "f_altar": {
+   "fg": [
+	{
+	 "sprite": "1576_f_slab_0",
+	 "weight": 1
+	}
+   ],
+   "bg": []
+  },
+  "f_container": {
+   "fg": [
+	{
+	 "sprite": "f_sealed_intermodal_crate",
+	 "weight": 1
+	}
+   ],
+   "bg": []
+  },
+  "f_hospital_bed": {
+   "fg": [
+	{
+	 "sprite": "f_exam_bed",
+	 "weight": 1
+	}
+   ],
+   "bg": []
+  },
+  "f_gurney": {
+   "fg": [
+	{
+	 "sprite": "f_metal_table_unconnected",
+	 "weight": 1
+	}
+   ],
+   "bg": []
+  },
+  "f_surgery_table": {
+   "fg": [
+	{
+	 "sprite": "f_metal_table_unconnected",
+	 "weight": 1
+	}
+   ],
+   "bg": []
+  },
+  "f_morgue_drawer": {
+   "fg": [
+	{
+	 "sprite": "f_locker",
+	 "weight": 1
+	}
+   ],
+   "bg": []
   }
  }
 }

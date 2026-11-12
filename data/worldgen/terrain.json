@@ -219,6 +219,13 @@
             "close_into": "t_window",
             "close_cost": 2.0,
             "close_noise": 5
+        },
+        "t_lava": {
+            "name": "Lave",
+            "tile": "t_lava",
+            "walkable": false,
+            "opaque": false,
+            "color": "#d35400"
         }
     }
 }

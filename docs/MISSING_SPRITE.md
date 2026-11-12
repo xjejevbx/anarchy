@@ -5,7 +5,7 @@
 ## À vérifier dans `tiles.json`
 - **Sol naturel** : `t_grass`, `t_grass_dead`, `t_grass_long`, `t_moss`, `t_tree`, `t_water_sh`, `t_water_dp`, `t_swater_sh`, `t_mud`, `t_dirt`, `t_sand`.
 - **Villes et routes** : `t_pavement`, `t_pavement_y`, `t_sidewalk`, `t_bridge` (aussi `t_pier`), `t_floor`, `t_door_c` (pour `t_door`), `t_window`.
-- **Lieux** : `t_dirtmound` (champ), `t_chainfence`, `t_gas_pump`, `t_rock_floor` (béton), `t_grave`, `t_reactor`, `t_helipad` (**absent du pack**, repli couleur).
+- **Lieux** : `t_dirtmound` (champ), `t_chainfence`, `t_gas_pump`, `t_rock_floor` (béton), `t_grave`, `t_reactor`, `t_helipad` (les trois sont fournis par les alias du jalon 8, voir plus bas).
 - **Murs** (via `ChunkManager.wall_sprite`) : `t_wall_edge_ns|ew`, `t_wall_corner_nw|ne|se|sw`, `t_wall_t_connection_n|e|s|w`, `t_wall_end_piece_n|e|s|w`, `t_wall_unconnected`.
 - **Mobilier** : `f_bed`, `f_table`, `f_chair`, `f_sofa`, `f_bookcase`, `f_fridge`, `f_counter`, `f_oven`, `f_dresser`, `f_sink`, `f_toilet`, `f_bathtub`, `f_rack`, `f_console`, `f_machinery_light`.
 - **Objets** (`items.json`) : `antibiotics` et les ids déjà listés dans « Objets (UltiCa) » ci-dessous.
@@ -35,18 +35,31 @@ Déjà utilisés par le jeu (à ne pas toucher) : `mon_zombie`, `mon_zombie_chil
 Plan de repli suggéré : pour chaque id absent, ajouter dans `monsters.json` un `fallback_tile` plus proche (ex. `mon_zombie_cop` pour les policiers) et un `tint`. Les ids sont à ajouter à `IDS` de `tools/build_ultica_pack.py` (voir l'avertissement plus bas).
 
 ### Mobilier prévu pour le jalon 6 (à la FIN de `furniture.json`)
-Tuiles demandées (confiance faible, repli en carré de la `color`) : `f_hospital_bed` (essayer `f_bed`), `f_gurney`, `f_surgery_table`, `f_morgue_drawer`, `f_cell_bed` (essayer `f_bed`), `f_quarantine_bed` (essayer `f_bed`), `f_lab_table` (essayer `f_table`), `f_cryo_pod`, `f_cage`, `f_vat`, `f_server`, `f_garage_pit`.
+Tuiles demandées (confiance faible, repli en carré de la `color`) : `f_hospital_bed` (essayer `f_bed`), `f_gurney`, `f_surgery_table`, `f_morgue_drawer` (les quatre sont fournis par les alias du jalon 8), `f_cell_bed` (essayer `f_bed`), `f_quarantine_bed` (essayer `f_bed`), `f_lab_table` (essayer `f_table`), `f_cryo_pod`, `f_cage`, `f_vat`, `f_server`, `f_garage_pit`.
 
 ## Jalon 6b : axe vertical, mobilier médical, monstres de lieux
 
 **Terrains verticaux** (`data/worldgen/terrain_vertical.json`) : `t_rock` (roche pleine ; `t_rock` existe dans CDDA, confiance haute), `t_open_air` (vide ; id de tuile probable, confiance moyenne), `t_stairs_up` et `t_stairs_down` (confiance haute). Un id absent n'empêche pas de jouer : carré de la `color` du JSON (roche grise, vide presque noir, escaliers beiges). Les étages (z != 0) ne sont affichés qu'après le jalon 8 (changement d'étage), donc ces tuiles ne servent pas encore.
 
-**Mobilier médical** (`data/worldgen/furniture_medical.json`, à la suite de `furniture.json`) : `f_hospital_bed` (essayer `f_bed`), `f_gurney`, `f_surgery_table`, `f_morgue_drawer` (confiance faible, repli en carré de la `color`). Ils étaient déjà annoncés plus haut (« Mobilier prévu pour le jalon 6 ») ; `f_cell_bed`, `f_quarantine_bed`, `f_lab_table`, `f_cryo_pod`, `f_cage`, `f_vat`, `f_server`, `f_garage_pit` ne sont PAS encore utilisés.
+**Mobilier médical** (`data/worldgen/furniture_medical.json`, à la suite de `furniture.json`) : `f_hospital_bed`, `f_gurney`, `f_surgery_table`, `f_morgue_drawer` (fournis par les alias du jalon 8). Ils étaient déjà annoncés plus haut (« Mobilier prévu pour le jalon 6 ») ; `f_cell_bed`, `f_quarantine_bed`, `f_lab_table`, `f_cryo_pod`, `f_cage`, `f_vat`, `f_server`, `f_garage_pit` ne sont PAS encore utilisés.
 
 **Monstres de lieux** (`data/monsters_places.json`, 60 monstres) : aucun nouvel id, tous les `mon_<id>` utilisés sont déjà listés dans la section « Jalon 6 » ci-dessus (même repli teinté `mon_zombie` / `mon_wolf`). Les affixes ne demandent aucun sprite (nom, PV, vitesse et armure seulement).
 
+## Jalon 8 : tuiles complètes (alias de `assets/tiles.json`)
+Neuf ids utilisés par les données n'existaient pas dans le pack UltiCa. Ils sont désormais dessinés par un **alias** vers un sprite existant, sans nouveau PNG :
+- `t_grave` → `f_grave_stone_1|2`, sur un fond `t_grass` ;
+- `t_reactor` → `139_vp_minireactor_0`, sur un fond `t_rock_floor_center` ;
+- `t_helipad` → `helipad` (icône d'héliport) ;
+- `f_altar` → `1576_f_slab_0` (dalle de pierre) ;
+- `f_container` → `f_sealed_intermodal_crate` ;
+- `f_hospital_bed` → `f_exam_bed` ;
+- `f_gurney` et `f_surgery_table` → `f_metal_table_unconnected` ;
+- `f_morgue_drawer` → `f_locker`.
+
+Une tuile de terrain peut avoir une couche `bg` : `Chunk._draw` la dessine sous la couche `fg` (tombe sur l'herbe, réacteur sur le béton). La lave des volcans n'utilise plus `t_reactor` : le terrain `t_lava` (ajouté à la fin de `terrain.json`, palette `v` de `rural.json`) a son sprite dans le pack. `test_worldgen_determinism` ne signale plus aucune tuile absente.
+
 ## Attention : `tools/build_ultica_pack.py`
-`IDS` ne contient que `t_grass_dead`, `t_grass_long`, `t_moss` : relancé tel quel, le script réécrit `tiles.json` avec ces 3 tuiles seulement. Remettre d'abord tous les ids utilisés.
+`IDS` ne contient que `t_grass_dead`, `t_grass_long`, `t_moss` : relancé tel quel, le script réécrit `tiles.json` avec ces 3 tuiles seulement. Remettre d'abord tous les ids utilisés, **y compris les alias du jalon 8** listés ci-dessus.
 
 ## Inventaire de `assets/sprites/` (chaque `.png` a son `.png.import`)
 Les PNG UltiCa sont copiés tels quels (ex. `t_dirt_unconnected`, pas `t_dirt`) : le nom de fichier n'est pas l'id de tuile (voir `tiles.json`).

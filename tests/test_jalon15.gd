@@ -46,7 +46,7 @@ func _check_plans() -> void:
 		_check(plan >= 0 and MapgenDB.has_door(plan), "plan %s : a une porte (accès par piste)" % id)
 	var pad: int = MapgenDB.plan_by_id("arctic_pad")
 	_check(pad >= 0 and MapgenDB.has_terrain(pad, TerrainDB.index_of("t_helipad")), "plan arctic_pad : contient un héliport")
-	var lava: int = TerrainDB.index_of("t_reactor")
+	var lava: int = TerrainDB.index_of("t_lava")
 	var lava_cells: int = 0
 	for id in ["volcano_nw", "volcano_ne", "volcano_sw", "volcano_se"]:
 		var plan: int = MapgenDB.plan_by_id(id)
