@@ -810,10 +810,11 @@ func _use_stairs(direction: int) -> void:
 		_perform_action("Escalier", MOVE_BASE_COST, 0.0)
 
 
-## Carte du joueur (touche p) : pose ou retire un repère sur `cell` à l'étage actif.
+## Carte du joueur (touche p) : pose ou retire un repère sur `cell` à l'étage `level` (par défaut l'étage actif).
 ## Renvoie true si le repère vient d'être posé, false s'il vient d'être retiré.
-func toggle_map_marker(cell: Vector2i) -> bool:
-	var level: int = world.get_level() if world != null else 0
+func toggle_map_marker(cell: Vector2i, level: int = 0x7FFFFFFF) -> bool:
+	if level == 0x7FFFFFFF:
+		level = world.get_level() if world != null else 0
 	var key := Vector3i(cell.x, cell.y, level)
 	if map_markers.has(key):
 		map_markers.erase(key)

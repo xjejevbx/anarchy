@@ -1,10 +1,12 @@
 extends Node
-## Test des cartes par étage (jalon 8). À lancer via sa scène (autoloads GameClock / EventBus) :
+## Test des cartes et du mode regard par étage (jalon 8). À lancer via sa scène (autoloads GameClock / EventBus) :
 ##   godot --headless --path <projet> res://tests/test_ui_levels.tscn
 ## Vérifie que la mini-carte suit l'étage actif : génération du plan sous terre (roche hors plan), séparation des
 ## tuiles entre surface et sous-sol, ouverture directe au zoom « 1 case = 1 échantillon » sous terre, et que le
 ## mode regard annonce l'étage et distingue les informations de surface sous terre. Vérifie aussi la carte du joueur :
-## seules les cases vues sont dessinées, cache séparé, repères posés/retirés et rattachés à leur étage.
+## seules les cases vues sont dessinées, cache séparé, repères posés/retirés et rattachés à leur étage, toits connus.
+## Enfin, l'APERÇU d'un autre étage (mini-carte et mode regard) : changement réel d'étage, zoom borné au plan, aucune
+## case révélée et restauration de l'étage actif à la fermeture.
 
 var _failures: int = 0
 
@@ -70,21 +72,49 @@ func _check_levels() -> void:
 	_check(map._zoom_index == MiniMapUI.TERRAIN_ZOOM_INDEX, "mini-carte : ouverture au zoom du plan (1 case par échantillon)")
 	map._close()
 
-	# Mode regard : en-tête et informations de surface étiquetées quand on est sous terre.
+	# Mode regard : ouvert à l'étage actif, il annonce l'étage et marque les informations de surface.
 	var look := LookUI.new()
 	look.player = player
 	add_child(look)
+	EventBus.look_requested.emit(Vector2i.ZERO)
+	_check(look._is_open, "mode regard : s'ouvre")
+	_check(look._active_level == -1 and look._level == -1, "mode regard : suit l'étage actif à l'ouverture")
 	look._cursor = player.grid_pos
 	look._build_lines()
 	var text: String = _lines_text(look)
 	_check(text.contains("étage -1"), "mode regard : l'en-tête indique l'étage actif")
 	_check(text.contains("Biome (surface)"), "mode regard : le biome est marqué « surface » sous terre")
 
+	# Aperçu : < / > changent réellement d'étage, sans champ de vision ni révélation de cases.
+	var surface_seen_before: int = _seen_count(world.chunks.seen_of(ChunkManager.key_of(player.grid_pos, 0)))
+	var top_seen_before: int = _seen_count(world.chunks.seen_of(ChunkManager.key_of(player.grid_pos, 1)))
+	look._change_level(1)   # -1 -> 0 (surface)
+	_check(look._level == 0 and world.get_level() == 0, "mode regard : aperçu de l'étage au-dessus")
+	_check(world.view_is_preview and not player.visible, "mode regard : l'aperçu marque la vue et masque le joueur")
+	_check(world.visible_cells.is_empty(), "mode regard : aucun champ de vision calculé en aperçu")
+	_check(_seen_count(world.chunks.seen_of(ChunkManager.key_of(player.grid_pos, 0))) == surface_seen_before,
+		"mode regard : l'aperçu ne révèle aucune case de surface")
+	text = _lines_text(look)
+	_check(text.contains("(aperçu)"), "mode regard : le panneau indique l'aperçu")
+
+	look._change_level(1)   # 0 -> 1 (vide au-dessus de la surface)
+	_check(look._level == 1 and world.get_level() == 1, "mode regard : aperçu de l'étage +1")
+	_check(_seen_count(world.chunks.seen_of(ChunkManager.key_of(player.grid_pos, 1))) == top_seen_before,
+		"mode regard : l'aperçu ne révèle aucune case de l'étage +1")
+
+	look._close()
+	_check(not look._is_open and world.get_level() == -1, "mode regard : la fermeture restaure l'étage actif")
+	_check(not world.view_is_preview and player.visible, "mode regard : la fermeture réactive la vue et le joueur")
+	_check(not world.visible_cells.is_empty(), "mode regard : la fermeture recalcule le champ de vision")
+
 	# Retour en surface : le mode regard lit de nouveau la surface.
 	world.change_level(0)
+	EventBus.look_requested.emit(Vector2i.ZERO)
+	look._cursor = player.grid_pos
 	look._build_lines()
 	text = _lines_text(look)
 	_check(text.contains("surface") and text.contains("Biome :"), "mode regard : retour en surface")
+	look._close()
 
 	# --- Carte du joueur : seules les cases vues sont dessinées, repères par étage ---
 	map._player_mode = false
@@ -127,6 +157,68 @@ func _check_levels() -> void:
 		"carte du joueur : repère rattaché au bon étage")
 	world.change_level(0)
 
+	# --- Aperçu d'étage par la carte et toits connus ---
+	var stale := Vector4i(MiniMapUI.PREVIEW_LEVEL_KEY_OFFSET + 7, 0, 0, 0)
+	MiniMapUI._tiles[stale] = null
+	map._clear_all_preview_tiles()
+	_check(not MiniMapUI._tiles.has(stale), "mini-carte : les tuiles d'aperçu sont invalidées")
+
+	map._active_level = world.get_level()
+	map._active_zoom_index = MiniMapUI.START_ZOOM_INDEX
+	map._player_mode = false
+	map._level = 0
+	map._zoom_index = MiniMapUI.START_ZOOM_INDEX
+	map._change_level(-1)
+	_check(map._level == -1 and map._zoom_index <= MiniMapUI.TERRAIN_ZOOM_INDEX,
+		"mini-carte : aperçu d'étage limité au zoom du plan")
+	var preview_key: Vector4i = map._tile_key(MiniMapUI.TERRAIN_ZOOM_INDEX, unseen_tx, unseen_ty)
+	_check(preview_key.x == MiniMapUI.PREVIEW_LEVEL_KEY_OFFSET - 1, "mini-carte : cache d'aperçu séparé de l'étage actif")
+	var under_seen_before: int = _seen_count(world.chunks.seen_of(ChunkManager.key_of(unseen, -1)))
+	var preview_tex: ImageTexture = map._compute_tile(preview_key)
+	var preview_color: Color = preview_tex.get_image().get_pixel(unseen_local.x, unseen_local.y)
+	_check(preview_color.is_equal_approx(MiniMapUI.COLOR_UNKNOWN),
+		"mini-carte : un aperçu ne dessine pas les cases inconnues")
+	_check(_seen_count(world.chunks.seen_of(ChunkManager.key_of(unseen, -1))) == under_seen_before,
+		"mini-carte : l'aperçu ne révèle aucune case")
+	map._change_level(1)
+	_check(map._level == 0 and map._zoom_index == MiniMapUI.START_ZOOM_INDEX,
+		"mini-carte : le retour à l'étage actif restaure le zoom")
+
+	# Toit déjà aperçu : les cases non vues du bâtiment sont peintes en toit, portes et fenêtres restent lisibles.
+	var roof_key := Vector3i(900, 900, 0)
+	var roof_chunk := Chunk.new()
+	roof_chunk.key = roof_key
+	roof_chunk.terrain = PackedByteArray()
+	roof_chunk.terrain.resize(Chunk.CELLS)
+	var grass_index: int = TerrainDB.index_of("t_grass")
+	for i in Chunk.CELLS:
+		roof_chunk.terrain[i] = grass_index
+	roof_chunk.seen = PackedByteArray()
+	roof_chunk.seen.resize(Chunk.CELLS)
+	roof_chunk.roof = PackedByteArray()
+	roof_chunk.roof.resize(Chunk.CELLS)
+	roof_chunk.seen[0] = 1
+	roof_chunk.roof[0] = Chunk.ROOF_COVER
+	roof_chunk.roof[1] = Chunk.ROOF_COVER
+	roof_chunk.roof[2] = Chunk.ROOF_OPENING
+	world.chunks.chunks[roof_key] = roof_chunk
+	var roof_cell := Vector2i(900 * Chunk.SIZE, 900 * Chunk.SIZE)
+	var roof_tx: int = floori(float(roof_cell.x) / MiniMapUI.TILE)
+	var roof_ty: int = floori(float(roof_cell.y) / MiniMapUI.TILE)
+	var roof_local := Vector2i(roof_cell.x - roof_tx * MiniMapUI.TILE, roof_cell.y - roof_ty * MiniMapUI.TILE)
+	map._player_mode = true
+	map._level = 0
+	var roof_tex: ImageTexture = map._compute_tile(
+		Vector4i(MiniMapUI.PLAYER_LEVEL_KEY_OFFSET, MiniMapUI.TERRAIN_ZOOM_INDEX, roof_tx, roof_ty))
+	var roof_image: Image = roof_tex.get_image()
+	_check(roof_image.get_pixel(roof_local.x + 1, roof_local.y).is_equal_approx(MiniMapUI.COLOR_ROOF),
+		"carte du joueur : un toit aperçu couvre les cases non vues")
+	_check(not roof_image.get_pixel(roof_local.x + 2, roof_local.y).is_equal_approx(MiniMapUI.COLOR_ROOF) \
+		and not roof_image.get_pixel(roof_local.x + 2, roof_local.y).is_equal_approx(MiniMapUI.COLOR_UNKNOWN),
+		"carte du joueur : une porte / fenêtre reste visible sous le toit")
+	world.chunks.chunks.erase(roof_key)
+	roof_chunk.free()
+
 	world.queue_free()
 
 
@@ -135,6 +227,15 @@ func _lines_text(look: LookUI) -> String:
 	for line: Dictionary in look._lines:
 		text += String(line.get("text", "")) + "\n"
 	return text
+
+
+## Nombre de cases marquées vues dans une empreinte de chunk (mémoire de la carte).
+func _seen_count(seen: PackedByteArray) -> int:
+	var count: int = 0
+	for value in seen:
+		if value != 0:
+			count += 1
+	return count
 
 
 func _check(condition: bool, label: String) -> void:

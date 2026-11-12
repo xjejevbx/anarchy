@@ -106,6 +106,8 @@ func _load(key: Vector3i) -> void:
 	chunk.setup(key, ChunkGenerator.generate(world_seed, key, arena), seen, self, _entities)
 	chunk.furniture = ChunkGenerator.generate_furniture(world_seed, key, arena)
 	_apply_deltas(key, chunk)
+	if not arena:
+		chunk.build_roof()   # empreinte du toit (surface), après les deltas de portes / fenêtres
 	_root.add_child(chunk)
 	chunks[key] = chunk
 	if chunk.has_autotile:  # les murs des chunks voisins doivent se raccorder
@@ -489,6 +491,20 @@ func has_terrain(cell: Vector2i) -> bool:
 	return chunk_at(cell) != null
 
 
+## Type de toit de la case à l'étage actif : Chunk.ROOF_NONE / ROOF_COVER / ROOF_OPENING.
+func roof_at(cell: Vector2i) -> int:
+	var chunk: Chunk = chunk_at(cell)
+	if chunk == null or chunk.roof.size() != Chunk.CELLS:
+		return Chunk.ROOF_NONE
+	return chunk.roof[index_of(cell)]
+
+
+## Le toit du chunk de la case a-t-il déjà été aperçu (au moins une de ses cases vue) ?
+func roof_known_at(cell: Vector2i) -> bool:
+	var chunk: Chunk = chunk_at(cell)
+	return chunk != null and chunk.roof_known
+
+
 func is_walkable(cell: Vector2i) -> bool:
 	var chunk: Chunk = chunk_at(cell)
 	if chunk == null:
@@ -564,3 +580,53 @@ func wall_sprite(cell: Vector2i) -> String:
 	if e and w:
 		return "t_wall_edge_ew"
 	return "t_wall_unconnected"
+
+
+# --- Toits : même convention de raccord que les murs, pièces « t_shingle_flat_roof_* » ---
+
+func _is_roof_cover(cell: Vector2i) -> bool:
+	return roof_at(cell) == Chunk.ROOF_COVER
+
+
+## Sprite du toit de la case selon les cases de toit voisines (aucun raccord avec l'extérieur du bâtiment).
+func roof_sprite(cell: Vector2i) -> String:
+	var n: bool = _is_roof_cover(cell + Vector2i.UP)
+	var e: bool = _is_roof_cover(cell + Vector2i.RIGHT)
+	var s: bool = _is_roof_cover(cell + Vector2i.DOWN)
+	var w: bool = _is_roof_cover(cell + Vector2i.LEFT)
+	var links: int = int(n) + int(e) + int(s) + int(w)
+	if links == 4:
+		return "t_shingle_flat_roof_center"
+	if links == 3:  # jonction en T : le nom du sprite est le côté SANS toit
+		if not n:
+			return "t_shingle_flat_roof_t_connection_n"
+		if not e:
+			return "t_shingle_flat_roof_t_connection_e"
+		if not s:
+			return "t_shingle_flat_roof_t_connection_s"
+		return "t_shingle_flat_roof_t_connection_w"
+	if links == 1:  # extrémité : le nom du sprite est le côté libre
+		if s:
+			return "t_shingle_flat_roof_end_piece_n"
+		if n:
+			return "t_shingle_flat_roof_end_piece_s"
+		if w:
+			return "t_shingle_flat_roof_end_piece_e"
+		return "t_shingle_flat_roof_end_piece_w"
+	if n and s and not e and not w:
+		return "t_shingle_flat_roof_edge_ns"
+	if e and w and not n and not s:
+		return "t_shingle_flat_roof_edge_ew"
+	if e and s and not n and not w:
+		return "t_shingle_flat_roof_corner_nw"
+	if w and s and not n and not e:
+		return "t_shingle_flat_roof_corner_ne"
+	if w and n and not e and not s:
+		return "t_shingle_flat_roof_corner_se"
+	if e and n and not w and not s:
+		return "t_shingle_flat_roof_corner_sw"
+	if n and s:
+		return "t_shingle_flat_roof_edge_ns"
+	if e and w:
+		return "t_shingle_flat_roof_edge_ew"
+	return "t_shingle_flat_roof_unconnected"

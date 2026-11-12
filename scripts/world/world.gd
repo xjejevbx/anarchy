@@ -13,19 +13,24 @@ extends Node2D
 ## bruit entendu par les monstres aveugles (BLIND_HEARING), monstres furtifs (STEALTH).
 ## Jalon 8 (portes et fenêtres) : toggle_openable() change le terrain entre son état fermé et ouvert (delta sauvegardé),
 ## refait la vue et fait du bruit ; une porte fermée bloque le passage et la vue, une porte ouverte laisse passer les deux.
+## Jalon 8 (toits) : RoofLayer recouvre les bâtiments de surface d'un toit une fois qu'ils ont été aperçus ; le toit du
+## bâtiment où se trouve le joueur est masqué. Pendant l'aperçu d'un autre étage (LookUI), `view_is_preview` empêche de
+## masquer le toit de la case du joueur, qui n'est pas réellement à cet étage.
 ##
 ## Rendu en couches (de bas en haut) :
 ##   1. `_terrain_layer` : les chunks (sol : herbe, murs)
 ##   2. `_items_layer`   : objets au sol
 ##   3. `entities`       : arbres, joueur, monstres, triés par Y (plus bas = plus devant)
-##   3b. `fx`            : particules et ondes (poussière, éclaboussures), voir Fx
-##   4. `fog`            : brouillard de guerre par-dessus
-##   5. `_pick_overlay`  : touches de choix de la case où ramasser
-##   6. `_target_overlay`: case ciblée par le déplacement automatique (carré + points du trajet)
+##   4. `roof_layer`     : toits des bâtiments de surface (au-dessus des entités)
+##   4b. `fx`            : particules et ondes (poussière, éclaboussures), voir Fx
+##   5. `fog`            : brouillard de guerre par-dessus
+##   6. `_pick_overlay`  : touches de choix de la case où ramasser
+##   7. `_target_overlay`: case ciblée par le déplacement automatique (carré + points du trajet)
 ## Les nœuds sont positionnés sur le coin haut-gauche de leur case ; UlticaTiles applique
 ## les décalages de chaque sprite (personnages 32x48, arbres 96x96...).
 
 const TILE_SIZE: int = 128
+const ROOF_LAYER_SCRIPT = preload("res://scripts/world/roof_layer.gd")   # évite de dépendre du cache des class_name
 const ALERT_REARM_POINTS: float = 5.0    # secondes hors de vue (dans le brouillard) avant qu'un monstre puisse être signalé à nouveau ; 0 = dès qu'il sort de vue
 const VIEW_RADIUS: int = 20              # portée de vue en cases (plein jour pour l'instant)
 const MAX_MONSTERS: int = 300            # plafond global de monstres chargés (au-delà, un chunk neuf n'est pas peuplé)
@@ -49,6 +54,7 @@ const STEALTH_REVEAL_RANGE: int = 3   # STEALTH : un monstre furtif n'est visibl
 const NOISE_WALK: int = 3             # le joueur qui marche (ni accroupi ni sprint) est entendu à N cases par les monstres aveugles
 const NOISE_MEMORY: float = 5.0       # secondes pendant lesquelles un bruit reste « entendu »
 const MAX_CORPSES: int = 200          # cadavres retenus (RAISE) ; les plus anciens disparaissent
+const NO_ROOF_CHUNK: Vector3i = Vector3i(2147483647, 2147483647, 2147483647)   # aucun toit masqué
 
 # --- Bruit (jalon 6b) : rayon (cases) dans lequel les dormeurs se réveillent ---
 const NOISE_SPRINT: int = 8              # le joueur court
@@ -93,6 +99,10 @@ var noise_cell: Vector2i = Vector2i.ZERO   # dernier bruit du joueur (voir recor
 var noise_radius: int = 0
 var noise_time: float = -1000.0
 var _ground_by_level: Dictionary = {}   # étage (int) -> Dictionary Vector2i -> Array d'Item
+var roof_layer: Node2D   # script RoofLayer, préchargé (voir ROOF_LAYER_SCRIPT)
+var visible_roof_chunks: Dictionary = {}   # Vector3i -> true : toits dont une case est actuellement visible
+var roof_hidden_chunk: Vector3i = NO_ROOF_CHUNK   # chunk du bâtiment où se trouve le joueur (toit masqué)
+var view_is_preview: bool = false          # LookUI affiche un autre étage : ne rien révéler et ne pas masquer de toit
 
 
 func _ready() -> void:
@@ -105,6 +115,10 @@ func _ready() -> void:
 	entities = Node2D.new()
 	entities.y_sort_enabled = true
 	add_child(entities)
+	roof_layer = ROOF_LAYER_SCRIPT.new()
+	roof_layer.world = self
+	roof_layer.z_index = 4  # au-dessus des entités, sous fx (5) et le brouillard (10)
+	add_child(roof_layer)
 	fx = Node2D.new()
 	fx.z_index = 5  # au-dessus des entités, sous le brouillard (z_index 10)
 	add_child(fx)
@@ -463,8 +477,28 @@ func update_fov() -> void:
 	visible_cells = FieldOfView.compute(self, player.grid_pos, VIEW_RADIUS)
 	for cell: Vector2i in visible_cells:
 		chunks.mark_seen(cell)
+	refresh_roof_state()
 	fog.queue_redraw()
 	_refresh_monster_visibility()
+
+
+## Recalcule l'état des toits après un changement de vue, d'étage ou d'aperçu : toits dont une case est visible et
+## toit du bâtiment où se trouve le joueur. Le RoofLayer et le brouillard sont redessinés.
+func refresh_roof_state() -> void:
+	visible_roof_chunks.clear()
+	roof_hidden_chunk = NO_ROOF_CHUNK
+	if player != null and get_level() == 0 and not view_is_preview:
+		for cell: Vector2i in visible_cells:
+			var chunk := chunks.chunk_at(cell) as Chunk
+			if chunk != null and chunk.roof.size() == Chunk.CELLS \
+					and chunk.roof[ChunkManager.index_of(cell)] != Chunk.ROOF_NONE:
+				visible_roof_chunks[chunk.key] = true
+		var here := chunks.chunk_at(player.grid_pos) as Chunk
+		if here != null and here.roof.size() == Chunk.CELLS \
+				and here.roof[ChunkManager.index_of(player.grid_pos)] != Chunk.ROOF_NONE:
+			roof_hidden_chunk = here.key
+	if roof_layer != null:
+		roof_layer.queue_redraw()
 
 
 ## Cache les monstres hors de vue ; signale ceux qui viennent d'apparaître.

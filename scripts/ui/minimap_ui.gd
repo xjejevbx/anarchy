@@ -12,6 +12,9 @@ extends CanvasLayer
 ## Jalon 8 : la carte suit l'ÉTAGE ACTIF du joueur. En surface, on retrouve les biomes, villes et routes ; dans un
 ## sous-sol, elle montre le plan de l'étage (terrain réel au zoom « 1 case = 1 échantillon ») et s'ouvre directement à
 ## ce zoom, sans les calques de surface (biomes, villes, lieux). Le cache de tuiles est séparé par étage (et par mode).
+## < et > changent l'étage AFFICHÉ (aperçu) sans déplacer le joueur : l'aperçu n'utilise que la mémoire des cases vues
+## de cet étage (jamais le champ de vision), ne dessine jamais l'inconnu, et limite le zoom à « 1 case = 1 échantillon ».
+## Le joueur n'est pas marqué sur un autre étage ; ses repères restent propres à chaque étage.
 ##
 ## Zoom : chaque palier = nombre de cases du monde par échantillon (pixel de l'image). Sous 1, une case occupe plusieurs
 ## échantillons (jusqu'à 16 x 16 : on ne voit plus que 10 x 10 cases). À 1 case par échantillon ou moins, on dessine le TERRAIN réel
@@ -39,6 +42,8 @@ const START_ZOOM_INDEX: int = 10               # 64 cases par échantillon (comm
 const TERRAIN_MAX_ZOOM: float = 1.0            # à ce zoom ou moins : terrain réel case par case
 const TERRAIN_ZOOM_INDEX: int = 4              # index de TERRAIN_MAX_ZOOM (1 case par échantillon) : zoom d'ouverture sous terre
 const PLAYER_LEVEL_KEY_OFFSET: int = 10000     # clé de cache des tuiles de la carte du joueur (évite la collision avec les étages)
+const PREVIEW_LEVEL_KEY_OFFSET: int = 20000    # clé de cache d'un étage en APERÇU (carte de debug, cases vues seulement)
+const PREVIEW_LEVEL_RANGE: int = 8              # étages visitables en aperçu autour de l'étage du joueur
 const ROUTES_MAX_ZOOM: float = 16.0            # routes entre villes et lieux spéciaux affichés jusqu'à ce zoom (au-delà : trop de régions à calculer)
 const SETTLEMENTS_MAX_ZOOM: float = 256.0      # villes affichées jusqu'à ce zoom ; au-delà : biomes seuls
 const BUDGET_US: int = 8000                    # temps de calcul de tuiles par frame (microsecondes)
@@ -57,6 +62,7 @@ const COLOR_HEADER: Color = Color(0.95, 0.8, 0.4)
 const COLOR_MARKER: Color = Color(1.0, 0.25, 0.2)
 const COLOR_PLAYER_MARKER: Color = Color(0.3, 0.9, 1.0)   # repère posé par le joueur (clic droit sur sa carte)
 const COLOR_UNKNOWN: Color = Color("#0d0d0f")            # case jamais vue (carte du joueur)
+const COLOR_ROOF: Color = Color("#6b5a4a")               # toit d'un bâtiment déjà aperçu (carte du joueur / aperçu)
 const COLOR_PENDING: Color = Color(0.14, 0.14, 0.17)
 const COLOR_UNDERGROUND: Color = Color(0.16, 0.16, 0.19)   # repli sous terre (terrain sans couleur ni couleur de biome)
 
@@ -89,8 +95,10 @@ var seed_text: String = ""
 var _view: Control
 var _is_open: bool = false
 var _player_mode: bool = false                # true : carte du joueur (cases vues + repères) ; false : carte de debug
-var _level: int = 0                           # étage affiché (capturé à l'ouverture)
+var _level: int = 0                           # étage AFFICHÉ (peut différer de l'étage du joueur en aperçu)
+var _active_level: int = 0                    # étage réel du joueur à l'ouverture
 var _zoom_index: int = START_ZOOM_INDEX
+var _active_zoom_index: int = START_ZOOM_INDEX   # zoom de l'étage actif, restauré en quittant l'aperçu
 var _center: Vector2i = Vector2i.ZERO
 var _map_rect: Rect2 = Rect2()
 var _hover_cell: Vector2i = Vector2i.ZERO
@@ -130,9 +138,12 @@ func _open(player_mode: bool) -> void:
 	_prepare_caches(player.world.world_seed)
 	_is_open = true
 	_player_mode = player_mode
-	_level = player.world.get_level()
+	_active_level = player.world.get_level()
+	_level = _active_level
 	# La carte du joueur ne montre que l'exploré : elle s'ouvre sur le plan, sans dézoom possible au-delà.
 	_zoom_index = TERRAIN_ZOOM_INDEX if player_mode or _level != 0 else START_ZOOM_INDEX
+	_active_zoom_index = _zoom_index
+	_clear_all_preview_tiles()   # la mémoire des étages a pu s'agrandir depuis la dernière ouverture
 	if player_mode:
 		_clear_player_tiles(_level)  # la mémoire a pu s'agrandir depuis la dernière ouverture
 	_center = player.grid_pos
@@ -149,10 +160,14 @@ func _close() -> void:
 	_view.visible = false
 
 
-## Clé de cache d'une tuile pour le mode et l'étage affichés. La carte du joueur utilise un étage décalé pour ne pas
-## partager ses tuiles (filtrées par la mémoire) avec celles de la carte de debug.
+## Clé de cache d'une tuile pour le mode et l'étage affichés. La carte du joueur et l'aperçu d'un autre étage ont
+## chacun un décalage de clé : le filtrage par cases vues ne partage jamais ses tuiles avec la carte de debug normale.
 func _tile_key(zoom_index: int, tx: int, ty: int) -> Vector4i:
-	var level_key: int = _level + (PLAYER_LEVEL_KEY_OFFSET if _player_mode else 0)
+	var level_key: int = _level
+	if _player_mode:
+		level_key += PLAYER_LEVEL_KEY_OFFSET
+	elif _level != _active_level:
+		level_key += PREVIEW_LEVEL_KEY_OFFSET
 	return Vector4i(level_key, zoom_index, tx, ty)
 
 
@@ -258,15 +273,17 @@ static func _cell_type(settlement: SettlementMap, coord: Vector2i, full: bool) -
 	return type
 
 
-## Terrain et mobilier d'un chunk : chunk déjà chargé par le jeu, sinon généré une fois et gardé.
+## Terrain, mobilier et empreinte de toit d'un chunk : chunk déjà chargé par le jeu, sinon généré une fois et gardé.
 func _chunk_arrays(key: Vector3i) -> Dictionary:
 	var loaded := player.world.chunks.chunks.get(key) as Chunk
 	if loaded != null:
-		return {"terrain": loaded.terrain, "furniture": loaded.furniture}
+		return {"terrain": loaded.terrain, "furniture": loaded.furniture, "roof": loaded.roof}
 	if not _chunk_data.has(key):
+		var terrain: PackedByteArray = ChunkGenerator.generate(_cache_seed, key)
 		_chunk_data[key] = {
-			"terrain": ChunkGenerator.generate(_cache_seed, key),
+			"terrain": terrain,
 			"furniture": ChunkGenerator.generate_furniture(_cache_seed, key),
+			"roof": Chunk.roof_mask(terrain) if key.z == 0 else PackedByteArray(),   # pas de toit sous terre
 		}
 	return _chunk_data[key]
 
@@ -289,19 +306,30 @@ static func _fixed_color(terrain: int) -> Variant:
 ## Image d'une tuile : une couleur par échantillon, écrite dans un buffer d'octets.
 func _compute_tile(key: Vector4i) -> ImageTexture:
 	var zoom: float = ZOOMS[key.y]
-	var player_mode: bool = key.x >= PLAYER_LEVEL_KEY_OFFSET
-	var level: int = key.x - (PLAYER_LEVEL_KEY_OFFSET if player_mode else 0)
+	var player_mode: bool = false
+	var seen_only: bool = false
+	var level: int = key.x
+	if key.x >= PLAYER_LEVEL_KEY_OFFSET:
+		if key.x >= PREVIEW_LEVEL_KEY_OFFSET:
+			level = key.x - PREVIEW_LEVEL_KEY_OFFSET
+			seen_only = true
+		else:
+			level = key.x - PLAYER_LEVEL_KEY_OFFSET
+			player_mode = true
+			seen_only = true
 	var world_seed: int = _cache_seed
 	var world_map: WorldMap = WorldMap.for_seed(world_seed)
 	var settlement: SettlementMap = SettlementMap.for_seed(world_seed)
-	var case_level: bool = zoom <= TERRAIN_MAX_ZOOM
-	var mode: int = _overlay_mode(zoom) if level == 0 and not player_mode else 0   # pas de villes / routes sous terre
+	var case_level: bool = zoom <= TERRAIN_MAX_ZOOM or seen_only
+	var mode: int = _overlay_mode(zoom) if level == 0 and not seen_only else 0   # pas de villes / routes sous terre
 	var data := PackedByteArray()
 	data.resize(TILE * TILE * 3)
 	var index: int = 0
 	var last_chunk := Vector3i(1 << 30, 0, 0)
 	var terrain := PackedByteArray()
 	var furniture := PackedByteArray()
+	var roof := PackedByteArray()
+	var roof_known: bool = false
 	var seen := PackedByteArray()
 	for j in TILE:
 		var wy: int = _cell_of_index(key.w * TILE + j, zoom)
@@ -314,12 +342,34 @@ func _compute_tile(key: Vector4i) -> ImageTexture:
 					var arrays: Dictionary = _chunk_arrays(chunk_key)
 					terrain = arrays["terrain"]
 					furniture = arrays["furniture"]
-					if player_mode:  # la mémoire décide ensuite : une case inconnue est peinte en noir
+					roof = arrays["roof"]
+					roof_known = false
+					if seen_only:  # la mémoire décide ensuite : une case inconnue est peinte en noir
 						seen = player.world.chunks.seen_of(chunk_key)
+						if level == 0:
+							for k in Chunk.CELLS:
+								if roof.size() == Chunk.CELLS and roof[k] != Chunk.ROOF_NONE and seen[k] != 0:
+									roof_known = true
+									break
+							if player_mode and chunk_key == player.world.roof_hidden_chunk:
+								roof_known = false   # joueur dans le bâtiment : l'intérieur remplace le toit
 				var cell_index: int = ChunkManager.index_of(cell)
 				var color: Color
-				if player_mode and (seen.size() != Chunk.CELLS or seen[cell_index] == 0):
-					color = COLOR_UNKNOWN
+				if seen_only and (seen.size() != Chunk.CELLS or seen[cell_index] == 0):
+					var roof_value: int = roof[cell_index] if roof.size() == Chunk.CELLS else Chunk.ROOF_NONE
+					if roof_known and roof_value != Chunk.ROOF_NONE:
+						if roof_value == Chunk.ROOF_COVER:
+							color = COLOR_ROOF
+						else:  # porte / fenêtre : le terrain reste visible sous le toit
+							var opening_fixed: Variant = _fixed_color(terrain[cell_index])
+							if opening_fixed != null:
+								color = opening_fixed
+							elif level == 0:
+								color = _kind_colors[world_map.kind_at(cell)]
+							else:
+								color = COLOR_UNDERGROUND
+					else:
+						color = COLOR_UNKNOWN
 				else:
 					var furniture_index: int = furniture[cell_index] if furniture.size() == Chunk.CELLS else 0
 					if furniture_index != 0:
@@ -378,8 +428,8 @@ func _toggle_marker_at(cell: Vector2i) -> void:
 	if not _is_seen_cell(cell):
 		EventBus.message_logged.emit("Carte : cette case n'a jamais été vue.")
 		return
-	var placed: bool = player.toggle_map_marker(cell)
-	EventBus.message_logged.emit("Carte : repère %s en (%d, %d)." % ["posé" if placed else "retiré", cell.x, cell.y])
+	var placed: bool = player.toggle_map_marker(cell, _level)
+	EventBus.message_logged.emit("Carte : repère %s en (%d, %d) à l'étage %d." % ["posé" if placed else "retiré", cell.x, cell.y, _level])
 	_view.queue_redraw()
 
 
@@ -390,6 +440,49 @@ func _marker_count() -> int:
 		if key.z == _level:
 			count += 1
 	return count
+
+
+func _clear_preview_tiles(level: int) -> void:
+	var level_key: int = level + PREVIEW_LEVEL_KEY_OFFSET
+	var doomed: Array[Vector4i] = []
+	for key: Vector4i in _tiles:
+		if key.x == level_key:
+			doomed.append(key)
+	for key: Vector4i in doomed:
+		_tiles.erase(key)
+
+
+## Toutes les tuiles d'aperçu (tous étages) : la mémoire des cases vues a pu s'agrandir depuis la dernière carte.
+func _clear_all_preview_tiles() -> void:
+	var doomed: Array[Vector4i] = []
+	for key: Vector4i in _tiles:
+		if key.x >= PREVIEW_LEVEL_KEY_OFFSET:
+			doomed.append(key)
+	for key: Vector4i in doomed:
+		_tiles.erase(key)
+
+
+## Change l'étage AFFICHÉ (pas celui du joueur) : < monte, > descend. Un autre étage est montré en APERÇU, filtré
+## par la mémoire des cases vues ; la carte de debug normale n'est jamais utilisée pour ces tuiles. Le zoom est
+## limité au plan (1 case = 1 échantillon) hors de l'étage actif.
+func _change_level(delta: int) -> void:
+	var new_level: int = clampi(_level + delta, _active_level - PREVIEW_LEVEL_RANGE, _active_level + PREVIEW_LEVEL_RANGE)
+	if new_level == _level:
+		return
+	if _level == _active_level:
+		_active_zoom_index = _zoom_index
+	_level = new_level
+	if _level != _active_level:
+		_zoom_index = mini(_zoom_index, TERRAIN_ZOOM_INDEX)
+		if _player_mode:
+			_clear_player_tiles(_level)
+		else:
+			_clear_preview_tiles(_level)
+	else:
+		_zoom_index = _active_zoom_index
+	_dirty = true
+	_pending.clear()
+	_view.queue_redraw()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -415,12 +508,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			or (_player_mode and KeyUtil.is_letter(key_event, "p")):
 		_close()
 		return
+	elif key_event.unicode == 60:  # « < » : étage au-dessus (aperçu)
+		_change_level(1)
+		return
+	elif key_event.unicode == 62:  # « > » : étage en dessous (aperçu)
+		_change_level(-1)
+		return
 	var step: int = maxi(roundi(PAN_SAMPLES * ZOOMS[_zoom_index]), 1)
 	if key == KEY_KP_ADD or key == KEY_EQUAL:
 		_zoom_index = maxi(_zoom_index - 1, 0)
 	elif key == KEY_KP_SUBTRACT or key == KEY_MINUS:
-		# Sous terre et sur la carte du joueur, on ne dézoome pas au-delà du plan (1 case = 1 échantillon).
-		var max_zoom_out: int = ZOOMS.size() - 1 if _level == 0 and not _player_mode else TERRAIN_ZOOM_INDEX
+		# Hors de l'étage actif et sur la carte du joueur, on ne dézoome pas au-delà du plan (1 case = 1 échantillon).
+		var max_zoom_out: int = ZOOMS.size() - 1 if _level == _active_level and not _player_mode else TERRAIN_ZOOM_INDEX
 		_zoom_index = mini(_zoom_index + 1, max_zoom_out)
 	elif key == KEY_KP_8 or key == KEY_UP:
 		_center.y -= step
@@ -515,18 +614,21 @@ func _draw_view() -> void:
 	var span: int = maxi(roundi(SAMPLES * zoom), 1)
 	var scale_text: String = "1 pixel = %d cases" % roundi(zoom) if zoom >= 1.0 else "1 case = %d x %d pixels" % [roundi(1.0 / zoom), roundi(1.0 / zoom)]
 	var level_text: String = "surface" if _level == 0 else "sous-sol %d" % _level
+	var preview: bool = _level != _active_level
 	var title: String
 	if _player_mode:
 		title = "CARTE DU JOUEUR" if _level == 0 else "CARTE DU JOUEUR — étage %d" % _level
 	else:
 		title = "CARTE DU MONDE (debug)" if _level == 0 else "CARTE DU SOUS-SOL (debug) — étage %d" % _level
+	if preview:
+		title += "   —   APERÇU"
 	_view.draw_string(font, panel.position + Vector2(16, 28), title, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE + 4, COLOR_HEADER)
 	if not _pending.is_empty() or _dirty:
 		_view.draw_string(font, Vector2(panel.position.x, panel.position.y + 28), "Calcul : %d tuile(s) restante(s)…" % _pending.size(),
 			HORIZONTAL_ALIGNMENT_RIGHT, panel.size.x - 16.0, FONT_SIZE - 2, COLOR_MUTED)
 	if _player_mode:
-		_view.draw_string(font, panel.position + Vector2(16, 52), "%s   —   %d repère(s)   —   seules les cases explorées sont affichées ; clic droit : poser / retirer un repère" % \
-			[scale_text, _marker_count()],
+		_view.draw_string(font, panel.position + Vector2(16, 52), "%s   —   %d repère(s)   —   seules les cases explorées sont affichées ; clic droit : poser / retirer un repère%s" % \
+			[scale_text, _marker_count(), ("   —   aperçu : joueur à l'étage %d" % _active_level) if preview else ""],
 			HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, FONT_SIZE - 2, COLOR_TEXT)
 	else:
 		_view.draw_string(font, panel.position + Vector2(16, 52), "Seed : « %s » (%d)   —   %s, la carte couvre %d × %d cases (%.1f chunks de côté)%s" % \
@@ -538,9 +640,10 @@ func _draw_view() -> void:
 	var settlement: SettlementMap = SettlementMap.for_seed(player.world.world_seed)
 	var here_town: Dictionary = settlement.town_at(Vector2i(here_chunk.x, here_chunk.y))
 	var here_place: String = WorldMap.kind_name(world_map.kind_at(here)) if _level == 0 else level_text
-	_view.draw_string(font, panel.position + Vector2(16, 74), "Joueur : (%d, %d)   chunk (%d, %d, %d)   %s%s" % \
-		[here.x, here.y, here_chunk.x, here_chunk.y, here_chunk.z, here_place,
-		("   —   " + String(here_town["name"])) if _level == 0 and not here_town.is_empty() else ""],
+	_view.draw_string(font, panel.position + Vector2(16, 74), "%s : (%d, %d)   chunk (%d, %d, %d)   %s%s%s" % \
+		["Case" if preview else "Joueur", here.x, here.y, here_chunk.x, here_chunk.y, here_chunk.z, here_place,
+		("   —   " + String(here_town["name"])) if _level == 0 and not here_town.is_empty() else "",
+		("   —   joueur à l'étage %d" % _active_level) if preview else ""],
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, FONT_SIZE - 2, COLOR_TEXT)
 
 	# Carte (tuiles en cache, grille alignée sur le zoom)
@@ -548,10 +651,11 @@ func _draw_view() -> void:
 	var s0: Vector2i = _view_origin()
 	_draw_tiles(pixel_scale, s0)
 	_view.draw_rect(_map_rect, COLOR_BORDER, false, 1.0)
-	# Position du joueur : centre de sa case (une case = 1 / zoom échantillons de large).
+	# Position du joueur : centre de sa case (une case = 1 / zoom échantillons de large). Hors de son étage (aperçu),
+	# elle n'est pas dessinée : le joueur n'est pas à cet étage.
 	var marker_sample: Vector2 = (Vector2(here) + Vector2(0.5, 0.5)) / zoom - Vector2(s0)
 	var marker: Vector2 = _map_rect.position + marker_sample * pixel_scale
-	if _map_rect.grow(2).has_point(marker):
+	if not preview and _map_rect.grow(2).has_point(marker):
 		if zoom < 1.0:  # case agrandie : on l'entoure au lieu de la couvrir
 			var case_px: float = pixel_scale / zoom
 			_view.draw_rect(Rect2(marker - Vector2(case_px, case_px) / 2.0, Vector2(case_px, case_px)), COLOR_MARKER, false, 3.0)
@@ -586,6 +690,10 @@ func _draw_view() -> void:
 	var y: float = _map_rect.position.y + 4.0
 	_view.draw_string(font, Vector2(legend_x, y + 14), "LÉGENDE", HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE - 2, COLOR_HEADER)
 	y += 30.0
+	if _level == 0 and (_player_mode or preview):
+		_view.draw_rect(Rect2(legend_x, y, 16, 16), COLOR_ROOF)
+		_view.draw_string(font, Vector2(legend_x + 26, y + 14), "Toit déjà aperçu", HORIZONTAL_ALIGNMENT_LEFT, legend_width - 30.0, FONT_SIZE - 2, COLOR_TEXT)
+		y += 24.0
 	if _player_mode:
 		_view.draw_rect(Rect2(legend_x, y, 16, 16), COLOR_UNKNOWN)
 		_view.draw_string(font, Vector2(legend_x + 26, y + 14), "Jamais exploré", HORIZONTAL_ALIGNMENT_LEFT, legend_width - 30.0, FONT_SIZE - 2, COLOR_TEXT)
@@ -594,9 +702,9 @@ func _draw_view() -> void:
 		_view.draw_circle(Vector2(legend_x + 8, y + 8), 7.0, Color.WHITE, false, 1.5)
 		_view.draw_string(font, Vector2(legend_x + 26, y + 14), "Repère (clic droit)", HORIZONTAL_ALIGNMENT_LEFT, legend_width - 30.0, FONT_SIZE - 2, COLOR_TEXT)
 		y += 24.0
-		_view.draw_string(font, Vector2(legend_x, y + 14), "Le terrain de l'étage n'apparaît", HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_MUTED)
+		_view.draw_string(font, Vector2(legend_x, y + 14), "Aperçu : seules les cases" if preview else "Le terrain de l'étage n'apparaît", HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_MUTED)
 		y += 24.0
-		_view.draw_string(font, Vector2(legend_x, y + 14), "que sur les cases déjà vues.", HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_MUTED)
+		_view.draw_string(font, Vector2(legend_x, y + 14), "déjà vues ici sont dessinées." if preview else "que sur les cases déjà vues.", HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_MUTED)
 		y += 24.0
 		if _level != 0:
 			for terrain_id in ["t_rock", "t_air", "t_stairs_down", "t_stairs_up"]:
@@ -639,8 +747,9 @@ func _draw_view() -> void:
 			_view.draw_string(font, Vector2(legend_x, y + 36), "Terrain : %s" % TerrainDB.name_of(cell_info.x), HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_HEADER)
 			if cell_info.y != 0:
 				_view.draw_string(font, Vector2(legend_x, y + 58), "Mobilier : %s" % FurnitureDB.name_of(cell_info.y), HORIZONTAL_ALIGNMENT_LEFT, legend_width, FONT_SIZE - 2, COLOR_TEXT)
-	var zoom_help: String = "+/− : zoom (jusqu'à ~10 cases)" if _level == 0 and not _player_mode else "+/− : zoom (max : 1 case)"
+	var zoom_help: String = "+/− : zoom (jusqu'à ~10 cases)" if _level == _active_level and not _player_mode else "+/− : zoom (max : 1 case)"
 	var close_help: String = "p / Échap : fermer" if _player_mode else "m / Échap : fermer"
+	var level_help: String = "> / < : étage en dessous / au-dessus" if _level == _active_level else "> / < : changer d'étage (aperçu)"
 	_view.draw_string(font, Vector2(panel.position.x + 16, panel.end.y - 14),
-		"%s   8/2/4/6 (ou flèches), 7/9/1/3 : déplacer la vue   5 : recentrer   %s" % [zoom_help, close_help],
+		"%s   8/2/4/6 (ou flèches), 7/9/1/3 : déplacer la vue   5 : recentrer   %s   %s" % [zoom_help, level_help, close_help],
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32.0, 14, COLOR_MUTED)

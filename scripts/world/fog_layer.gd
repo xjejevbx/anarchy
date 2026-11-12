@@ -39,6 +39,13 @@ func _half_extent() -> Vector2i:
 func _color_at(pos: Vector2i) -> Color:
 	if world.visible_cells.has(pos):
 		return NONE
+	# Toit : une fois le bâtiment aperçu, sa surface est connue même si l'intérieur ne l'est pas. Si le bâtiment est
+	# actuellement visible, le toit l'est aussi (aucun brouillard) ; sinon il reste dans la mémoire (assombri).
+	var chunk := world.chunks.chunk_at(pos) as Chunk
+	if chunk != null and chunk.roof_known and chunk.key != world.roof_hidden_chunk \
+			and chunk.roof.size() == Chunk.CELLS \
+			and chunk.roof[ChunkManager.index_of(pos)] != Chunk.ROOF_NONE:
+		return NONE if world.visible_roof_chunks.has(chunk.key) else REMEMBERED
 	return REMEMBERED if world.chunks.is_seen(pos) else Color.BLACK
 
 
