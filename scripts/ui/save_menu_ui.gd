@@ -2,11 +2,12 @@ class_name SaveMenuUI
 extends CanvasLayer
 ## Écran des sauvegardes (jalon 7), utilisé comme MENU PRINCIPAL au lancement et en jeu (F5).
 ##
-## Menu principal : liste les sauvegardes (charger / supprimer), crée une nouvelle partie (seed + scénario).
-## En jeu : choisir un emplacement pour sauvegarder (écrasement confirmé), charger une autre partie, supprimer,
-## ou créer une nouvelle partie (la partie en cours est perdue). Touches : 8 / 2 (ou flèches), Entrée, Échap ;
-## L = charger, Suppr = supprimer, C = copier la seed affichée. La saisie de la seed se fait au clavier
-## (Ctrl+V colle), vide = seed aléatoire affichée dans le journal une fois la partie créée.
+## Menu principal : partie rapide (seed aléatoire), arène de test, sauvegardes (charger / supprimer),
+## nouvelle partie (seed + scénario). En jeu : choisir un emplacement pour sauvegarder (écrasement confirmé),
+## charger une autre partie, supprimer, partie rapide, arène de test, ou créer une nouvelle partie
+## (la partie en cours est perdue). Touches : 8 / 2 (ou flèches), Entrée, Échap ; N = seed aléatoire,
+## T = arène de test, L = charger, Suppr = supprimer, C = copier la seed affichée. La saisie de la seed se fait
+## au clavier (Ctrl+V colle), vide = seed aléatoire affichée dans le journal une fois la partie créée.
 
 enum Screen { LIST, NEW_GAME, CONFIRM }
 
@@ -90,6 +91,9 @@ func _refresh_slots() -> void:
 	if _selected >= 0 and _selected < _rows.size():
 		previous = _rows[_selected]
 	_rows.clear()
+	# Accès direct demandé par le menu principal : partie rapide et arène de test, avant les sauvegardes.
+	_rows.append({"kind": "quick_game"})
+	_rows.append({"kind": "arena"})
 	for entry: Dictionary in SaveGame.list_slots():
 		_rows.append({"kind": "slot", "slot": entry["slot"], "meta": entry["meta"]})
 	if not main_mode:
@@ -149,6 +153,10 @@ func _handle_list_key(event: InputEventKey) -> void:
 		var row: Dictionary = _rows[_selected]
 		if row.get("kind", "") == "slot":
 			_ask_confirm("load", String(row["slot"]), Screen.LIST)
+	elif KeyUtil.is_letter(event, "n"):
+		_activate_quick_game()
+	elif KeyUtil.is_letter(event, "t"):
+		_activate_arena()
 	elif KeyUtil.is_letter(event, "c"):
 		var row: Dictionary = _rows[_selected]
 		if row.get("kind", "") == "slot":
@@ -163,6 +171,10 @@ func _handle_list_key(event: InputEventKey) -> void:
 func _activate_row() -> void:
 	var row: Dictionary = _rows[_selected]
 	match String(row.get("kind", "")):
+		"quick_game":
+			_activate_quick_game()
+		"arena":
+			_activate_arena()
 		"slot":
 			var slot: String = String(row["slot"])
 			if main_mode:
@@ -255,6 +267,10 @@ func _handle_confirm_key(event: InputEventKey) -> void:
 			_load_game(_confirm_slot)
 		"new_game":
 			_launch_new_game()
+		"quick_game":
+			_launch_quick_game()
+		"arena":
+			_launch_arena()
 
 
 func _ask_confirm(action: String, slot: String, return_screen: int) -> void:
@@ -305,6 +321,32 @@ func _launch_new_game() -> void:
 	get_tree().reload_current_scene()
 
 
+## Partie rapide : seed aléatoire, scénario par défaut (aucune saisie).
+func _activate_quick_game() -> void:
+	if main_mode:
+		_launch_quick_game()
+	else:
+		_ask_confirm("quick_game", "", Screen.LIST)
+
+
+func _launch_quick_game() -> void:
+	GameSession.request_new_game(_random_seed_text(), "default")
+	get_tree().reload_current_scene()
+
+
+## Arène de test : seed fixe, contenu de démonstration (voir TestArena et ArenaGuideUI).
+func _activate_arena() -> void:
+	if main_mode:
+		_launch_arena()
+	else:
+		_ask_confirm("arena", "", Screen.LIST)
+
+
+func _launch_arena() -> void:
+	GameSession.request_arena()
+	get_tree().reload_current_scene()
+
+
 func _copy_seed(text: String) -> void:
 	if text.strip_edges() == "":
 		return
@@ -350,9 +392,9 @@ func _draw_list(font: Font, view_size: Vector2) -> void:
 	box.position = (view_size - box.size) / 2.0
 	_view.draw_rect(box, COLOR_PANEL)
 	_view.draw_rect(box, COLOR_BORDER, false, 2.0)
-	var title: String = "ANARCHY — SAUVEGARDES" if main_mode else "SAUVEGARDES"
+	var title: String = "ANARCHY — MENU PRINCIPAL" if main_mode else "SAUVEGARDES"
 	_view.draw_string(font, box.position + Vector2(18, 32), title, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE + 4, COLOR_HEADER)
-	var subtitle: String = "Choisissez une sauvegarde ou créez une nouvelle partie."
+	var subtitle: String = "Partie rapide, arène de test, sauvegardes ou nouvelle partie au choix."
 	if not main_mode and player != null and player.world != null:
 		subtitle = "Partie en cours : seed « %s » • %s" % [player.world.seed_text, GameClock.get_time_string()]
 	_view.draw_string(font, box.position + Vector2(18, 54), subtitle, HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 36.0, FONT_SIZE - 2, COLOR_MUTED)
@@ -374,11 +416,11 @@ func _draw_list(font: Font, view_size: Vector2) -> void:
 		y += 28.0
 	var hint: String
 	if main_mode:
-		hint = "8 / 2 : choisir   Entrée : charger / créer   Suppr : supprimer   C : copier la seed   Échap : quitter"
+		hint = "8 / 2 : choisir   Entrée : valider   N : seed aléatoire   T : arène   C : copier   Échap : quitter"
 	else:
-		hint = "8 / 2 : choisir   Entrée : sauvegarder   L : charger   Suppr : supprimer   C : copier la seed   Échap : reprendre"
+		hint = "8 / 2 : choisir   Entrée : valider   N : seed aléatoire   T : arène   L : charger   Échap : reprendre"
 	_view.draw_string(font, Vector2(box.position.x + 18.0, box.position.y + box.size.y - 14.0), hint,
-		HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 36.0, 14, COLOR_MUTED)
+		HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 36.0, 12, COLOR_MUTED)
 
 
 func _draw_list_row(font: Font, row: Rect2, data: Dictionary) -> void:
@@ -404,6 +446,16 @@ func _draw_list_row(font: Font, row: Rect2, data: Dictionary) -> void:
 		"new_save":
 			_view.draw_string(font, row.position + Vector2(12, 34), "＋ Nouvelle sauvegarde (emplacement « %s »)" % String(data["slot"]),
 				HORIZONTAL_ALIGNMENT_LEFT, row.size.x - 24.0, FONT_SIZE, COLOR_ON)
+		"quick_game":
+			_view.draw_string(font, row.position + Vector2(12, 24), "▶ Nouvelle partie (seed aléatoire)",
+				HORIZONTAL_ALIGNMENT_LEFT, row.size.x - 24.0, FONT_SIZE, COLOR_ON)
+			_view.draw_string(font, row.position + Vector2(12, 46), "Lancement immédiat, scénario par défaut (lisière de ville / nature).",
+				HORIZONTAL_ALIGNMENT_LEFT, row.size.x - 24.0, FONT_SIZE - 4, COLOR_MUTED)
+		"arena":
+			_view.draw_string(font, row.position + Vector2(12, 24), "▶ Arène de test (toutes les fonctionnalités)",
+				HORIZONTAL_ALIGNMENT_LEFT, row.size.x - 24.0, FONT_SIZE, COLOR_ON)
+			_view.draw_string(font, row.position + Vector2(12, 46), "Carte fixe multi-zones et multi-étages, guide pas à pas en haut (F1).",
+				HORIZONTAL_ALIGNMENT_LEFT, row.size.x - 24.0, FONT_SIZE - 4, COLOR_MUTED)
 		"new_game":
 			_view.draw_string(font, row.position + Vector2(12, 34), "＋ Nouvelle partie (seed et scénario au choix)",
 				HORIZONTAL_ALIGNMENT_LEFT, row.size.x - 24.0, FONT_SIZE, COLOR_ON)
@@ -481,6 +533,10 @@ func _draw_confirm(font: Font, view_size: Vector2) -> void:
 			text = "Charger la sauvegarde « %s » ?\nLa progression en cours non sauvegardée sera perdue." % _confirm_slot
 		"new_game":
 			text = "Créer une nouvelle partie ?\nLa progression en cours non sauvegardée sera perdue."
+		"quick_game":
+			text = "Créer une nouvelle partie avec une seed aléatoire ?\nLa progression en cours non sauvegardée sera perdue."
+		"arena":
+			text = "Lancer l'arène de test ?\nLa progression en cours non sauvegardée sera perdue."
 	_view.draw_multiline_string(font, box.position + Vector2(18, 78), text, HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 36.0,
 		FONT_SIZE, -1, COLOR_TEXT)
 	_view.draw_string(font, box.position + Vector2(18, box.size.y - 54), "Entrée : oui, confirmer",

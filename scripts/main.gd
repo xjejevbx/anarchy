@@ -1,29 +1,21 @@
 extends Node2D
-## Racine du jeu : au lancement, affiche l'écran des sauvegardes (nouvelle partie avec seed/scénario, chargement) ;
-## une fois la partie créée ou chargée, assemble le monde, le joueur et les interfaces.
-## F5 ouvre l'écran des sauvegardes en jeu ; F2 copie la seed dans le presse-papiers.
+## Racine du jeu : au lancement, affiche le menu principal (partie rapide à seed aléatoire, arène de test,
+## sauvegardes, nouvelle partie avec seed/scénario) ; une fois la partie créée ou chargée, assemble le monde,
+## le joueur et les interfaces. F5 ouvre l'écran des sauvegardes en jeu ; F2 copie la seed dans le presse-papiers.
 
-# --- Réglages de debug (une nouvelle partie normale utilise le menu : seed et scénario) ---
-const USE_TEST_ARENA: bool = false           # true : ancienne carte fermée 60x40 (debug), avec 3 zombies de test
-const SPAWN_BESTIARY: bool = false            # true : tous les types de monstres près du départ (debug) ; false : population normale seulement
+# --- Réglages de debug ---
 # Densité de monstres (jalon 6a) : multiplie les densités de data/worldgen/ecology.json. 0 = aucun monstre, 1 = normal, 2 = très peuplé.
 const POPULATION: float = 1.0
 # true : au lancement d'une partie, un écran liste les sprites demandés par les données mais absents de assets/tiles.json
 # (MissingSpritesUI, SpriteAudit). Rien ne s'affiche si tout est chargé. Mettre false pour ne plus l'afficher.
 const SHOW_MISSING_SPRITES: bool = true
+# Réglage effectif, modifiable avant l'ajout du nœud (tests headless) : true par défaut, voir SHOW_MISSING_SPRITES.
+var show_missing_sprites: bool = SHOW_MISSING_SPRITES
 
-# Monstres de test : [id MonsterData, décalage par rapport au départ]. Tous dans les ~30 cases (chunks proches chargés au démarrage).
-# BASE_MONSTERS : seulement dans l'arène de test (le monde normal a sa propre population, voir SpawnGenerator).
-const BASE_MONSTERS: Array = [
-	["zombie", Vector2i(9, 3)], ["zombie", Vector2i(15, 9)], ["zombie", Vector2i(5, 15)],
-]
-const BESTIARY_MONSTERS: Array = [
-	["zombie_child", Vector2i(-10, 6)], ["zombie_fast", Vector2i(18, -8)], ["zombie_crawler", Vector2i(-6, 12)],
-	["zombie_brute", Vector2i(22, 12)], ["zombie_spitter", Vector2i(-14, -9)], ["zombie_screecher", Vector2i(12, -16)],
-	["zombie_electric", Vector2i(-18, 14)], ["zombie_soldier", Vector2i(24, -4)], ["zombie_dog", Vector2i(-8, -14)],
-	["wolf", Vector2i(-24, 4)], ["wolf", Vector2i(-26, 7)], ["wolf", Vector2i(-23, 9)],
-	["giant_spider", Vector2i(8, 22)], ["bear", Vector2i(-20, -20)], ["zombie_hulk", Vector2i(28, 24)],
-]
+# Arène de test : géométrie, bestiaire et objets sont centralisés dans TestArena (voir son en-tête).
+# Préchargés pour ne pas dépendre du cache des class_name en mode headless.
+const TEST_ARENA = preload("res://scripts/worldgen/test_arena.gd")
+const ARENA_GUIDE_SCRIPT = preload("res://scripts/ui/arena_guide_ui.gd")
 
 var _world: World
 var _player: Player
@@ -36,6 +28,8 @@ func _ready() -> void:
 			_start_loaded(String(request.get("slot", "")))
 		GameSession.Request.NEW_GAME:
 			_start_new(String(request.get("seed_text", "")), String(request.get("scenario", "default")))
+		GameSession.Request.ARENA:
+			_start_arena()
 		_:
 			_show_main_menu()
 
@@ -70,6 +64,15 @@ func _start_loaded(slot: String) -> void:
 
 
 func _start_new(seed_text: String, scenario: String) -> void:
+	_start_game(seed_text, scenario, false)
+
+
+## Arène de test du menu principal : seed fixe, pas de génération procédurale, contenu de démonstration.
+func _start_arena() -> void:
+	_start_game(TEST_ARENA.SEED_TEXT, "default", true)
+
+
+func _start_game(seed_text: String, scenario: String, arena: bool) -> void:
 	# Nouvelle partie depuis le menu en jeu : l'horloge et les gestionnaires globaux de l'ancienne partie ne doivent pas survivre.
 	GameClock.elapsed_points = 0.0
 	StatusEffects.reset()
@@ -80,16 +83,19 @@ func _start_new(seed_text: String, scenario: String) -> void:
 	var world := World.new()
 	world.world_seed = WorldRng.seed_from_text(clean_seed)
 	world.seed_text = clean_seed
-	world.scenario = scenario
-	world.use_arena = USE_TEST_ARENA
+	world.scenario = scenario if not arena else "default"
+	world.use_arena = arena
 	world.population = POPULATION
 	add_child(world)
 
 	# Point de départ : déterministe selon la seed (lisière de la ville la plus proche, sinon pleine nature ; une île selon le scénario) ;
-	# (5, 5) dans l'arène.
-	var spawn: Vector2i = ChunkGenerator.SPAWN_POS
+	# (5, 5) dans l'arène de test.
+	var spawn: Vector2i = TEST_ARENA.SPAWN_POS
 	var scenario_note: String = ""
-	if not USE_TEST_ARENA:
+	var spawn_town: Dictionary = {}
+	if arena:
+		scenario_note = " Arène de test : guide en haut à gauche (F1), F3 valide une étape."
+	else:
 		var settlement: SettlementMap = SettlementMap.for_seed(world.world_seed)
 		spawn = settlement.spawn_cell()
 		if scenario == "island":
@@ -104,40 +110,35 @@ func _start_new(seed_text: String, scenario: String) -> void:
 	_build_ui(world, player)
 	player.emit_status()
 
-	var spawn_town: Dictionary = {}
-	if not USE_TEST_ARENA:
+	if not arena:
 		var spawn_key: Vector3i = ChunkManager.key_of(spawn)
 		spawn_town = SettlementMap.for_seed(world.world_seed).town_at(Vector2i(spawn_key.x, spawn_key.y))
 	var spawn_note: String = (" en lisière de « %s »" % spawn_town["name"]) if not spawn_town.is_empty() else ""
-	EventBus.message_logged.emit("Monde : seed « %s » (%d)%s. Départ en (%d, %d)%s.%s m : carte de debug." % \
-		[clean_seed, world.world_seed, ", arène de test" if USE_TEST_ARENA else "", spawn.x, spawn.y, spawn_note, scenario_note])
+	EventBus.message_logged.emit("Monde : seed « %s » (%d)%s. Départ en (%d, %d)%s.%s" % \
+		[clean_seed, world.world_seed, ", arène de test" if arena else "", spawn.x, spawn.y, spawn_note, scenario_note])
 
-	# Monstres de test (placés relativement au joueur ; survolez-les ou utilisez x pour voir leurs compétences).
-	# Monde normal : la population vient des chunks (SpawnGenerator) ; l'arène de test garde ses 3 zombies.
-	var roster: Array = []
-	if USE_TEST_ARENA:
-		roster.append_array(BASE_MONSTERS)
-	if SPAWN_BESTIARY:
-		roster.append_array(BESTIARY_MONSTERS)
-	for entry: Array in roster:
-		world.spawn_monster(MonsterData.create(String(entry[0])), spawn + (entry[1] as Vector2i))
+	if arena:
+		_populate_arena(world, player)
+		world.update_fov()   # les monstres et objets viennent d'être ajoutés : rafraîchit la vue et les signale
 
-	# Objets de test au sol, autour du joueur : i = inventaire, g = ramasser (seulement pour une nouvelle partie).
-	var at := func(dx: int, dy: int) -> Vector2i: return spawn + Vector2i(dx, dy)
-	world.add_ground_item(at.call(1, 0), Item.create("backpack_military"))
-	world.add_ground_item(at.call(1, 0), Item.create("backpack"))
-	world.add_ground_item(at.call(1, 0), Item.create("bag_curtain"))
-	world.add_ground_item(at.call(0, 1), Item.create("jacket_light"))
-	world.add_ground_item(at.call(0, 1), Item.create("pants_cargo"))
-	world.add_ground_item(at.call(0, 1), Item.create("hat_ball"))
-	world.add_ground_item(at.call(-1, 0), Item.create("2x4"))
-	world.add_ground_item(at.call(-1, 0), Item.create("sheet_metal_small"))
-	world.add_ground_item(at.call(-1, 0), Item.create("pipe"))
-	world.add_ground_item(at.call(-1, 0), Item.create("stick"))
-	world.add_ground_item(at.call(0, -1), Item.create("can_beans", 4))
-	world.add_ground_item(at.call(0, -1), Item.create("bottle_plastic", 2))
-	world.add_ground_item(at.call(0, -1), Item.create("rope_6"))
-	world.add_ground_item(at.call(1, 1), Item.create("antibiotics", 3))
+
+## Contenu de démonstration de l'arène : objets au sol (tous les étages) et bestiaire complet, endormi.
+func _populate_arena(world: World, player: Player) -> void:
+	for entry: Dictionary in TEST_ARENA.ground_items():
+		var cell: Vector2i = entry["cell"]
+		world.add_ground_item_at(int(entry.get("level", 0)), cell,
+			Item.create(String(entry["item"]), int(entry.get("count", 1))))
+	for entry: Dictionary in TEST_ARENA.bestiary():
+		var cell: Vector2i = entry["cell"]
+		var monster: Monster = world.spawn_monster_at({
+			"monster": String(entry["monster"]), "cell": cell, "state": "sleep",
+		})
+		if monster == null:
+			push_warning("TestArena : impossible de placer %s en (%d, %d)." % [entry["monster"], cell.x, cell.y])
+	# Des antibiotiques dans l'inventaire de départ : l'étape « u » du guide est testable immédiatement,
+	# même si les objets au sol permettent aussi de tester le ramassage.
+	player.inventory.loose.append(Item.create("antibiotics", 3))
+	player.refresh_inventory()
 
 
 func _create_player(world: World, spawn: Vector2i) -> Player:
@@ -184,7 +185,7 @@ func _build_ui(world: World, player: Player) -> void:
 
 	# Contrôle des sprites au lancement : ajouté APRÈS les autres interfaces pour recevoir les touches en premier (il bloque le joueur
 	# tant qu'il est ouvert) et après le HUD (le message du journal est alors affiché).
-	if SHOW_MISSING_SPRITES:
+	if show_missing_sprites:
 		var sprite_report := MissingSpritesUI.new()
 		sprite_report.player = player
 		add_child(sprite_report)
@@ -193,6 +194,12 @@ func _build_ui(world: World, player: Player) -> void:
 	var save_menu := SaveMenuUI.new()  # F5 en jeu (écran des sauvegardes)
 	save_menu.player = player
 	add_child(save_menu)
+
+	# Guide de test : seulement dans l'arène, ajouté en dernier pour recevoir F1 / F3 / F4 avant les autres interfaces.
+	if world.use_arena:
+		var guide = ARENA_GUIDE_SCRIPT.new()
+		guide.player = player
+		add_child(guide)
 
 
 func _unhandled_input(event: InputEvent) -> void:

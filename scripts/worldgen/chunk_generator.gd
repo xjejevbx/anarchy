@@ -7,22 +7,19 @@ extends RefCounted
 ## Jalon 6b (axe vertical) : un chunk à z != 0 n'est PLUS la copie de la surface. Étage z < 0 : roche pleine (t_rock). Étage z > 0 : vide (t_air).
 ## Un lieu définit ses étages avec des plans nommés "<id du plan de surface>@<z>" (ex. "urban_hospital@-1") : le plan (même rotation que
 ## celui de la surface) se superpose à la roche ou au vide ; ses '.' gardent la roche / le vide. Terrain ET mobilier suivent la même règle.
+## Arène de test : géométrie fixe multi-zones/multi-étages définie dans scripts/worldgen/test_arena.gd (TestArena).
 
-# --- Arène de test (ancienne carte fermée 60 x 40, option debug USE_TEST_ARENA) ---
-const ARENA_WIDTH: int = 60
-const ARENA_HEIGHT: int = 40
-const SPAWN_POS: Vector2i = Vector2i(5, 5)    # départ du joueur dans l'arène
-const ARENA_CLEAR_RADIUS: float = 3.5         # pas d'arbre autour du départ
-const ARENA_TREE_DENSITY: float = 0.12
+# --- Arène de test (menu principal > « Arène de test ») : toute la géométrie est dans TestArena. ---
+const TEST_ARENA = preload("res://scripts/worldgen/test_arena.gd")   # évite de dépendre du cache des class_name
+const SPAWN_POS: Vector2i = Vector2i(5, 5)    # départ de l'arène (voir TestArena.SPAWN_POS)
 
 
 ## Un octet par case (index TerrainDB), rangées de haut en bas : indice = y local * 24 + x local.
 static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> PackedByteArray:
+	if arena:
+		return TEST_ARENA.generate(world_seed, key)
 	var data := PackedByteArray()
 	data.resize(Chunk.CELLS)
-	if arena:
-		_fill_arena(world_seed, key, data)
-		return data
 	if key.z != 0:
 		_fill_level(world_seed, key, data)
 		return data
@@ -61,22 +58,6 @@ static func generate(world_seed: int, key: Vector3i, arena: bool = false) -> Pac
 				index = grass  # le point de départ est dégagé
 			data[ly * Chunk.SIZE + lx] = index
 	return data
-
-
-static func _fill_arena(world_seed: int, key: Vector3i, data: PackedByteArray) -> void:
-	var grass: int = TerrainDB.index_of("t_grass")
-	var tree: int = TerrainDB.index_of("t_tree")
-	var wall: int = TerrainDB.index_of("t_wall_arena")
-	for ly in Chunk.SIZE:
-		for lx in Chunk.SIZE:
-			var cell := Vector2i(key.x * Chunk.SIZE + lx, key.y * Chunk.SIZE + ly)
-			var index: int = grass
-			if cell.x <= 0 or cell.y <= 0 or cell.x >= ARENA_WIDTH - 1 or cell.y >= ARENA_HEIGHT - 1:
-				index = wall
-			elif Vector2(cell).distance_to(Vector2(SPAWN_POS)) > ARENA_CLEAR_RADIUS \
-					and WorldRng.chance(world_seed, WorldRng.LAYER_TERRAIN, cell.x, cell.y, key.z, ARENA_TREE_DENSITY):
-				index = tree
-			data[ly * Chunk.SIZE + lx] = index
 
 
 # --- Étages (axe vertical) ---
@@ -121,10 +102,10 @@ static func fingerprint(world_seed: int, key: Vector3i, arena: bool = false) -> 
 ## Mobilier d'un chunk (un octet par case : 0 = rien, sinon index FurnitureDB). FONCTION PURE comme generate().
 ## À z != 0 : seulement celui du plan d'étage du lieu (voir level_plan).
 static func generate_furniture(world_seed: int, key: Vector3i, arena: bool = false) -> PackedByteArray:
+	if arena:
+		return TEST_ARENA.generate_furniture(key)
 	var data := PackedByteArray()
 	data.resize(Chunk.CELLS)
-	if arena:
-		return data
 	var plan: int
 	var rot: int
 	if key.z != 0:

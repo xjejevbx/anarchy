@@ -106,8 +106,7 @@ func _load(key: Vector3i) -> void:
 	chunk.setup(key, ChunkGenerator.generate(world_seed, key, arena), seen, self, _entities)
 	chunk.furniture = ChunkGenerator.generate_furniture(world_seed, key, arena)
 	_apply_deltas(key, chunk)
-	if not arena:
-		chunk.build_roof()   # empreinte du toit (surface), après les deltas de portes / fenêtres
+	chunk.build_roof()   # empreinte du toit (surface), après les deltas de portes / fenêtres ; l'arène de test en profite aussi
 	_root.add_child(chunk)
 	chunks[key] = chunk
 	if chunk.has_autotile:  # les murs des chunks voisins doivent se raccorder

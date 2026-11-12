@@ -69,7 +69,7 @@ const TARGET_DOT_RADIUS: float = 12.0
 var world_seed: int = 4444                  # à fixer AVANT add_child()
 var seed_text: String = ""                  # seed telle que saisie (affichage / copie / sauvegarde)
 var scenario: String = "default"            # scénario de départ (sauvegardé ; utilisé à la création)
-var use_arena: bool = false              # true : ancienne carte fermée 60x40 (debug), à fixer AVANT add_child()
+var use_arena: bool = false              # true : arène de test du menu principal (géométrie fixe, voir TestArena) ; à fixer AVANT add_child()
 var population: float = 1.0              # multiplicateur des densités de monstres (0 = aucun), à fixer AVANT le premier chargement
 var safe_centers: Array[Vector2i] = []   # cases autour desquelles aucun monstre n'apparaît (départ du joueur), voir SpawnGenerator
 var chunks: ChunkManager

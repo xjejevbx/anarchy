@@ -1,9 +1,9 @@
 class_name GameSession
 extends RefCounted
-## Demande de changement de partie qui survit à `reload_current_scene()` (menu principal, nouvelle partie, chargement).
+## Demande de changement de partie qui survit à `reload_current_scene()` (menu principal, nouvelle partie, arène, chargement).
 ## `Main` la consomme une seule fois au démarrage ; sans demande, il affiche l'écran des sauvegardes.
 
-enum Request { MENU, NEW_GAME, LOAD }
+enum Request { MENU, NEW_GAME, ARENA, LOAD }
 
 static var mode: int = Request.MENU
 static var seed_text: String = ""
@@ -23,6 +23,14 @@ static func request_load(slot_value: String) -> void:
 	slot = slot_value
 	seed_text = ""
 	scenario = "default"
+
+
+## Arène de test : seed fixe et contenu de démonstration (voir TestArena et Main).
+static func request_arena() -> void:
+	mode = Request.ARENA
+	seed_text = ""
+	scenario = "default"
+	slot = ""
 
 
 static func request_menu() -> void:
