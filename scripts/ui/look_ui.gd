@@ -207,7 +207,18 @@ func _build_lines() -> void:
 	if terrain < 0:
 		_add("Terrain : zone non chargée.", COLOR_MUTED)
 		return
-	_add("Terrain : %s" % TerrainDB.name_of(terrain))
+	if TerrainDB.is_air(terrain) and _level > 0:
+		# Étages : le vide laisse voir l'extérieur de la surface, en contrebas (même rendu que Chunk).
+		var surface_terrain: int = world.chunks.surface_terrain_at(cell)
+		_add("Terrain : vide — vue sur la surface en contrebas : %s" % TerrainDB.name_of(surface_terrain), COLOR_ACCENT)
+		if world.chunks.surface_roof_at(cell) == Chunk.ROOF_COVER:
+			_add("Toit (surface) : bâtiment couvert, intérieur masqué.", COLOR_MUTED)
+		else:
+			var surface_furniture: int = world.chunks.surface_furniture_at(cell)
+			if surface_furniture != 0:
+				_add("Mobilier (surface) : %s" % FurnitureDB.name_of(surface_furniture))
+	else:
+		_add("Terrain : %s" % TerrainDB.name_of(terrain))
 	var chunk: Chunk = world.chunks.chunk_at(cell)
 	var furniture: int = 0
 	if chunk != null and chunk.furniture.size() == Chunk.CELLS:

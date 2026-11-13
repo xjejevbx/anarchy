@@ -37,6 +37,8 @@ var _queue: Array[Vector3i] = []
 var _modified: Dictionary = {}          # Vector3i -> true : chunk à écrire dans la sauvegarde
 var _terrain_deltas: Dictionary = {}    # Vector3i -> Dictionary(index local -> index de terrain)
 var _furniture_deltas: Dictionary = {}  # Vector3i -> Dictionary(index local -> index de mobilier)
+# --- Vue de la surface depuis un étage supérieur : contenu z = 0 régénéré pour les cases vides (t_air). ---
+var _surface_cache: Dictionary = {}     # Vector3i (z = 0) -> {terrain, furniture, roof}
 
 
 func setup(seed_value: int, use_arena: bool, root: Node2D, entities: Node2D, owner_world: World = null) -> void:
@@ -61,6 +63,8 @@ func set_level(new_level: int) -> void:
 		return
 	level = new_level
 	_queue.clear()
+	if level <= 0:   # la surface n'est plus visible par les fenêtres : libérer l'arrière-plan généré
+		_surface_cache.clear()
 	for key: Vector3i in chunks.keys():
 		if key.z != level:
 			_unload(key)
@@ -231,6 +235,7 @@ func reset_state() -> void:
 	_populated.clear()
 	_monster_store.clear()
 	_unloaded_at.clear()
+	_surface_cache.clear()
 	reset_deltas()
 	level = 0
 
@@ -486,6 +491,65 @@ func furniture_at_level(cell: Vector2i, z: int) -> int:
 	return ChunkGenerator.generate_furniture(world_seed, key, arena)[index]
 
 
+# --- Surface vue depuis un étage supérieur (arrière-plan des cases t_air) ---
+# Le chunk de surface n'est pas chargé quand on est à un étage (un seul étage est actif). On régénère donc son
+# contenu pur une seule fois par chunk, mis en cache ; les deltas de sauvegarde sont appliqués à chaque requête.
+
+func _surface_data(key: Vector3i) -> Dictionary:
+	var surface_key := Vector3i(key.x, key.y, 0)
+	var data: Dictionary = _surface_cache.get(surface_key, {})
+	if not data.is_empty():
+		return data
+	var terrain: PackedByteArray = ChunkGenerator.generate(world_seed, surface_key, arena)
+	var furniture: PackedByteArray = ChunkGenerator.generate_furniture(world_seed, surface_key, arena)
+	data = {"terrain": terrain, "furniture": furniture, "roof": Chunk.roof_mask(terrain)}
+	_surface_cache[surface_key] = data
+	return data
+
+
+## Terrain de la SURFACE à cette case, même si cet étage n'est pas chargé : support de l'extérieur visible depuis
+## une fenêtre d'étage. Les deltas (portes / fenêtres ouvertes) sont pris en compte.
+func surface_terrain_at(cell: Vector2i) -> int:
+	var key: Vector3i = key_of(cell, 0)
+	var index: int = index_of(cell)
+	var loaded := chunks.get(key) as Chunk
+	if loaded != null:
+		return loaded.terrain[index]
+	var data: Dictionary = _surface_data(key)
+	var delta: Dictionary = _terrain_deltas.get(key, {})
+	if delta.has(index):
+		return int(delta[index])
+	var terrain_data: PackedByteArray = data["terrain"]
+	return terrain_data[index]
+
+
+## Mobilier de la surface à cette case, même si cet étage n'est pas chargé.
+func surface_furniture_at(cell: Vector2i) -> int:
+	var key: Vector3i = key_of(cell, 0)
+	var index: int = index_of(cell)
+	var loaded := chunks.get(key) as Chunk
+	if loaded != null and loaded.furniture.size() == Chunk.CELLS:
+		return loaded.furniture[index]
+	var data: Dictionary = _surface_data(key)
+	var delta: Dictionary = _furniture_deltas.get(key, {})
+	if delta.has(index):
+		return int(delta[index])
+	var furniture_data: PackedByteArray = data["furniture"]
+	return furniture_data[index]
+
+
+## Toit de la surface à cette case (Chunk.ROOF_*), même si cet étage n'est pas chargé.
+func surface_roof_at(cell: Vector2i) -> int:
+	var key: Vector3i = key_of(cell, 0)
+	var index: int = index_of(cell)
+	var loaded := chunks.get(key) as Chunk
+	if loaded != null and loaded.roof.size() == Chunk.CELLS:
+		return loaded.roof[index]
+	var data: Dictionary = _surface_data(key)
+	var roof: PackedByteArray = data["roof"]
+	return roof[index]
+
+
 func has_terrain(cell: Vector2i) -> bool:
 	return chunk_at(cell) != null
 
@@ -533,18 +597,27 @@ func mark_seen(cell: Vector2i) -> void:
 
 # --- Murs : choix du sprite selon les murs voisins ---
 
-func _is_wall(cell: Vector2i) -> bool:
-	var index: int = terrain_index(cell)
+func _is_wall(cell: Vector2i, surface: bool = false) -> bool:
+	var index: int = surface_terrain_at(cell) if surface else terrain_index(cell)
 	return TerrainDB.autotile_of(index) == "wall" or TerrainDB.links_wall(index)  # portes et fenêtres se raccordent aux murs
 
 
 ## Convention UltiCa/CDDA : « corner_nw » est le coin nord-ouest d'une structure (il relie l'est et le sud).
 ## À FAIRE : jonctions en T et extrémités (t_connection_*, end_piece_*) quand on aura des bâtiments.
 func wall_sprite(cell: Vector2i) -> String:
-	var n: bool = _is_wall(cell + Vector2i.UP)
-	var e: bool = _is_wall(cell + Vector2i.RIGHT)
-	var s: bool = _is_wall(cell + Vector2i.DOWN)
-	var w: bool = _is_wall(cell + Vector2i.LEFT)
+	return _wall_sprite(cell, false)
+
+
+## Même raccord, mais calculé sur la SURFACE (murs vus depuis un étage supérieur).
+func surface_wall_sprite(cell: Vector2i) -> String:
+	return _wall_sprite(cell, true)
+
+
+func _wall_sprite(cell: Vector2i, surface: bool) -> String:
+	var n: bool = _is_wall(cell + Vector2i.UP, surface)
+	var e: bool = _is_wall(cell + Vector2i.RIGHT, surface)
+	var s: bool = _is_wall(cell + Vector2i.DOWN, surface)
+	var w: bool = _is_wall(cell + Vector2i.LEFT, surface)
 	if n and s and not e and not w:
 		return "t_wall_edge_ns"
 	if e and w and not n and not s:
@@ -583,16 +656,26 @@ func wall_sprite(cell: Vector2i) -> String:
 
 # --- Toits : même convention de raccord que les murs, pièces « t_shingle_flat_roof_* » ---
 
-func _is_roof_cover(cell: Vector2i) -> bool:
-	return roof_at(cell) == Chunk.ROOF_COVER
+func _is_roof_cover(cell: Vector2i, surface: bool = false) -> bool:
+	var roof: int = surface_roof_at(cell) if surface else roof_at(cell)
+	return roof == Chunk.ROOF_COVER
 
 
 ## Sprite du toit de la case selon les cases de toit voisines (aucun raccord avec l'extérieur du bâtiment).
 func roof_sprite(cell: Vector2i) -> String:
-	var n: bool = _is_roof_cover(cell + Vector2i.UP)
-	var e: bool = _is_roof_cover(cell + Vector2i.RIGHT)
-	var s: bool = _is_roof_cover(cell + Vector2i.DOWN)
-	var w: bool = _is_roof_cover(cell + Vector2i.LEFT)
+	return _roof_sprite(cell, false)
+
+
+## Même raccord, mais calculé sur les toits de la SURFACE (vus depuis un étage supérieur).
+func surface_roof_sprite(cell: Vector2i) -> String:
+	return _roof_sprite(cell, true)
+
+
+func _roof_sprite(cell: Vector2i, surface: bool) -> String:
+	var n: bool = _is_roof_cover(cell + Vector2i.UP, surface)
+	var e: bool = _is_roof_cover(cell + Vector2i.RIGHT, surface)
+	var s: bool = _is_roof_cover(cell + Vector2i.DOWN, surface)
+	var w: bool = _is_roof_cover(cell + Vector2i.LEFT, surface)
 	var links: int = int(n) + int(e) + int(s) + int(w)
 	if links == 4:
 		return "t_shingle_flat_roof_center"

@@ -80,6 +80,7 @@ func _check_house_and_floors() -> void:
 	_check(_id(Vector2i(30, 10), 1) == "t_floor", "étage +1 : plancher")
 	_check(_id(Vector2i(26, 3), 1) == "t_wall_house", "étage +1 : mur")
 	_check(_id(Vector2i(20, 10), 1) == "t_air", "étage +1 : vide hors maison")
+	_check(TerrainDB.is_air(TerrainDB.index_of(_id(Vector2i(20, 10), 1))), "étage +1 : le vide est bien du t_air")
 	_check(_id(Vector2i(30, 10), -1) == "t_concrete", "sous-sol : salle en béton")
 	_check(_id(Vector2i(34, 11), -1) == "t_door", "sous-sol : porte de cloison")
 	_check(_id(Vector2i(34, 10), -1) == "t_wall_house", "sous-sol : cloison")
@@ -248,6 +249,18 @@ func _check_live_arena() -> void:
 	# Escaliers utilisables dans les deux sens.
 	_check(world.use_stairs(TEST_ARENA.STAIRS_UP, 1), "montée surface -> étage +1")
 	_check(world.get_level() == 1, "étage actif = +1")
+	# Depuis un étage, les cases vides s'appuient sur la surface : terrain, mobilier et toits du dessous.
+	_check(world.chunks.surface_terrain_at(Vector2i(20, 10)) == TerrainDB.index_of("t_sidewalk"),
+		"étage +1 : chemin de la surface visible en contrebas")
+	_check(world.chunks.surface_terrain_at(Vector2i(6, 5)) == TerrainDB.index_of("t_grass"),
+		"étage +1 : herbe de la surface visible en contrebas")
+	_check(world.chunks.surface_furniture_at(Vector2i(42, 4)) == FurnitureDB.index_of("f_bed"),
+		"étage +1 : mobilier de la surface accessible")
+	_check(world.chunks.surface_roof_at(Vector2i(30, 10)) == Chunk.ROOF_COVER,
+		"étage +1 : toit de la maison calculé en contrebas")
+	_check(world.chunks.surface_roof_at(Vector2i(20, 10)) == Chunk.ROOF_NONE,
+		"étage +1 : pas de toit sur le chemin")
+	_check(guide != null and guide._sees_open_air(world), "guide : une fenêtre d'étage laisse voir le vide extérieur")
 	_check(world.use_stairs(TEST_ARENA.STAIRS_UP, -1), "descente étage +1 -> surface")
 	_check(world.get_level() == 0, "étage actif = 0")
 	_check(world.use_stairs(TEST_ARENA.STAIRS_DOWN, -1), "descente surface -> sous-sol")

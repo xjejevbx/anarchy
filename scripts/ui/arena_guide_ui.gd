@@ -1,15 +1,15 @@
 class_name ArenaGuideUI
 extends CanvasLayer
-## Guide de l'arÃ¨ne de test : petit panneau en haut Ã  gauche qui liste les fonctionnalitÃ©s Ã  essayer, dans l'ordre.
+## Guide de l'arène de test : petit panneau en haut à gauche qui liste les fonctionnalités à essayer, dans l'ordre.
 ##
-## Chaque Ã©tape a un identifiant et une dÃ©tection automatique :
-##  - signaux d'EventBus (action_performed, menus, posture, regard, monstres repÃ©rÃ©s, journal) ;
-##  - Ã©tat du joueur vÃ©rifiÃ© pÃ©riodiquement (nage, Ã©tage, toit masquÃ©, effets d'Ã©tat, zoom).
-## Une Ã©tape cochÃ©e le reste (on peut tout tester dans n'importe quel ordre). F3 valide l'Ã©tape courante Ã  la main
-## (utile pour les essais difficiles Ã  dÃ©clencher), F4 rÃ©initialise le guide, F1 masque/affiche le panneau.
+## Chaque étape a un identifiant et une détection automatique :
+##  - signaux d'EventBus (action_performed, menus, posture, regard, monstres repérés, journal) ;
+##  - état du joueur vérifié périodiquement (nage, étage, toit masqué, effets d'état, zoom).
+## Une étape cochée le reste (on peut tout tester dans n'importe quel ordre). F3 valide l'étape courante à la main
+## (utile pour les essais difficiles à déclencher), F4 réinitialise le guide, F1 masque/affiche le panneau.
 ##
-## Pour une future fonctionnalitÃ© : ajouter une entrÃ©e dans STEPS, puis la dÃ©tection correspondante dans
-## _on_action / _on_message / _on_* / _poll_state. Si l'essai est purement manuel, aucune dÃ©tection n'est nÃ©cessaire :
+## Pour une future fonctionnalité : ajouter une entrée dans STEPS, puis la détection correspondante dans
+## _on_action / _on_message / _on_* / _poll_state. Si l'essai est purement manuel, aucune détection n'est nécessaire :
 ## F3 suffit.
 
 const FONT_SIZE: int = 12
@@ -25,38 +25,39 @@ const COLOR_CURRENT: Color = Color(1.0, 0.88, 0.45)
 const COLOR_PENDING: Color = Color(0.62, 0.64, 0.68)
 const COLOR_HINT: Color = Color(0.72, 0.75, 0.8)
 
-# L'ordre est l'ordre conseillÃ© du parcours. Les textes restent courts pour tenir sur deux colonnes.
+# L'ordre est l'ordre conseillé du parcours. Les textes restent courts pour tenir sur deux colonnes.
 const STEPS: Array = [
-	{"id": "move", "text": "Se dÃ©placer (flÃ¨ches / 8-2-4-6)", "hint": "Chaque pas coÃ»te 1 point d'action (1 s) ; l'eau coÃ»te plus cher."},
-	{"id": "wait", "text": "Attendre (5, espace ou .)", "hint": "Attendre regagne de la stamina, moins vite si vous Ãªtes lourd."},
+	{"id": "move", "text": "Se déplacer (flèches / 8-2-4-6)", "hint": "Chaque pas coûte 1 point d'action (1 s) ; l'eau coûte plus cher."},
+	{"id": "wait", "text": "Attendre (5, espace ou .)", "hint": "Attendre regagne de la stamina, moins vite si vous êtes lourd."},
 	{"id": "posture", "text": "Changer de posture (|)", "hint": "Marche, sprint (rapide et bruyant), accroupi (lent et discret)."},
-	{"id": "attack", "text": "Attaquer un monstre au contact", "hint": "Orientez-vous vers lui et avancez : le combat de base frappe Ã  6 PV."},
-	{"id": "kill", "text": "Tuer un monstre", "hint": "Deux zombies d'entraÃ®nement vous attendent dans l'arÃ¨ne de combat, au sud-est."},
-	{"id": "door", "text": "Ouvrir / fermer porte ou fenÃªtre (o)", "hint": "Approchez-vous de la maison : porte Ã  l'ouest, fenÃªtres sur les murs."},
-	{"id": "ground", "text": "Voir les objets au sol (g)", "hint": "Sacs, armes improvisÃ©es et vivres entourent le dÃ©part."},
-	{"id": "inventory", "text": "Ouvrir l'inventaire (i)", "hint": "Ã‰quipez, rangez, jetez : chaque action a un coÃ»t affichÃ© avant validation."},
-	{"id": "use", "text": "Utiliser un objet (u)", "hint": "Des antibiotiques sont dÃ©jÃ  dans votre inventaire de dÃ©part (u puis EntrÃ©e)."},
-	{"id": "swim", "text": "Nager en eau peu profonde", "hint": "Le bassin est Ã  l'est : entrez par la plage de sable."},
-	{"id": "deep", "text": "Nager en eau profonde", "hint": "Le centre du bassin Ã©puise la stamina et interdit de se reposer."},
-	{"id": "basement", "text": "Descendre au sous-sol (> sur un escalier)", "hint": "Escalier de descente dans la maison : roche, salle et porte intÃ©rieure."},
-	{"id": "upstairs", "text": "Monter Ã  l'Ã©tage (< sur un escalier)", "hint": "L'escalier de montÃ©e mÃ¨ne Ã  l'Ã©tage supÃ©rieur de la maison."},
-	{"id": "roof", "text": "Entrer dans la maison (le toit se masque)", "hint": "Le toit du bÃ¢timent oÃ¹ vous vous tenez disparaÃ®t ; sortez pour le revoir."},
+	{"id": "attack", "text": "Attaquer un monstre au contact", "hint": "Orientez-vous vers lui et avancez : le combat de base frappe à 6 PV."},
+	{"id": "kill", "text": "Tuer un monstre", "hint": "Deux zombies d'entraînement vous attendent dans l'arène de combat, au sud-est."},
+	{"id": "door", "text": "Ouvrir / fermer porte ou fenêtre (o)", "hint": "Approchez-vous de la maison : porte à l'ouest, fenêtres sur les murs."},
+	{"id": "ground", "text": "Voir les objets au sol (g)", "hint": "Sacs, armes improvisées et vivres entourent le départ."},
+	{"id": "inventory", "text": "Ouvrir l'inventaire (i)", "hint": "Équipez, rangez, jetez : chaque action a un coût affiché avant validation."},
+	{"id": "use", "text": "Utiliser un objet (u)", "hint": "Des antibiotiques sont déjà dans votre inventaire de départ (u puis Entrée)."},
+	{"id": "swim", "text": "Nager en eau peu profonde", "hint": "Le bassin est à l'est : entrez par la plage de sable."},
+	{"id": "deep", "text": "Nager en eau profonde", "hint": "Le centre du bassin épuise la stamina et interdit de se reposer."},
+	{"id": "basement", "text": "Descendre au sous-sol (> sur un escalier)", "hint": "Escalier de descente dans la maison : roche, salle et porte intérieure."},
+	{"id": "upstairs", "text": "Monter à l'étage (< sur un escalier)", "hint": "L'escalier de montée mène à l'étage supérieur de la maison."},
+	{"id": "window_view", "text": "Voir l'extérieur par une fenêtre (étage)", "hint": "Au premier étage, les fenêtres montrent le sol, les toits et les arbres du dessous."},
+	{"id": "roof", "text": "Entrer dans la maison (le toit se masque)", "hint": "Le toit du bâtiment où vous vous tenez disparaît ; sortez pour le revoir."},
 	{"id": "bestiary", "text": "Observer le bestiaire (approche / x)", "hint": "Au sud-ouest : archétypes et capacités spéciales (armure, aura, charge, grab, garde...), tous endormis."},
-	{"id": "status", "text": "Subir un effet d'Ã©tat", "hint": "Morsure, poison, acide, irradiation, brÃ»lure, engelure ou infection."},
-	{"id": "explosion", "text": "Provoquer une explosion", "hint": "Grenadier zombie, chien de feu ou expÃ©rience gonflÃ©e, dans le bestiaire."},
-	{"id": "minimap", "text": "Mini-carte de debug (m)", "hint": "Cases vues, monstres proches, zoom et dÃ©placements dans la mini-carte."},
-	{"id": "map", "text": "Carte du joueur (p)", "hint": "Seules les cases explorÃ©es apparaissent ; un clic pose un repÃ¨re."},
-	{"id": "character", "text": "Ã‰cran du personnage (c)", "hint": "Stats, Ã©tat des parties du corps et onglets d'information."},
-	{"id": "look", "text": "Mode regard (x ou Maj + flÃ¨che)", "hint": "Inspectez un monstre ou l'Ã©tage voisin sans dÃ©placer le joueur."},
-	{"id": "zoom", "text": "Zoomer / dÃ©zoomer (+ / -)", "hint": "Cinq niveaux de zoom, du plus large (0,125) au plus proche (0,75)."},
-	{"id": "save", "text": "Sauvegarder (F5) puis recharger", "hint": "L'arÃ¨ne est une partie comme une autre : sauvegarde, chargement, suppression."},
+	{"id": "status", "text": "Subir un effet d'état", "hint": "Morsure, poison, acide, irradiation, brûlure, engelure ou infection."},
+	{"id": "explosion", "text": "Provoquer une explosion", "hint": "Grenadier zombie, chien de feu ou expérience gonflée, dans le bestiaire."},
+	{"id": "minimap", "text": "Mini-carte de debug (m)", "hint": "Cases vues, monstres proches, zoom et déplacements dans la mini-carte."},
+	{"id": "map", "text": "Carte du joueur (p)", "hint": "Seules les cases explorées apparaissent ; un clic pose un repère."},
+	{"id": "character", "text": "Écran du personnage (c)", "hint": "Stats, état des parties du corps et onglets d'information."},
+	{"id": "look", "text": "Mode regard (x ou Maj + flèche)", "hint": "Inspectez un monstre ou l'étage voisin sans déplacer le joueur."},
+	{"id": "zoom", "text": "Zoomer / dézoomer (+ / -)", "hint": "Cinq niveaux de zoom, du plus large (0,125) au plus proche (0,75)."},
+	{"id": "save", "text": "Sauvegarder (F5) puis recharger", "hint": "L'arène est une partie comme une autre : sauvegarde, chargement, suppression."},
 ]
 
 var player: Player
 
 var _view: Control
 var _visible: bool = true
-var _done: Dictionary = {}          # id d'Ã©tape -> true
+var _done: Dictionary = {}          # id d'étape -> true
 var _elapsed: float = 0.0
 var _zoom_start: int = 0
 
@@ -110,7 +111,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
-## Ã‰tat du joueur qui ne passe pas par un signal : nage, Ã©tage, toit, effets, zoom.
+## État du joueur qui ne passe pas par un signal : nage, étage, toit, effets, zoom.
 func _poll_state() -> void:
 	if player == null or player.world == null:
 		return
@@ -125,6 +126,8 @@ func _poll_state() -> void:
 		_mark("basement")
 	elif level > 0:
 		_mark("upstairs")
+		if _sees_open_air(player.world):
+			_mark("window_view")
 	if player.world.roof_hidden_chunk != World.NO_ROOF_CHUNK:
 		_mark("roof")
 	if StatusEffects.summary() != "":
@@ -133,9 +136,18 @@ func _poll_state() -> void:
 		_mark("zoom")
 
 
+## Une case de vide est-elle visible ? Depuis un étage, cela signifie qu'une fenêtre (ou une ouverture) laisse
+## voir l'extérieur de la surface en contrebas.
+func _sees_open_air(world: World) -> bool:
+	for cell: Vector2i in world.visible_cells:
+		if TerrainDB.is_air(world.chunks.terrain_index(cell)):
+			return true
+	return false
+
+
 func _on_action(action_name: String, _cost: float, _stamina_delta: float) -> void:
 	match action_name:
-		"DÃ©placement":
+		"Déplacement":
 			_mark("move")
 		"Nage":
 			_mark("move")
@@ -157,7 +169,7 @@ func _on_message(text: String) -> void:
 		_mark("explosion")
 	if text.contains("antibiotiques"):
 		_mark("use")
-	if text.contains("Partie sauvegardÃ©e"):
+	if text.contains("Partie sauvegardée"):
 		_mark("save")
 	if text.contains("Vous apercevez"):
 		_mark("bestiary")
@@ -200,7 +212,7 @@ func _on_look_requested(_direction: Vector2i) -> void:
 	_mark("look")
 
 
-## Valide l'Ã©tape en cours (premiÃ¨re non cochÃ©e) : secours pour les essais manuels ou difficiles Ã  dÃ©clencher.
+## Valide l'étape en cours (première non cochée) : secours pour les essais manuels ou difficiles à déclencher.
 func _validate_current() -> void:
 	for step: Dictionary in STEPS:
 		if not _done.has(String(step["id"])):
@@ -242,10 +254,10 @@ func _draw_view() -> void:
 	var panel := Rect2(PANEL_MARGIN, Vector2(PANEL_WIDTH, panel_height))
 	_view.draw_rect(panel, COLOR_PANEL)
 	_view.draw_rect(panel, COLOR_BORDER, false, 1.5)
-	var header := "ARÃˆNE DE TEST â€” GUIDE  %d/%d" % [_done.size(), STEPS.size()]
+	var header := "ARÈNE DE TEST — GUIDE  %d/%d" % [_done.size(), STEPS.size()]
 	_view.draw_string(font, panel.position + Vector2(10, 21), header,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE + 3, COLOR_HEADER)
-	_view.draw_string(font, panel.position + Vector2(panel.size.x - 240.0, 21), "F1 masquer   F3 valider   F4 rÃ©initialiser",
+	_view.draw_string(font, panel.position + Vector2(panel.size.x - 240.0, 21), "F1 masquer   F3 valider   F4 réinitialiser",
 		HORIZONTAL_ALIGNMENT_LEFT, 230.0, FONT_SIZE - 1, COLOR_PENDING)
 
 	var current: int = _current_index()
@@ -263,8 +275,8 @@ func _draw_view() -> void:
 
 	var hint: String
 	if current >= 0:
-		hint = "Ã‰tape %d : %s" % [current + 1, String(STEPS[current]["hint"])]
+		hint = "Étape %d : %s" % [current + 1, String(STEPS[current]["hint"])]
 	else:
-		hint = "Toutes les Ã©tapes sont validÃ©es. F4 pour recommencer le guide."
+		hint = "Toutes les étapes sont validées. F4 pour recommencer le guide."
 	_view.draw_string(font, panel.position + Vector2(10, panel.size.y - 8.0), hint,
 		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 20.0, FONT_SIZE, COLOR_HINT)

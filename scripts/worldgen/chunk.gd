@@ -9,6 +9,7 @@ const SIZE: int = 24
 const CELLS: int = SIZE * SIZE
 const TREE_SHADOW_CENTER: Vector2 = Vector2(64.0, 108.0)   # pied du tronc dans la case (pixels)
 const TREE_SHADOW_RADII: Vector2 = Vector2(52.0, 17.0)
+const ROOF_BACKDROP_COLOR: Color = Color(0.30, 0.26, 0.22)   # repli si le sprite de toit manque (surface vue d'un étage)
 
 # --- Toits (jalon 8) : empreinte du bâtiment du chunk, dérivée du terrain généré ---
 const ROOF_NONE: int = 0       # hors du bâtiment
@@ -221,6 +222,8 @@ func mark_seen(index: int) -> bool:
 		roof_known = true
 	if _tree_sprites.has(index):
 		(_tree_sprites[index] as Sprite2D).visible = true
+	if key.z > 0:
+		queue_redraw()  # une case de vide nouvellement vue révèle la surface en contrebas
 	return true
 
 
@@ -233,29 +236,63 @@ func release() -> void:
 
 
 func _draw() -> void:
+	var air: int = TerrainDB.index_of("t_air")
+	var above_surface: bool = key.z > 0
 	for i in CELLS:
-		var t: int = terrain[i]
 		var cell: Vector2i = cell_of(i)
-		var sprite_name: String
 		var local := Vector2(i % SIZE, floori(float(i) / SIZE)) * World.TILE_SIZE
-		if TerrainDB.autotile_of(t) == "wall":
-			sprite_name = _manager.wall_sprite(cell)
+		var t: int = terrain[i]
+		if above_surface and t == air and seen[i] != 0:
+			# Étage : une case vide laisse voir l'extérieur du dessous (terrain, toits et arbres de la surface).
+			_draw_surface_below(cell, local)
 		else:
-			# Certaines tuiles de terrain ont un fond (tombe sur l'herbe, machine sur le béton) : voir tiles.json.
-			var ground_tile: String = TerrainDB.ground_tile_of(t)
-			UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(ground_tile, "bg", cell_seed(cell)), local)
-			sprite_name = UlticaTiles.pick_sprite(ground_tile, "fg", cell_seed(cell))
-		UlticaTiles.draw_sprite(self, sprite_name, local)
-		if sprite_name == "" or UlticaTiles.get_texture(sprite_name) == null:  # repli : carré coloré du terrain
-			draw_rect(Rect2(local, Vector2(World.TILE_SIZE, World.TILE_SIZE)), TerrainDB.color_of(t))
-		if furniture.size() == CELLS and furniture[i] != 0:
-			var furniture_tile: String = FurnitureDB.tile_of(furniture[i])
-			UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(furniture_tile, "bg", 0), local)
-			var furniture_sprite: String = UlticaTiles.pick_sprite(furniture_tile, "fg", cell_seed(cell))
-			UlticaTiles.draw_sprite(self, furniture_sprite, local)
-			if furniture_sprite == "" or UlticaTiles.get_texture(furniture_sprite) == null:  # repli : petit carré coloré
-				draw_rect(Rect2(local + Vector2(24, 24), Vector2(80, 80)), FurnitureDB.color_of(furniture[i]))
+			_draw_terrain(cell, t, local, false)
+			if furniture.size() == CELLS and furniture[i] != 0:
+				_draw_furniture(cell, furniture[i], local)
 	if Fx.SHADOWS:  # ombres des arbres : seconde passe, pour qu'une case voisine ne les recouvre pas
 		for i: int in _tree_sprites:
 			var origin := Vector2(i % SIZE, floori(float(i) / SIZE)) * World.TILE_SIZE
 			draw_colored_polygon(Fx.ellipse_points(origin + TREE_SHADOW_CENTER, TREE_SHADOW_RADII), Fx.SHADOW_COLOR)
+
+
+## Dessine une case « normale » de l'étage. `surface` : la case vient du sol de la surface, vue d'un étage
+## supérieur (les murs doivent alors se raccorder avec les murs de surface, pas ceux de l'étage actif).
+func _draw_terrain(cell: Vector2i, t: int, local: Vector2, surface: bool) -> void:
+	var sprite_name: String
+	if TerrainDB.autotile_of(t) == "wall":
+		sprite_name = _manager.surface_wall_sprite(cell) if surface else _manager.wall_sprite(cell)
+	else:
+		# Certaines tuiles de terrain ont un fond (tombe sur l'herbe, machine sur le béton) : voir tiles.json.
+		var ground_tile: String = TerrainDB.ground_tile_of(t)
+		UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(ground_tile, "bg", cell_seed(cell)), local)
+		sprite_name = UlticaTiles.pick_sprite(ground_tile, "fg", cell_seed(cell))
+	UlticaTiles.draw_sprite(self, sprite_name, local)
+	if sprite_name == "" or UlticaTiles.get_texture(sprite_name) == null:  # repli : carré coloré du terrain
+		draw_rect(Rect2(local, Vector2(World.TILE_SIZE, World.TILE_SIZE)), TerrainDB.color_of(t))
+	if surface and TerrainDB.has_entity_sprite(t):
+		# Arbre de la surface : normalement une entité triée par Y, ici dessiné avec le sol faute d'étage chargé.
+		UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(TerrainDB.tile_of(t), "fg", cell_seed(cell)), local)
+
+
+func _draw_furniture(cell: Vector2i, index: int, local: Vector2) -> void:
+	var furniture_tile: String = FurnitureDB.tile_of(index)
+	UlticaTiles.draw_sprite(self, UlticaTiles.pick_sprite(furniture_tile, "bg", 0), local)
+	var furniture_sprite: String = UlticaTiles.pick_sprite(furniture_tile, "fg", cell_seed(cell))
+	UlticaTiles.draw_sprite(self, furniture_sprite, local)
+	if furniture_sprite == "" or UlticaTiles.get_texture(furniture_sprite) == null:  # repli : petit carré coloré
+		draw_rect(Rect2(local + Vector2(24, 24), Vector2(80, 80)), FurnitureDB.color_of(index))
+
+
+## Case vide d'un étage supérieur : dessine ce qu'on voit en contrebas. Un toit de surface masque l'intérieur
+## du bâtiment ; sinon on reprend le terrain, le mobilier et les arbres de la surface.
+func _draw_surface_below(cell: Vector2i, local: Vector2) -> void:
+	if _manager.surface_roof_at(cell) == ROOF_COVER:
+		var roof_sprite: String = _manager.surface_roof_sprite(cell)
+		UlticaTiles.draw_sprite(self, roof_sprite, local)
+		if roof_sprite == "" or UlticaTiles.get_texture(roof_sprite) == null:
+			draw_rect(Rect2(local, Vector2(World.TILE_SIZE, World.TILE_SIZE)), ROOF_BACKDROP_COLOR)
+		return
+	_draw_terrain(cell, _manager.surface_terrain_at(cell), local, true)
+	var surface_furniture: int = _manager.surface_furniture_at(cell)
+	if surface_furniture != 0:
+		_draw_furniture(cell, surface_furniture, local)

@@ -80,6 +80,12 @@ static func id_of(index: int) -> String:
 	return _ids[index] if index >= 0 and index < _ids.size() else ""
 
 
+## Case de VIDE au-dessus de la surface (t_air) : on voit au travers (fenêtres) mais on n'y marche pas.
+## Depuis un étage, le rendu montre la surface en contrebas (voir Chunk._draw_surface_below).
+static func is_air(index: int) -> bool:
+	return id_of(index) == "t_air"
+
+
 ## Nom affiché (champ "name" de terrain.json), l'id à défaut ; "" si l'index est invalide. Utilisé par le mode regard.
 static func name_of(index: int) -> String:
 	_ensure_loaded()

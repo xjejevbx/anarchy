@@ -11,7 +11,8 @@ extends RefCounted
 ##
 ## Surface (88 x 60) :
 ##   x  1..19, y  1..19 : camp de départ (herbe, objets d'essai autour de (5, 5))
-##   x 25..44, y  3..19 : maison témoin (toit calculé, portes, fenêtres, escaliers vers +1 et -1)
+##   x 25..44, y  3..19 : maison témoin (toit calculé, portes, fenêtres, escaliers vers +1 et -1) ;
+##                         à l'étage +1, les fenêtres laissent voir la surface en contrebas
 ##   x 48..72, y  1..25 : bassin (sable, eau peu profonde puis profonde) avec faune aquatique
 ##   x 26..53, y 30..54 : arène de combat (béton, clôture, zombies d'entraînement)
 ##   x  4..19, y 28..54 : bestiaire (terre, tous les types de monstres, endormis)
